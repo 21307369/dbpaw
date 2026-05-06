@@ -50,7 +50,10 @@ export const validateConnectionFormInput = (
       }
     }
     if (mode === "cluster") {
-      if ((form.seedNodes?.filter((value) => value.trim().length > 0).length ?? 0) < 2) {
+      if (
+        (form.seedNodes?.filter((value) => value.trim().length > 0).length ??
+          0) < 2
+      ) {
         issues.push({
           key: "connection.dialog.inputValidation.redisSeedNodesRequired",
         });
@@ -85,7 +88,9 @@ export const validateConnectionFormInput = (
       issues.push({ key: "connection.dialog.inputValidation.portRange" });
     }
     if (form.authMode === "basic" && !form.username) {
-      issues.push({ key: "connection.dialog.inputValidation.usernameRequired" });
+      issues.push({
+        key: "connection.dialog.inputValidation.usernameRequired",
+      });
     }
     if (mode === "create" && form.authMode === "api_key") {
       const hasEncoded = !!(form.apiKeyEncoded || "").trim();

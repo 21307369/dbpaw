@@ -432,9 +432,7 @@ impl MssqlDriver {
             serde_json::Value::Array(arr) => arr,
             serde_json::Value::Object(obj) => vec![serde_json::Value::Object(obj)],
             _ => {
-                return Err(
-                    "[QUERY_ERROR] MSSQL FOR JSON result is not array/object".to_string(),
-                );
+                return Err("[QUERY_ERROR] MSSQL FOR JSON result is not array/object".to_string());
             }
         };
         for row in &mut data {
@@ -860,10 +858,7 @@ fn render_mssql_create_table_ddl(
     // Column definitions
     for col in columns {
         if col.is_computed {
-            let def = col
-                .computed_definition
-                .as_deref()
-                .unwrap_or("(NULL)");
+            let def = col.computed_definition.as_deref().unwrap_or("(NULL)");
             lines.push(format!("    {} AS {}", quote_ident_or(&col.name), def));
             continue;
         }
@@ -877,7 +872,11 @@ fn render_mssql_create_table_ddl(
         }
         // Inline default from column info (loaded via sys.default_constraints join)
         if let (Some(def), Some(cn)) = (&col.default_definition, &col.default_constraint_name) {
-            line.push_str(&format!(" CONSTRAINT {} DEFAULT {}", quote_ident_or(cn), def));
+            line.push_str(&format!(
+                " CONSTRAINT {} DEFAULT {}",
+                quote_ident_or(cn),
+                def
+            ));
         }
         lines.push(line);
     }
@@ -917,10 +916,7 @@ fn render_mssql_create_table_ddl(
 
     // Foreign keys (inline)
     for fk in foreign_keys {
-        let ref_schema = fk
-            .referenced_schema
-            .as_deref()
-            .unwrap_or("dbo");
+        let ref_schema = fk.referenced_schema.as_deref().unwrap_or("dbo");
         let mut fk_line = format!(
             "    CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}.{} ({})",
             quote_ident_or(&fk.name),

@@ -305,7 +305,14 @@ impl PostgresDriver {
         &self,
         schema: &str,
         table: &str,
-    ) -> Result<(Vec<PgKeyConstraint>, Vec<ForeignKeyInfo>, Vec<(String, String)>), String> {
+    ) -> Result<
+        (
+            Vec<PgKeyConstraint>,
+            Vec<ForeignKeyInfo>,
+            Vec<(String, String)>,
+        ),
+        String,
+    > {
         let rows = sqlx::query(
             r#"
             SELECT
@@ -413,11 +420,7 @@ impl PostgresDriver {
         Ok((key_constraints, foreign_keys, check_constraints))
     }
 
-    async fn load_pg_indexes(
-        &self,
-        schema: &str,
-        table: &str,
-    ) -> Result<Vec<PgIndexInfo>, String> {
+    async fn load_pg_indexes(&self, schema: &str, table: &str) -> Result<Vec<PgIndexInfo>, String> {
         let rows = sqlx::query(
             r#"
             SELECT
@@ -654,7 +657,9 @@ fn pg_quote_ident(ident: &str) -> String {
 
 fn extract_pg_index_columns(full_def: &str) -> Option<Vec<String>> {
     let upper = full_def.to_uppercase();
-    let table_end = upper.find(")\n") .or_else(|| upper.find(") WHERE"))
+    let table_end = upper
+        .find(")\n")
+        .or_else(|| upper.find(") WHERE"))
         .or_else(|| upper.find(") INCLUDE"))
         .unwrap_or(full_def.len());
     let prefix = &full_def[..table_end];
@@ -670,7 +675,11 @@ fn extract_pg_index_columns(full_def: &str) -> Option<Vec<String>> {
         .map(|c| c.trim().trim_matches('"').to_string())
         .filter(|c| !c.is_empty())
         .collect();
-    if cols.is_empty() { None } else { Some(cols) }
+    if cols.is_empty() {
+        None
+    } else {
+        Some(cols)
+    }
 }
 
 fn render_pg_create_table_ddl(
@@ -987,6 +996,41 @@ fn is_json_projectable_statement(sql: &str) -> bool {
     )
 }
 
+/// Returns true for statements that produce no result rows (DML/DDL).
+fn is_non_result_statement(sql: &str) -> bool {
+    matches!(
+        first_sql_keyword(sql).as_deref(),
+        Some(
+            "INSERT"
+                | "UPDATE"
+                | "DELETE"
+                | "CREATE"
+                | "ALTER"
+                | "DROP"
+                | "TRUNCATE"
+                | "GRANT"
+                | "REVOKE"
+                | "COMMENT"
+                | "SET"
+                | "RESET"
+                | "CALL"
+                | "DO"
+                | "VACUUM"
+                | "ANALYZE"
+                | "REINDEX"
+                | "REFRESH"
+                | "CLUSTER"
+                | "DISCARD"
+                | "LISTEN"
+                | "NOTIFY"
+                | "PREPARE"
+                | "EXECUTE"
+                | "DEALLOCATE"
+                | "LOCK"
+        )
+    )
+}
+
 fn is_high_precision_query_type(type_name: &str) -> bool {
     matches!(
         type_name.trim().to_ascii_uppercase().as_str(),
@@ -1197,7 +1241,11 @@ impl DatabaseDriver for PostgresDriver {
             let comment = decode_postgres_optional_text_cell(&row, 4)?;
             let comment = comment.and_then(|c| {
                 let trimmed = c.trim().to_string();
-                if trimmed.is_empty() { None } else { Some(trimmed) }
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed)
+                }
             });
 
             columns.push(ColumnInfo {
@@ -1412,8 +1460,7 @@ impl DatabaseDriver for PostgresDriver {
         let (key_constraints, foreign_keys, check_constraints) =
             self.load_pg_constraints(&schema, &table).await?;
         let indexes = self.load_pg_indexes(&schema, &table).await?;
-        let (table_comment, column_comments) =
-            self.load_pg_comments(&schema, &table).await?;
+        let (table_comment, column_comments) = self.load_pg_comments(&schema, &table).await?;
 
         Ok(render_pg_create_table_ddl(
             &schema,

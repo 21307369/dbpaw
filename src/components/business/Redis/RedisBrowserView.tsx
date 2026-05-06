@@ -62,7 +62,11 @@ type DetailState =
   | { mode: "new" }
   | { mode: "view"; key: string };
 
-export function RedisBrowserView({ connectionId, database, onOpenConsole }: Props) {
+export function RedisBrowserView({
+  connectionId,
+  database,
+  onOpenConsole,
+}: Props) {
   const [pattern, setPattern] = useState("");
   const [keys, setKeys] = useState<RedisKeyInfo[]>([]);
   const [cursor, setCursor] = useState("0");
@@ -223,7 +227,11 @@ export function RedisBrowserView({ connectionId, database, onOpenConsole }: Prop
         key,
         ttlSeconds,
       }));
-      const results = await api.redis.batchKeyOps(connectionId, database, operations);
+      const results = await api.redis.batchKeyOps(
+        connectionId,
+        database,
+        operations,
+      );
       const succeeded = results.filter((r) => r.success).length;
       const failed = results.filter((r) => !r.success);
       if (succeeded > 0) {
@@ -487,7 +495,9 @@ export function RedisBrowserView({ connectionId, database, onOpenConsole }: Prop
                   key={k.key}
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/50 border-b border-border/30 text-xs",
-                    selectedKey === k.key && selectedCount === 0 && "bg-accent/50",
+                    selectedKey === k.key &&
+                      selectedCount === 0 &&
+                      "bg-accent/50",
                     isSelected && "bg-primary/10",
                   )}
                   onClick={(e) => handleSelectKey(k.key, index, e)}
@@ -619,7 +629,9 @@ export function RedisBrowserView({ connectionId, database, onOpenConsole }: Prop
             </Button>
             <Button
               size="sm"
-              disabled={batchLoading || !expireTtl.trim() || Number(expireTtl) <= 0}
+              disabled={
+                batchLoading || !expireTtl.trim() || Number(expireTtl) <= 0
+              }
               onClick={() => {
                 runBatchOp("expire", parseInt(expireTtl, 10));
                 setExpireDialogOpen(false);
@@ -669,7 +681,8 @@ export function RedisBrowserView({ connectionId, database, onOpenConsole }: Prop
                 onClick={async () => {
                   try {
                     const { save } = await import("@tauri-apps/plugin-dialog");
-                    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+                    const { writeTextFile } =
+                      await import("@tauri-apps/plugin-fs");
                     const filePath = await save({
                       defaultPath: "redis-mget-export.json",
                       filters: [{ name: "JSON", extensions: ["json"] }],
@@ -720,7 +733,9 @@ export function RedisBrowserView({ connectionId, database, onOpenConsole }: Prop
                 value={msetImportText}
                 onChange={(e) => setMsetImportText(e.target.value)}
                 className="min-h-[180px] font-mono text-xs"
-                placeholder={'{"key1": "value1", "key2": "value2"}\nor\nkey1: value1\nkey2: value2'}
+                placeholder={
+                  '{"key1": "value1", "key2": "value2"}\nor\nkey1: value1\nkey2: value2'
+                }
               />
             </div>
           </div>
@@ -740,7 +755,9 @@ export function RedisBrowserView({ connectionId, database, onOpenConsole }: Prop
               disabled={msetLoading || !msetImportText.trim()}
               onClick={handleMsetImport}
             >
-              {msetLoading && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              {msetLoading && (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              )}
               Import
             </Button>
           </DialogFooter>

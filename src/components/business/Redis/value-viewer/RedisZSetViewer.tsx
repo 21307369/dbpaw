@@ -57,10 +57,7 @@ interface Props {
   onZRank?: (member: string, reverse: boolean) => Promise<number | null>;
   onZScore?: (member: string) => Promise<number | null>;
   onZMScore?: (members: string[]) => Promise<(number | null)[]>;
-  onZRangeByLex?: (
-    min: string,
-    max: string,
-  ) => Promise<RedisZRangeByLexResult>;
+  onZRangeByLex?: (min: string, max: string) => Promise<RedisZRangeByLexResult>;
   onZPopMin?: (count?: number) => Promise<void>;
   onZPopMax?: (count?: number) => Promise<void>;
 }
@@ -128,11 +125,12 @@ export function RedisZSetViewer({
   } | null>(null);
   const [isPopping, setIsPopping] = useState(false);
 
-  const displayMembers = filterActive && filteredMembers
-    ? filteredMembers
-    : [...value].sort((a, b) =>
-        sortAsc ? a.score - b.score : b.score - a.score,
-      );
+  const displayMembers =
+    filterActive && filteredMembers
+      ? filteredMembers
+      : [...value].sort((a, b) =>
+          sortAsc ? a.score - b.score : b.score - a.score,
+        );
 
   const handleFilter = async () => {
     if (!onZRangeByScore) return;
@@ -171,7 +169,10 @@ export function RedisZSetViewer({
   const handleScoreLookup = async (multi: boolean) => {
     const raw = scoreMember.trim();
     if (!raw) return;
-    const members = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const members = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (members.length === 0) return;
     setIsScoring(true);
     try {
@@ -282,7 +283,8 @@ export function RedisZSetViewer({
     setScoreError(null);
   };
 
-  const hasQueryCapability = onZRangeByScore || onZRank || onZScore || onZMScore || onZRangeByLex;
+  const hasQueryCapability =
+    onZRangeByScore || onZRank || onZScore || onZMScore || onZRangeByLex;
   const hasPopCapability = onZPopMin || onZPopMax;
 
   return (
@@ -420,8 +422,8 @@ export function RedisZSetViewer({
                   <Badge variant="secondary" className="text-xs mr-1.5">
                     ZCOUNT: {filterTotal}
                   </Badge>
-                  Showing {filteredMembers?.length ?? 0} members matching score ∈{" "}
-                  [{filterMin}, {filterMax}]
+                  Showing {filteredMembers?.length ?? 0} members matching score
+                  ∈ [{filterMin}, {filterMax}]
                 </div>
               )}
             </div>
@@ -484,13 +486,11 @@ export function RedisZSetViewer({
                   </span>
                 </div>
               )}
-              {rankResult === null &&
-                rankMember.trim() &&
-                !isRanking && (
-                  <div className="text-xs text-muted-foreground">
-                    Member not found
-                  </div>
-                )}
+              {rankResult === null && rankMember.trim() && !isRanking && (
+                <div className="text-xs text-muted-foreground">
+                  Member not found
+                </div>
+              )}
             </div>
           )}
 
@@ -563,13 +563,11 @@ export function RedisZSetViewer({
                   ))}
                 </div>
               )}
-              {scoreResult === null &&
-                scoreMember.trim() &&
-                !isScoring && (
-                  <div className="text-xs text-muted-foreground">
-                    Member not found
-                  </div>
-                )}
+              {scoreResult === null && scoreMember.trim() && !isScoring && (
+                <div className="text-xs text-muted-foreground">
+                  Member not found
+                </div>
+              )}
             </div>
           )}
 
@@ -625,7 +623,8 @@ export function RedisZSetViewer({
                   <Badge variant="secondary" className="text-xs mr-1.5">
                     ZLEXCOUNT: {lexTotal}
                   </Badge>
-                  Showing {lexMembers?.length ?? 0} members in lex range [{lexMin}, {lexMax}]
+                  Showing {lexMembers?.length ?? 0} members in lex range [
+                  {lexMin}, {lexMax}]
                 </div>
               )}
               {lexActive && lexMembers && lexMembers.length > 0 && (
@@ -870,7 +869,12 @@ export function RedisZSetViewer({
       )}
 
       {/* Pop confirmation dialog */}
-      <AlertDialog open={!!popDialog} onOpenChange={(open) => { if (!open) setPopDialog(null); }}>
+      <AlertDialog
+        open={!!popDialog}
+        onOpenChange={(open) => {
+          if (!open) setPopDialog(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>

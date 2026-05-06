@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import {
   Check,
   ChevronDown,
@@ -102,7 +109,10 @@ const createInitialBrowserState = (
   appliedEndId: "+",
   pageSize: DEFAULT_PAGE_SIZE,
   nextStartId:
-    totalLen !== null && totalLen !== undefined && entries.length < totalLen && entries.length > 0
+    totalLen !== null &&
+    totalLen !== undefined &&
+    entries.length < totalLen &&
+    entries.length > 0
       ? `(${entries[entries.length - 1].id}`
       : null,
   totalLen: totalLen ?? null,
@@ -143,7 +153,10 @@ function resolvePageSize(raw: string) {
   return parsed;
 }
 
-function mapViewResultToBrowserState(result: RedisStreamView, current: StreamBrowserState): StreamBrowserState {
+function mapViewResultToBrowserState(
+  result: RedisStreamView,
+  current: StreamBrowserState,
+): StreamBrowserState {
   return {
     ...current,
     appliedStartId: result.startId,
@@ -186,13 +199,26 @@ export function RedisStreamViewer({
 
   // ── Consumer Group state ──
   const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
-  const [deleteGroupTarget, setDeleteGroupTarget] = useState<string | null>(null);
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState<string | null>(
+    null,
+  );
   const [resetGroupTarget, setResetGroupTarget] = useState<string | null>(null);
-  const [expandedGroupNames, setExpandedGroupNames] = useState<Set<string>>(new Set());
-  const [pendingData, setPendingData] = useState<Record<string, RedisXPendingSummary | RedisXPendingEntry[] | null>>({});
-  const [pendingLoading, setPendingLoading] = useState<Record<string, boolean>>({});
-  const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
-  const [claimTarget, setClaimTarget] = useState<{ group: string; entry: RedisXPendingEntry } | null>(null);
+  const [expandedGroupNames, setExpandedGroupNames] = useState<Set<string>>(
+    new Set(),
+  );
+  const [pendingData, setPendingData] = useState<
+    Record<string, RedisXPendingSummary | RedisXPendingEntry[] | null>
+  >({});
+  const [pendingLoading, setPendingLoading] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [claimTarget, setClaimTarget] = useState<{
+    group: string;
+    entry: RedisXPendingEntry;
+  } | null>(null);
 
   // ── XTRIM state ──
   const [showTrimDialog, setShowTrimDialog] = useState(false);
@@ -238,7 +264,15 @@ export function RedisStreamViewer({
     } catch {
       // silent — caller can show toast
     }
-  }, [connectionId, database, redisKey, browser.appliedStartId, browser.appliedEndId, browser.pageSize, onChange]);
+  }, [
+    connectionId,
+    database,
+    redisKey,
+    browser.appliedStartId,
+    browser.appliedEndId,
+    browser.pageSize,
+    onChange,
+  ]);
 
   const loadStreamView = async (
     mode: "replace" | "append",
@@ -259,7 +293,9 @@ export function RedisStreamViewer({
     const startId =
       mode === "append"
         ? browser.nextStartId ||
-          (value.length > 0 ? `(${value[value.length - 1].id}` : browser.appliedStartId)
+          (value.length > 0
+            ? `(${value[value.length - 1].id}`
+            : browser.appliedStartId)
         : (overrides?.startId ?? browser.startIdInput.trim()) || "-";
     const endId = (overrides?.endId ?? browser.endIdInput.trim()) || "+";
 
@@ -273,11 +309,15 @@ export function RedisStreamViewer({
         endId,
         count,
       );
-      onChange(mode === "append" ? [...value, ...result.entries] : result.entries);
+      onChange(
+        mode === "append" ? [...value, ...result.entries] : result.entries,
+      );
       setBrowser((current) => mapViewResultToBrowserState(result, current));
     } catch (e) {
       toast.error(
-        mode === "append" ? "Failed to load more stream entries" : "Failed to load stream entries",
+        mode === "append"
+          ? "Failed to load more stream entries"
+          : "Failed to load stream entries",
         { description: e instanceof Error ? e.message : String(e) },
       );
     } finally {
@@ -309,40 +349,76 @@ export function RedisStreamViewer({
 
   // ── Group operations ──
 
-  const handleCreateGroup = async (groupName: string, startId: string, mkstream: boolean) => {
+  const handleCreateGroup = async (
+    groupName: string,
+    startId: string,
+    mkstream: boolean,
+  ) => {
     try {
-      await api.redis.xgroupCreate(connectionId, database, redisKey, groupName, startId, mkstream);
+      await api.redis.xgroupCreate(
+        connectionId,
+        database,
+        redisKey,
+        groupName,
+        startId,
+        mkstream,
+      );
       toast.success(`Group "${groupName}" created`);
       setShowCreateGroupDialog(false);
       await refreshView();
     } catch (e) {
-      toast.error("Failed to create group", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Failed to create group", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     }
   };
 
   const handleDeleteGroup = async () => {
     if (!deleteGroupTarget) return;
     try {
-      await api.redis.xgroupDel(connectionId, database, redisKey, deleteGroupTarget);
+      await api.redis.xgroupDel(
+        connectionId,
+        database,
+        redisKey,
+        deleteGroupTarget,
+      );
       toast.success(`Group "${deleteGroupTarget}" deleted`);
       setDeleteGroupTarget(null);
-      setExpandedGroupNames((s) => { const n = new Set(s); n.delete(deleteGroupTarget); return n; });
-      setPendingData((s) => { const n = { ...s }; delete n[deleteGroupTarget]; return n; });
+      setExpandedGroupNames((s) => {
+        const n = new Set(s);
+        n.delete(deleteGroupTarget);
+        return n;
+      });
+      setPendingData((s) => {
+        const n = { ...s };
+        delete n[deleteGroupTarget];
+        return n;
+      });
       await refreshView();
     } catch (e) {
-      toast.error("Failed to delete group", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Failed to delete group", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     }
   };
 
   const handleResetGroup = async (startId: string) => {
     if (!resetGroupTarget) return;
     try {
-      await api.redis.xgroupSetId(connectionId, database, redisKey, resetGroupTarget, startId);
+      await api.redis.xgroupSetId(
+        connectionId,
+        database,
+        redisKey,
+        resetGroupTarget,
+        startId,
+      );
       toast.success(`Group "${resetGroupTarget}" cursor reset`);
       setResetGroupTarget(null);
       await refreshView();
     } catch (e) {
-      toast.error("Failed to reset group cursor", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Failed to reset group cursor", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     }
   };
 
@@ -360,10 +436,20 @@ export function RedisStreamViewer({
     if (!expandedGroupNames.has(groupName) && !pendingData[groupName]) {
       setPendingLoading((s) => ({ ...s, [groupName]: true }));
       try {
-        const result = await api.redis.xpending(connectionId, database, redisKey, groupName);
-        setPendingData((s) => ({ ...s, [groupName]: result as RedisXPendingSummary }));
+        const result = await api.redis.xpending(
+          connectionId,
+          database,
+          redisKey,
+          groupName,
+        );
+        setPendingData((s) => ({
+          ...s,
+          [groupName]: result as RedisXPendingSummary,
+        }));
       } catch (e) {
-        toast.error("Failed to load pending info", { description: e instanceof Error ? e.message : String(e) });
+        toast.error("Failed to load pending info", {
+          description: e instanceof Error ? e.message : String(e),
+        });
       } finally {
         setPendingLoading((s) => ({ ...s, [groupName]: false }));
       }
@@ -374,12 +460,23 @@ export function RedisStreamViewer({
     setPendingLoading((s) => ({ ...s, [groupName]: true }));
     try {
       const result = await api.redis.xpending(
-        connectionId, database, redisKey, groupName, "-", "+", 100,
+        connectionId,
+        database,
+        redisKey,
+        groupName,
+        "-",
+        "+",
+        100,
       );
-      setPendingData((s) => ({ ...s, [groupName]: result as RedisXPendingEntry[] }));
+      setPendingData((s) => ({
+        ...s,
+        [groupName]: result as RedisXPendingEntry[],
+      }));
       setSelectedPendingIds(new Set());
     } catch (e) {
-      toast.error("Failed to load pending entries", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Failed to load pending entries", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setPendingLoading((s) => ({ ...s, [groupName]: false }));
     }
@@ -387,25 +484,47 @@ export function RedisStreamViewer({
 
   const handleAck = async (groupName: string, ids: string[]) => {
     try {
-      const count = await api.redis.xack(connectionId, database, redisKey, groupName, ids);
+      const count = await api.redis.xack(
+        connectionId,
+        database,
+        redisKey,
+        groupName,
+        ids,
+      );
       toast.success(`Acknowledged ${count} message(s)`);
       setSelectedPendingIds(new Set());
       // Reload pending details
       await loadPendingDetails(groupName);
       await refreshView();
     } catch (e) {
-      toast.error("Failed to acknowledge", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Failed to acknowledge", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     }
   };
 
-  const handleClaim = async (groupName: string, consumer: string, entryId: string) => {
+  const handleClaim = async (
+    groupName: string,
+    consumer: string,
+    entryId: string,
+  ) => {
     try {
-      await api.redis.xclaim(connectionId, database, redisKey, groupName, consumer, 0, [entryId]);
+      await api.redis.xclaim(
+        connectionId,
+        database,
+        redisKey,
+        groupName,
+        consumer,
+        0,
+        [entryId],
+      );
       toast.success(`Entry claimed by "${consumer}"`);
       setClaimTarget(null);
       await loadPendingDetails(groupName);
     } catch (e) {
-      toast.error("Failed to claim entry", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Failed to claim entry", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     }
   };
 
@@ -413,12 +532,20 @@ export function RedisStreamViewer({
 
   const handleTrim = async (strategy: string, threshold: string) => {
     try {
-      const trimmed = await api.redis.xtrim(connectionId, database, redisKey, strategy, threshold);
+      const trimmed = await api.redis.xtrim(
+        connectionId,
+        database,
+        redisKey,
+        strategy,
+        threshold,
+      );
       toast.success(`Trimmed ${trimmed} entries`);
       setShowTrimDialog(false);
       await refreshView();
     } catch (e) {
-      toast.error("Failed to trim stream", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Failed to trim stream", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     }
   };
 
@@ -433,17 +560,26 @@ export function RedisStreamViewer({
     try {
       const count = resolvePageSize(browser.countInput);
       const entries = await api.redis.xreadgroup(
-        connectionId, database, redisKey, xrgGroup, xrgConsumer, xrgStartId, count,
+        connectionId,
+        database,
+        redisKey,
+        xrgGroup,
+        xrgConsumer,
+        xrgStartId,
+        count,
       );
       setXrgEntries(entries);
     } catch (e) {
-      toast.error("Failed to read from consumer group", { description: e instanceof Error ? e.message : String(e) });
+      toast.error("Failed to read from consumer group", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setIsLoadingXrg(false);
     }
   };
 
-  const displayEntries = readMode === "xreadgroup" && xrgEntries !== null ? xrgEntries : value;
+  const displayEntries =
+    readMode === "xreadgroup" && xrgEntries !== null ? xrgEntries : value;
 
   return (
     <div className="space-y-3">
@@ -509,7 +645,8 @@ export function RedisStreamViewer({
             onTogglePendingSelect={(id) => {
               setSelectedPendingIds((s) => {
                 const n = new Set(s);
-                if (n.has(id)) n.delete(id); else n.add(id);
+                if (n.has(id)) n.delete(id);
+                else n.add(id);
                 return n;
               });
             }}
@@ -587,7 +724,9 @@ export function RedisStreamViewer({
             onClick={() => void loadStreamView("append")}
             disabled={isLoadingView}
           >
-            {isLoadingView ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {isLoadingView ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
             Load more
           </Button>
         </div>
@@ -601,17 +740,28 @@ export function RedisStreamViewer({
         />
       )}
 
-      <AlertDialog open={!!deleteGroupTarget} onOpenChange={(o) => { if (!o) setDeleteGroupTarget(null); }}>
+      <AlertDialog
+        open={!!deleteGroupTarget}
+        onOpenChange={(o) => {
+          if (!o) setDeleteGroupTarget(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete consumer group</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the group <span className="font-mono font-semibold">{deleteGroupTarget}</span> and all its pending entries. This cannot be undone.
+              This will permanently delete the group{" "}
+              <span className="font-mono font-semibold">
+                {deleteGroupTarget}
+              </span>{" "}
+              and all its pending entries. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void handleDeleteGroup()}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={() => void handleDeleteGroup()}>
+              Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -626,7 +776,9 @@ export function RedisStreamViewer({
 
       {showTrimDialog && (
         <TrimDialog
-          currentLength={browser.streamInfo?.length ?? browser.totalLen ?? value.length}
+          currentLength={
+            browser.streamInfo?.length ?? browser.totalLen ?? value.length
+          }
           onClose={() => setShowTrimDialog(false)}
           onConfirm={handleTrim}
         />
@@ -636,7 +788,9 @@ export function RedisStreamViewer({
         <ClaimDialog
           entry={claimTarget.entry}
           onClose={() => setClaimTarget(null)}
-          onConfirm={(consumer) => void handleClaim(claimTarget.group, consumer, claimTarget.entry.id)}
+          onConfirm={(consumer) =>
+            void handleClaim(claimTarget.group, consumer, claimTarget.entry.id)
+          }
         />
       )}
     </div>
@@ -702,23 +856,44 @@ function StreamFilterBar({
           <Input
             className="h-8 font-mono text-xs"
             value={browser.startIdInput}
-            onChange={(e) => onChange((current) => ({ ...current, startIdInput: e.target.value }))}
+            onChange={(e) =>
+              onChange((current) => ({
+                ...current,
+                startIdInput: e.target.value,
+              }))
+            }
             placeholder="Start ID (-)"
           />
           <Input
             className="h-8 font-mono text-xs"
             value={browser.endIdInput}
-            onChange={(e) => onChange((current) => ({ ...current, endIdInput: e.target.value }))}
+            onChange={(e) =>
+              onChange((current) => ({
+                ...current,
+                endIdInput: e.target.value,
+              }))
+            }
             placeholder="End ID (+)"
           />
           <Input
             className="h-8 font-mono text-xs"
             value={browser.countInput}
-            onChange={(e) => onChange((current) => ({ ...current, countInput: e.target.value }))}
+            onChange={(e) =>
+              onChange((current) => ({
+                ...current,
+                countInput: e.target.value,
+              }))
+            }
             placeholder="Count"
             inputMode="numeric"
           />
-          <Button variant="outline" size="sm" className="h-8" onClick={onApply} disabled={isLoading}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={onApply}
+            disabled={isLoading}
+          >
             {isLoading ? (
               <Loader2 className="mr-1 h-3 w-3 animate-spin" />
             ) : (
@@ -739,10 +914,14 @@ function StreamFilterBar({
             </SelectTrigger>
             <SelectContent>
               {groups.map((g) => (
-                <SelectItem key={g.name} value={g.name}>{g.name}</SelectItem>
+                <SelectItem key={g.name} value={g.name}>
+                  {g.name}
+                </SelectItem>
               ))}
               {groups.length === 0 && (
-                <SelectItem value="__none" disabled>No groups available</SelectItem>
+                <SelectItem value="__none" disabled>
+                  No groups available
+                </SelectItem>
               )}
             </SelectContent>
           </Select>
@@ -768,7 +947,11 @@ function StreamFilterBar({
             onClick={onXreadgroupApply}
             disabled={isLoadingXrg || !xrgGroup || !xrgConsumer}
           >
-            {isLoadingXrg ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Filter className="mr-1 h-3 w-3" />}
+            {isLoadingXrg ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <Filter className="mr-1 h-3 w-3" />
+            )}
             Read
           </Button>
         </div>
@@ -824,7 +1007,13 @@ function StreamSummaryCards({
           </div>
         </div>
       </div>
-      <Button variant="outline" size="sm" className="h-auto shrink-0 px-2 py-2" onClick={onTrim} title="Trim stream">
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-auto shrink-0 px-2 py-2"
+        onClick={onTrim}
+        title="Trim stream"
+      >
         <Scissors className="h-4 w-4" />
       </Button>
     </div>
@@ -850,7 +1039,10 @@ function StreamGroupsTable({
 }: {
   groups: RedisStreamGroup[];
   expandedGroupNames: Set<string>;
-  pendingData: Record<string, RedisXPendingSummary | RedisXPendingEntry[] | null>;
+  pendingData: Record<
+    string,
+    RedisXPendingSummary | RedisXPendingEntry[] | null
+  >;
   pendingLoading: Record<string, boolean>;
   selectedPendingIds: Set<string>;
   onToggleGroup: (name: string) => void;
@@ -870,8 +1062,15 @@ function StreamGroupsTable({
           <span>Consumer groups</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{groups.length} groups</span>
-          <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={onCreateGroup}>
+          <span className="text-xs text-muted-foreground">
+            {groups.length} groups
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={onCreateGroup}
+          >
             <UserPlus className="mr-1 h-3 w-3" />
             Create
           </Button>
@@ -892,7 +1091,10 @@ function StreamGroupsTable({
         <TableBody>
           {groups.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="py-5 text-center text-sm text-muted-foreground">
+              <TableCell
+                colSpan={7}
+                className="py-5 text-center text-sm text-muted-foreground"
+              >
                 No consumer groups
               </TableCell>
             </TableRow>
@@ -906,21 +1108,36 @@ function StreamGroupsTable({
                   onClick={() => onToggleGroup(group.name)}
                 >
                   <TableCell className="py-1.5">
-                    {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                    {expanded ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{group.name}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {group.name}
+                  </TableCell>
                   <TableCell className="text-xs">{group.consumers}</TableCell>
                   <TableCell className="text-xs">
-                    <span className={group.pending > 0 ? "text-orange-500 font-medium" : ""}>
+                    <span
+                      className={
+                        group.pending > 0 ? "text-orange-500 font-medium" : ""
+                      }
+                    >
                       {group.pending}
                     </span>
                   </TableCell>
                   <TableCell className="font-mono text-xs">
                     {group.lastDeliveredId || "n/a"}
                   </TableCell>
-                  <TableCell className="text-xs">{group.lag ?? group.entriesRead ?? "n/a"}</TableCell>
+                  <TableCell className="text-xs">
+                    {group.lag ?? group.entriesRead ?? "n/a"}
+                  </TableCell>
                   <TableCell className="py-1.5">
-                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className="flex gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Button
                         variant="ghost"
                         size="icon"
@@ -946,13 +1163,18 @@ function StreamGroupsTable({
 
               if (expanded) {
                 rows.push(
-                  <TableRow key={`${group.name}-pending`} className="bg-muted/10">
+                  <TableRow
+                    key={`${group.name}-pending`}
+                    className="bg-muted/10"
+                  >
                     <TableCell colSpan={7} className="p-0">
                       <StreamPendingPanel
                         data={pendingData[group.name] ?? null}
                         isLoading={!!pendingLoading[group.name]}
                         selectedIds={selectedPendingIds}
-                        onLoadDetails={() => void onLoadPendingDetails(group.name)}
+                        onLoadDetails={() =>
+                          void onLoadPendingDetails(group.name)
+                        }
                         onAck={(ids) => onAck(group.name, ids)}
                         onClaim={(entry) => onClaim(group.name, entry)}
                         onToggleSelect={onTogglePendingSelect}
@@ -1000,7 +1222,9 @@ function StreamPendingPanel({
 
   if (!data) {
     return (
-      <div className="px-4 py-3 text-sm text-muted-foreground">No pending data</div>
+      <div className="px-4 py-3 text-sm text-muted-foreground">
+        No pending data
+      </div>
     );
   }
 
@@ -1027,14 +1251,23 @@ function StreamPendingPanel({
             {summary.consumers.length === 0
               ? "none"
               : summary.consumers.map(([name, cnt]) => (
-                  <Badge key={name} variant="secondary" className="ml-1 text-[10px]">
+                  <Badge
+                    key={name}
+                    variant="secondary"
+                    className="ml-1 text-[10px]"
+                  >
                     {name}: {cnt}
                   </Badge>
                 ))}
           </div>
         </div>
         {summary.count > 0 && (
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onLoadDetails}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onLoadDetails}
+          >
             View Details
           </Button>
         )}
@@ -1049,7 +1282,9 @@ function StreamPendingPanel({
   return (
     <div className="space-y-2 px-4 py-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{entries.length} pending entries</span>
+        <span className="text-xs text-muted-foreground">
+          {entries.length} pending entries
+        </span>
         {hasSelection && (
           <Button
             variant="outline"
@@ -1076,7 +1311,10 @@ function StreamPendingPanel({
         <TableBody>
           {entries.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="py-3 text-center text-xs text-muted-foreground">
+              <TableCell
+                colSpan={6}
+                className="py-3 text-center text-xs text-muted-foreground"
+              >
                 No pending entries
               </TableCell>
             </TableRow>
@@ -1092,7 +1330,9 @@ function StreamPendingPanel({
                   />
                 </TableCell>
                 <TableCell className="font-mono text-xs">{entry.id}</TableCell>
-                <TableCell className="font-mono text-xs">{entry.consumer}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {entry.consumer}
+                </TableCell>
                 <TableCell className="text-xs">
                   <span className="inline-flex items-center gap-1">
                     <Clock className="h-3 w-3 text-muted-foreground" />
@@ -1208,7 +1448,10 @@ function StreamEntriesTable({
         <TableBody>
           {entries.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
+              <TableCell
+                colSpan={5}
+                className="py-6 text-center text-sm text-muted-foreground"
+              >
                 No entries in this range
               </TableCell>
             </TableRow>
@@ -1249,21 +1492,35 @@ function StreamEntryRow({
     <>
       <TableRow className="group">
         <TableCell className="py-1.5">
-          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onToggle}>
-            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5"
+            onClick={onToggle}
+          >
+            {expanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
           </Button>
         </TableCell>
         <TableCell className="max-w-0 truncate py-1.5 font-mono text-xs text-muted-foreground">
           <span title={entry.id} className="inline-flex items-center gap-1">
             {entry.id}
             {isPending && (
-              <Badge variant="outline" className="h-4 px-1 text-[9px] text-orange-500 border-orange-300">
+              <Badge
+                variant="outline"
+                className="h-4 px-1 text-[9px] text-orange-500 border-orange-300"
+              >
                 pending
               </Badge>
             )}
           </span>
         </TableCell>
-        <TableCell className="py-1.5 text-xs">{Object.keys(entry.fields).length}</TableCell>
+        <TableCell className="py-1.5 text-xs">
+          {Object.keys(entry.fields).length}
+        </TableCell>
         <TableCell className="py-1.5">
           <span
             className="block cursor-pointer truncate font-mono text-xs hover:text-foreground/70"
@@ -1303,7 +1560,9 @@ function StreamEntryRow({
             <div className="space-y-1 px-2">
               {Object.entries(entry.fields).map(([key, fieldValue]) => (
                 <div key={key} className="flex gap-2 text-xs">
-                  <span className="min-w-[80px] font-mono text-muted-foreground">{key}</span>
+                  <span className="min-w-[80px] font-mono text-muted-foreground">
+                    {key}
+                  </span>
                   <span className="font-mono">{fieldValue}</span>
                 </div>
               ))}
@@ -1329,7 +1588,12 @@ function CreateGroupDialog({
   const [mkstream, setMkstream] = useState(false);
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create Consumer Group</DialogTitle>
@@ -1355,8 +1619,12 @@ function CreateGroupDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="0">0 — Process all entries from the beginning</SelectItem>
-                <SelectItem value="$">$ — Only new entries from now on</SelectItem>
+                <SelectItem value="0">
+                  0 — Process all entries from the beginning
+                </SelectItem>
+                <SelectItem value="$">
+                  $ — Only new entries from now on
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1371,7 +1639,9 @@ function CreateGroupDialog({
           </label>
         </div>
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             size="sm"
             disabled={!name.trim()}
@@ -1397,12 +1667,18 @@ function ResetGroupDialog({
   const [startId, setStartId] = useState("0");
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Reset Group Cursor</DialogTitle>
           <DialogDescription>
-            Reset the last delivered ID for group <span className="font-mono font-semibold">{groupName}</span>.
+            Reset the last delivered ID for group{" "}
+            <span className="font-mono font-semibold">{groupName}</span>.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1">
@@ -1418,8 +1694,12 @@ function ResetGroupDialog({
           </Select>
         </div>
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={() => onConfirm(startId)}>Reset</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={() => onConfirm(startId)}>
+            Reset
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1439,13 +1719,19 @@ function TrimDialog({
   const [threshold, setThreshold] = useState("");
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Trim Stream</DialogTitle>
           <DialogDescription>
-            Current length: <span className="font-mono">{currentLength.toLocaleString()}</span> entries.
-            Uses approximate trimming (~) for better performance.
+            Current length:{" "}
+            <span className="font-mono">{currentLength.toLocaleString()}</span>{" "}
+            entries. Uses approximate trimming (~) for better performance.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -1456,8 +1742,12 @@ function TrimDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="MAXLEN">MAXLEN — Keep at most N entries</SelectItem>
-                <SelectItem value="MINID">MINID — Remove entries with ID below threshold</SelectItem>
+                <SelectItem value="MAXLEN">
+                  MAXLEN — Keep at most N entries
+                </SelectItem>
+                <SelectItem value="MINID">
+                  MINID — Remove entries with ID below threshold
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1474,7 +1764,9 @@ function TrimDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             size="sm"
             disabled={!threshold.trim()}
@@ -1500,13 +1792,19 @@ function ClaimDialog({
   const [consumer, setConsumer] = useState("");
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Claim Entry</DialogTitle>
           <DialogDescription>
             Transfer entry <span className="font-mono">{entry.id}</span> from{" "}
-            <span className="font-mono">{entry.consumer}</span> to a new consumer.
+            <span className="font-mono">{entry.consumer}</span> to a new
+            consumer.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1">
@@ -1520,7 +1818,9 @@ function ClaimDialog({
           />
         </div>
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             size="sm"
             disabled={!consumer.trim()}

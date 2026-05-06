@@ -1,12 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import {
-  MapPin,
-  Plus,
-  Ruler,
-  Search,
-  Trash2,
-  ArrowUpDown,
-} from "lucide-react";
+import { MapPin, Plus, Ruler, Search, Trash2, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,7 +67,9 @@ export function RedisGeoViewer({
   const [distLoading, setDistLoading] = useState(false);
 
   // POS lookup
-  const [posLookup, setPosLookup] = useState<Map<string, RedisGeoPosition>>(new Map());
+  const [posLookup, setPosLookup] = useState<Map<string, RedisGeoPosition>>(
+    new Map(),
+  );
   const [loadingPos, setLoadingPos] = useState<Set<string>>(new Set());
 
   // Search
@@ -82,13 +77,18 @@ export function RedisGeoViewer({
   const [searchCenter, setSearchCenter] = useState("");
   const [searchRadius, setSearchRadius] = useState("");
   const [searchUnit, setSearchUnit] = useState("km");
-  const [searchResults, setSearchResults] = useState<RedisGeoSearchResult[] | null>(null);
+  const [searchResults, setSearchResults] = useState<
+    RedisGeoSearchResult[] | null
+  >(null);
   const [searchLoading, setSearchLoading] = useState(false);
 
   const geoCount = extra?.geoCount ?? value.length;
 
   const sorted = useMemo(
-    () => [...value].sort((a, b) => (sortAsc ? a.score - b.score : b.score - a.score)),
+    () =>
+      [...value].sort((a, b) =>
+        sortAsc ? a.score - b.score : b.score - a.score,
+      ),
     [value, sortAsc],
   );
 
@@ -185,20 +185,32 @@ export function RedisGeoViewer({
     setSearchLoading(true);
     try {
       const { api } = await import("@/services/api");
-      const results = await api.redis.geoSearch(connectionId, database, redisKey, {
-        member: center,
-        radius,
-        unit: searchUnit,
-        withCoord: true,
-        withDist: true,
-      });
+      const results = await api.redis.geoSearch(
+        connectionId,
+        database,
+        redisKey,
+        {
+          member: center,
+          radius,
+          unit: searchUnit,
+          withCoord: true,
+          withDist: true,
+        },
+      );
       setSearchResults(results);
     } catch {
       setSearchResults(null);
     } finally {
       setSearchLoading(false);
     }
-  }, [searchCenter, searchRadius, searchUnit, connectionId, database, redisKey]);
+  }, [
+    searchCenter,
+    searchRadius,
+    searchUnit,
+    connectionId,
+    database,
+    redisKey,
+  ]);
 
   const deleteMember = useCallback(
     (member: string) => {
@@ -313,7 +325,10 @@ export function RedisGeoViewer({
           </div>
           {distResult !== null && (
             <div className="text-xs text-teal-700 dark:text-teal-400 font-mono">
-              {distResult.toLocaleString(undefined, { maximumFractionDigits: 4 })} {distUnit}
+              {distResult.toLocaleString(undefined, {
+                maximumFractionDigits: 4,
+              })}{" "}
+              {distUnit}
             </div>
           )}
         </div>
@@ -445,9 +460,7 @@ export function RedisGeoViewer({
               Cancel
             </Button>
           </div>
-          {addError && (
-            <div className="text-xs text-red-600">{addError}</div>
-          )}
+          {addError && <div className="text-xs text-red-600">{addError}</div>}
         </div>
       )}
 

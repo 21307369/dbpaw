@@ -55,7 +55,9 @@ function CopyButton({ text }: CopyButtonProps) {
       ) : (
         <Copy className="h-3.5 w-3.5 mr-1" />
       )}
-      {copied ? t("tableMetadata.copy.copiedShort") : t("tableMetadata.copy.copy")}
+      {copied
+        ? t("tableMetadata.copy.copiedShort")
+        : t("tableMetadata.copy.copy")}
     </Button>
   );
 }
@@ -166,8 +168,12 @@ export function TableMetadataView({
             {t("tableMetadata.title")}
           </div>
         </div>
-        {loading && <Badge variant="secondary">{t("tableMetadata.loading")}</Badge>}
-        {error && <Badge variant="destructive">{t("tableMetadata.error")}</Badge>}
+        {loading && (
+          <Badge variant="secondary">{t("tableMetadata.loading")}</Badge>
+        )}
+        {error && (
+          <Badge variant="destructive">{t("tableMetadata.error")}</Badge>
+        )}
       </div>
 
       {error && (
@@ -175,16 +181,28 @@ export function TableMetadataView({
       )}
 
       <section className="space-y-2">
-        <div className="text-sm font-semibold">{t("tableMetadata.columns.title")}</div>
+        <div className="text-sm font-semibold">
+          {t("tableMetadata.columns.title")}
+        </div>
         <div className="border border-border rounded-md overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[220px]">{t("tableMetadata.columns.columnName")}</TableHead>
-                <TableHead className="w-[220px]">{t("tableMetadata.columns.type")}</TableHead>
-                <TableHead className="w-[90px]">{t("tableMetadata.columns.nullable")}</TableHead>
-                <TableHead className="w-[220px]">{t("tableMetadata.columns.defaultValue")}</TableHead>
-                <TableHead className="w-[160px]">{t("tableMetadata.columns.keys")}</TableHead>
+                <TableHead className="w-[220px]">
+                  {t("tableMetadata.columns.columnName")}
+                </TableHead>
+                <TableHead className="w-[220px]">
+                  {t("tableMetadata.columns.type")}
+                </TableHead>
+                <TableHead className="w-[90px]">
+                  {t("tableMetadata.columns.nullable")}
+                </TableHead>
+                <TableHead className="w-[220px]">
+                  {t("tableMetadata.columns.defaultValue")}
+                </TableHead>
+                <TableHead className="w-[160px]">
+                  {t("tableMetadata.columns.keys")}
+                </TableHead>
                 <TableHead>{t("tableMetadata.columns.description")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -212,10 +230,14 @@ export function TableMetadataView({
                       </TableCell>
                       <TableCell className="flex items-center gap-2">
                         {col.primaryKey && (
-                          <Badge variant="default">{t("tableMetadata.columns.pk")}</Badge>
+                          <Badge variant="default">
+                            {t("tableMetadata.columns.pk")}
+                          </Badge>
                         )}
                         {isFk && (
-                          <Badge variant="outline">{t("tableMetadata.columns.fk")}</Badge>
+                          <Badge variant="outline">
+                            {t("tableMetadata.columns.fk")}
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell>{col.comment ?? ""}</TableCell>
@@ -258,9 +280,13 @@ export function TableMetadataView({
               <TableBody>
                 {specialTypeSummaries.map((summary) => (
                   <TableRow key={`${summary.columnName}-${summary.category}`}>
-                    <TableCell className="font-mono">{summary.columnName}</TableCell>
+                    <TableCell className="font-mono">
+                      {summary.columnName}
+                    </TableCell>
                     <TableCell>{categoryLabel(summary.category)}</TableCell>
-                    <TableCell className="font-mono">{summary.typeName}</TableCell>
+                    <TableCell className="font-mono">
+                      {summary.typeName}
+                    </TableCell>
                     <TableCell className="font-mono">
                       {summary.declaredLength ??
                         t("tableMetadata.specialTypes.unavailable")}
@@ -281,7 +307,9 @@ export function TableMetadataView({
       <section className="space-y-2">
         {clickhouseExtra && (
           <>
-            <div className="text-sm font-semibold">{t("tableMetadata.clickhouse.title")}</div>
+            <div className="text-sm font-semibold">
+              {t("tableMetadata.clickhouse.title")}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div className="border border-border rounded-md p-2">
                 <div className="text-xs text-muted-foreground">
@@ -347,14 +375,22 @@ export function TableMetadataView({
       </section>
 
       <section className="space-y-2">
-        <div className="text-sm font-semibold">{t("tableMetadata.indexes.title")}</div>
+        <div className="text-sm font-semibold">
+          {t("tableMetadata.indexes.title")}
+        </div>
         <div className="border border-border rounded-md overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[240px]">{t("tableMetadata.indexes.indexName")}</TableHead>
-                <TableHead className="w-[120px]">{t("tableMetadata.indexes.unique")}</TableHead>
-                <TableHead className="w-[160px]">{t("tableMetadata.indexes.type")}</TableHead>
+                <TableHead className="w-[240px]">
+                  {t("tableMetadata.indexes.indexName")}
+                </TableHead>
+                <TableHead className="w-[120px]">
+                  {t("tableMetadata.indexes.unique")}
+                </TableHead>
+                <TableHead className="w-[160px]">
+                  {t("tableMetadata.indexes.type")}
+                </TableHead>
                 <TableHead>{t("tableMetadata.indexes.columns")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -395,16 +431,28 @@ export function TableMetadataView({
       </section>
 
       <section className="space-y-2">
-        <div className="text-sm font-semibold">{t("tableMetadata.foreignKeys.title")}</div>
+        <div className="text-sm font-semibold">
+          {t("tableMetadata.foreignKeys.title")}
+        </div>
         <div className="border border-border rounded-md overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[240px]">{t("tableMetadata.foreignKeys.fkName")}</TableHead>
-                <TableHead className="w-[180px]">{t("tableMetadata.foreignKeys.localColumn")}</TableHead>
-                <TableHead className="w-[320px]">{t("tableMetadata.foreignKeys.references")}</TableHead>
-                <TableHead className="w-[140px]">{t("tableMetadata.foreignKeys.onUpdate")}</TableHead>
-                <TableHead className="w-[140px]">{t("tableMetadata.foreignKeys.onDelete")}</TableHead>
+                <TableHead className="w-[240px]">
+                  {t("tableMetadata.foreignKeys.fkName")}
+                </TableHead>
+                <TableHead className="w-[180px]">
+                  {t("tableMetadata.foreignKeys.localColumn")}
+                </TableHead>
+                <TableHead className="w-[320px]">
+                  {t("tableMetadata.foreignKeys.references")}
+                </TableHead>
+                <TableHead className="w-[140px]">
+                  {t("tableMetadata.foreignKeys.onUpdate")}
+                </TableHead>
+                <TableHead className="w-[140px]">
+                  {t("tableMetadata.foreignKeys.onDelete")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -436,7 +484,9 @@ export function TableMetadataView({
 
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold">{t("tableMetadata.ddl.title")}</div>
+          <div className="text-sm font-semibold">
+            {t("tableMetadata.ddl.title")}
+          </div>
           <CopyButton text={ddl} />
         </div>
         <div className="border border-border rounded-md bg-muted/10">

@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
-import { Clock, Hash, Loader2, MemoryStick, RefreshCw, Save, Trash2, Box, Timer, Copy } from "lucide-react";
+import {
+  Clock,
+  Hash,
+  Loader2,
+  MemoryStick,
+  RefreshCw,
+  Save,
+  Trash2,
+  Box,
+  Timer,
+  Copy,
+} from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +32,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/services/api";
-import type { RedisKeyPatchPayload, RedisKeyValue, RedisValue, RedisBitmapBit } from "@/services/api";
+import type {
+  RedisKeyPatchPayload,
+  RedisKeyValue,
+  RedisValue,
+  RedisBitmapBit,
+} from "@/services/api";
 import { toast } from "sonner";
 import { RedisStringViewer } from "./value-viewer/RedisStringViewer";
 import { RedisHashViewer } from "./value-viewer/RedisHashViewer";
@@ -279,7 +295,10 @@ export function RedisKeyView({
 }: RedisKeyViewProps) {
   const [record, setRecord] = useState<RedisKeyValue | null>(null);
   const [value, setValue] = useState<RedisValue>({ kind: "string", value: "" });
-  const [originalValue, setOriginalValue] = useState<RedisValue>({ kind: "string", value: "" });
+  const [originalValue, setOriginalValue] = useState<RedisValue>({
+    kind: "string",
+    value: "",
+  });
   const [originalLoadedCount, setOriginalLoadedCount] = useState(0);
   const [keyName, setKeyName] = useState(redisKey);
   const [ttl, setTtl] = useState("");
@@ -331,7 +350,9 @@ export function RedisKeyView({
         isRedisValuePagePartial(v, total, next.valueOffset, count),
       );
       setLoadedOffset(next.valueOffset);
-      setOriginalValue(resolvedKind === v.kind ? v : KIND_DEFAULT[resolvedKind]);
+      setOriginalValue(
+        resolvedKind === v.kind ? v : KIND_DEFAULT[resolvedKind],
+      );
       setOriginalLoadedCount(count);
     } catch (e) {
       toast.error("Failed to load Redis key", {
@@ -384,7 +405,9 @@ export function RedisKeyView({
     if (!normalizedKey) throw new Error("Redis key cannot be empty");
     if (value.kind === "json") {
       if (jsonModuleMissing) {
-        throw new Error("RedisJSON module is unavailable for this key. Saving is disabled.");
+        throw new Error(
+          "RedisJSON module is unavailable for this key. Saving is disabled.",
+        );
       }
       if (jsonValidationError) {
         throw new Error(`Invalid JSON: ${jsonValidationError}`);
@@ -507,7 +530,8 @@ export function RedisKeyView({
     }
     if (jsonModuleMissing) {
       toast.error("Failed to save Redis key", {
-        description: "RedisJSON module is unavailable for this key. Saving is disabled.",
+        description:
+          "RedisJSON module is unavailable for this key. Saving is disabled.",
       });
       return;
     }
@@ -741,7 +765,9 @@ export function RedisKeyView({
               onClick={() => setSetOptionsExpanded(!setOptionsExpanded)}
             >
               <span>Advanced SET options</span>
-              <span className="text-[10px]">{setOptionsExpanded ? "▲" : "▼"}</span>
+              <span className="text-[10px]">
+                {setOptionsExpanded ? "▲" : "▼"}
+              </span>
             </button>
             {setOptionsExpanded && (
               <div className="grid gap-3 border-t px-4 py-3 md:grid-cols-2">
@@ -753,7 +779,10 @@ export function RedisKeyView({
                         type="radio"
                         name="set-condition"
                         checked={!setNx && !setXx}
-                        onChange={() => { setSetNx(false); setSetXx(false); }}
+                        onChange={() => {
+                          setSetNx(false);
+                          setSetXx(false);
+                        }}
                       />
                       None
                     </label>
@@ -762,7 +791,10 @@ export function RedisKeyView({
                         type="radio"
                         name="set-condition"
                         checked={setNx}
-                        onChange={() => { setSetNx(true); setSetXx(false); }}
+                        onChange={() => {
+                          setSetNx(true);
+                          setSetXx(false);
+                        }}
                       />
                       NX
                     </label>
@@ -771,12 +803,17 @@ export function RedisKeyView({
                         type="radio"
                         name="set-condition"
                         checked={setXx}
-                        onChange={() => { setSetNx(false); setSetXx(true); }}
+                        onChange={() => {
+                          setSetNx(false);
+                          setSetXx(true);
+                        }}
                       />
                       XX
                     </label>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">NX: set only if absent · XX: set only if exists</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    NX: set only if absent · XX: set only if exists
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">PX (ms expiry)</Label>
@@ -788,7 +825,9 @@ export function RedisKeyView({
                     inputMode="numeric"
                     disabled={!!ttl.trim()}
                   />
-                  <p className="text-[10px] text-muted-foreground">Mutually exclusive with TTL (seconds)</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Mutually exclusive with TTL (seconds)
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -797,8 +836,15 @@ export function RedisKeyView({
                     checked={setKeepttl}
                     onChange={(e) => setSetKeepttl(e.target.checked)}
                   />
-                  <Label htmlFor="set-keepttl" className="text-xs cursor-pointer">KEEPTTL</Label>
-                  <p className="text-[10px] text-muted-foreground">Retain existing TTL</p>
+                  <Label
+                    htmlFor="set-keepttl"
+                    className="text-xs cursor-pointer"
+                  >
+                    KEEPTTL
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Retain existing TTL
+                  </p>
                 </div>
               </div>
             )}
@@ -832,55 +878,58 @@ export function RedisKeyView({
               extra={record?.extra}
             />
           )}
-          {value.kind === "string" && record?.extra?.subtype === "hyperloglog" && (
-            <RedisHyperLogLogViewer
-              value={value.value}
-              isBinary={record?.isBinary ?? false}
-              extra={record?.extra}
-              connectionId={connectionId}
-              database={database}
-              redisKey={redisKey}
-              onRefresh={() => void load()}
-            />
-          )}
-          {value.kind === "string" && record?.extra?.subtype !== "bitmap" && record?.extra?.subtype !== "hyperloglog" && (
-            <RedisStringViewer
-              value={value.value}
-              onChange={(v) => setValue({ kind: "string", value: v })}
-              isBinary={record?.isBinary}
-              extra={record?.extra}
-              onIncrBy={async (amount) => {
-                try {
-                  await api.redis.patchKey(connectionId, database, {
-                    key: redisKey,
-                    ttlSeconds: null,
-                    stringIncrBy: amount,
-                  });
-                  toast.success("Value incremented");
-                  await load();
-                } catch (e) {
-                  toast.error("Failed to increment", {
-                    description: e instanceof Error ? e.message : String(e),
-                  });
-                }
-              }}
-              onIncrByInt={async (amount) => {
-                try {
-                  await api.redis.patchKey(connectionId, database, {
-                    key: redisKey,
-                    ttlSeconds: null,
-                    stringIncrByInt: amount,
-                  });
-                  toast.success("Value incremented");
-                  await load();
-                } catch (e) {
-                  toast.error("Failed to increment", {
-                    description: e instanceof Error ? e.message : String(e),
-                  });
-                }
-              }}
-            />
-          )}
+          {value.kind === "string" &&
+            record?.extra?.subtype === "hyperloglog" && (
+              <RedisHyperLogLogViewer
+                value={value.value}
+                isBinary={record?.isBinary ?? false}
+                extra={record?.extra}
+                connectionId={connectionId}
+                database={database}
+                redisKey={redisKey}
+                onRefresh={() => void load()}
+              />
+            )}
+          {value.kind === "string" &&
+            record?.extra?.subtype !== "bitmap" &&
+            record?.extra?.subtype !== "hyperloglog" && (
+              <RedisStringViewer
+                value={value.value}
+                onChange={(v) => setValue({ kind: "string", value: v })}
+                isBinary={record?.isBinary}
+                extra={record?.extra}
+                onIncrBy={async (amount) => {
+                  try {
+                    await api.redis.patchKey(connectionId, database, {
+                      key: redisKey,
+                      ttlSeconds: null,
+                      stringIncrBy: amount,
+                    });
+                    toast.success("Value incremented");
+                    await load();
+                  } catch (e) {
+                    toast.error("Failed to increment", {
+                      description: e instanceof Error ? e.message : String(e),
+                    });
+                  }
+                }}
+                onIncrByInt={async (amount) => {
+                  try {
+                    await api.redis.patchKey(connectionId, database, {
+                      key: redisKey,
+                      ttlSeconds: null,
+                      stringIncrByInt: amount,
+                    });
+                    toast.success("Value incremented");
+                    await load();
+                  } catch (e) {
+                    toast.error("Failed to increment", {
+                      description: e instanceof Error ? e.message : String(e),
+                    });
+                  }
+                }}
+              />
+            )}
           {value.kind === "hash" && (
             <RedisHashViewer
               value={value.value}
@@ -961,9 +1010,7 @@ export function RedisKeyView({
                   dstDirection,
                 );
                 if (moved !== null) {
-                  toast.success(
-                    `Moved "${moved}" to "${destination}"`,
-                  );
+                  toast.success(`Moved "${moved}" to "${destination}"`);
                   await load();
                 } else {
                   toast.warning("Source list is empty");
@@ -1170,14 +1217,15 @@ export function RedisKeyView({
               </Button>
             </div>
           )}
-
         </div>
 
         {/* Save */}
         <div className="flex justify-end">
           <Button
             onClick={() => void handleSave()}
-            disabled={isSaving || Boolean(jsonValidationError) || jsonModuleMissing}
+            disabled={
+              isSaving || Boolean(jsonValidationError) || jsonModuleMissing
+            }
           >
             {isSaving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

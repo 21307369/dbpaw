@@ -378,7 +378,10 @@ async fn test_postgres_command_get_table_ddl_success() {
     .await
     .expect("get_table_ddl should succeed");
     let ddl_upper = ddl.to_uppercase();
-    assert!(ddl_upper.contains("CREATE TABLE"), "DDL should contain CREATE TABLE");
+    assert!(
+        ddl_upper.contains("CREATE TABLE"),
+        "DDL should contain CREATE TABLE"
+    );
     assert!(ddl.contains(&child), "DDL should contain table name");
     assert!(
         ddl_upper.contains("PRIMARY KEY"),
@@ -436,7 +439,10 @@ async fn test_postgres_command_get_table_metadata_contains_indexes_and_foreign_k
     )
     .await
     .expect("get_table_metadata should succeed");
-    assert!(meta.indexes.iter().any(|idx| idx.name == format!("idx_{}_name", child)));
+    assert!(meta
+        .indexes
+        .iter()
+        .any(|idx| idx.name == format!("idx_{}_name", child)));
     assert!(meta.foreign_keys.iter().any(|fk| fk.column == "parent_id"));
 
     cleanup_metadata_fixture(&form, &schema, &parent, &child).await;

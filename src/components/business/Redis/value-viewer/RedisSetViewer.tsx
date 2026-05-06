@@ -43,10 +43,7 @@ interface Props {
   value: string[];
   onChange: (v: string[]) => void;
   onSismember?: (member: string) => Promise<boolean>;
-  onSetOperation?: (
-    keys: string[],
-    op: RedisSetOperation,
-  ) => Promise<string[]>;
+  onSetOperation?: (keys: string[], op: RedisSetOperation) => Promise<string[]>;
   onSmove?: (destination: string, member: string) => Promise<boolean>;
 }
 

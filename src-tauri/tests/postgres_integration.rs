@@ -1159,10 +1159,7 @@ async fn test_postgres_routines() {
     let procedure_name = "dbpaw_pg_test_proc";
 
     let _ = driver
-        .execute_query(format!(
-            "DROP FUNCTION IF EXISTS public.{}",
-            function_name
-        ))
+        .execute_query(format!("DROP FUNCTION IF EXISTS public.{}", function_name))
         .await;
     let _ = driver
         .execute_query(format!(
@@ -1194,17 +1191,13 @@ async fn test_postgres_routines() {
     assert!(
         routines
             .iter()
-            .any(|r| r.schema == "public"
-                && r.name == function_name
-                && r.r#type == "function"),
+            .any(|r| r.schema == "public" && r.name == function_name && r.r#type == "function"),
         "list_routines should include created function"
     );
     assert!(
         routines
             .iter()
-            .any(|r| r.schema == "public"
-                && r.name == procedure_name
-                && r.r#type == "procedure"),
+            .any(|r| r.schema == "public" && r.name == procedure_name && r.r#type == "procedure"),
         "list_routines should include created procedure"
     );
 
@@ -1237,10 +1230,7 @@ async fn test_postgres_routines() {
     );
 
     let _ = driver
-        .execute_query(format!(
-            "DROP FUNCTION IF EXISTS public.{}",
-            function_name
-        ))
+        .execute_query(format!("DROP FUNCTION IF EXISTS public.{}", function_name))
         .await;
     let _ = driver
         .execute_query(format!(
@@ -1304,10 +1294,7 @@ async fn test_postgres_ddl_includes_constraints_indexes_comments() {
         .await
         .expect("create child table failed");
     driver
-        .execute_query(format!(
-            "CREATE INDEX idx_child_name ON {} (name)",
-            child_q
-        ))
+        .execute_query(format!("CREATE INDEX idx_child_name ON {} (name)", child_q))
         .await
         .expect("create child index failed");
 
@@ -1317,7 +1304,10 @@ async fn test_postgres_ddl_includes_constraints_indexes_comments() {
         .expect("get_table_ddl failed");
 
     let ddl_upper = ddl.to_uppercase();
-    assert!(ddl_upper.contains("CREATE TABLE"), "DDL should contain CREATE TABLE");
+    assert!(
+        ddl_upper.contains("CREATE TABLE"),
+        "DDL should contain CREATE TABLE"
+    );
     assert!(
         ddl_upper.contains("PRIMARY KEY"),
         "DDL should contain PRIMARY KEY constraint, got:\n{}",
@@ -1430,7 +1420,10 @@ async fn test_postgres_table_structure_includes_primary_key_and_comment() {
         .iter()
         .find(|c| c.name == "id")
         .expect("should have id column");
-    assert!(id_col.primary_key, "id column should be marked as primary key");
+    assert!(
+        id_col.primary_key,
+        "id column should be marked as primary key"
+    );
 
     let label_col = structure
         .columns

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type RedisClusterInfo, type RedisServerInfo, type RedisSlowlogEntry } from "@/services/api";
+import {
+  api,
+  type RedisClusterInfo,
+  type RedisServerInfo,
+  type RedisSlowlogEntry,
+} from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -28,8 +33,19 @@ interface Props {
 const HIGHLIGHT_KEYS: Record<string, string[]> = {
   Server: ["redis_version", "os", "tcp_port", "uptime_in_seconds"],
   Clients: ["connected_clients", "blocked_clients", "maxclients"],
-  Memory: ["used_memory_human", "used_memory_peak_human", "used_memory_rss_human", "mem_fragmentation_ratio"],
-  Stats: ["total_connections_received", "total_commands_processed", "instantaneous_ops_per_sec", "keyspace_hits", "keyspace_misses"],
+  Memory: [
+    "used_memory_human",
+    "used_memory_peak_human",
+    "used_memory_rss_human",
+    "mem_fragmentation_ratio",
+  ],
+  Stats: [
+    "total_connections_received",
+    "total_commands_processed",
+    "instantaneous_ops_per_sec",
+    "keyspace_hits",
+    "keyspace_misses",
+  ],
   Replication: ["role", "connected_slaves"],
   Keyspace: [],
 };
@@ -62,7 +78,9 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [configFilter, setConfigFilter] = useState("");
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    new Set(),
+  );
   const [slowlogLoading, setSlowlogLoading] = useState(false);
   const [clusterData, setClusterData] = useState<RedisClusterInfo | null>(null);
   const [clusterLoading, setClusterLoading] = useState(false);
@@ -71,7 +89,10 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.redis.serverInfo(connectionId, database || undefined);
+      const data = await api.redis.serverInfo(
+        connectionId,
+        database || undefined,
+      );
       setInfo(data);
       setExpandedSections(new Set(Object.keys(data.sections)));
     } catch (e) {
@@ -83,7 +104,10 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
 
   const loadConfig = useCallback(async () => {
     try {
-      const data = await api.redis.serverConfig(connectionId, database || undefined);
+      const data = await api.redis.serverConfig(
+        connectionId,
+        database || undefined,
+      );
       setConfig(data);
     } catch {
       // Config may fail on restricted servers, silently ignore
@@ -93,7 +117,11 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
   const loadSlowlog = useCallback(async () => {
     try {
       setSlowlogLoading(true);
-      const data = await api.redis.slowlogGet(connectionId, database || undefined, 50);
+      const data = await api.redis.slowlogGet(
+        connectionId,
+        database || undefined,
+        50,
+      );
       setSlowlog(data);
     } catch {
       // Slowlog may not be available
@@ -105,7 +133,10 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
   const loadClusterInfo = useCallback(async () => {
     try {
       setClusterLoading(true);
-      const data = await api.redis.clusterInfo(connectionId, database || undefined);
+      const data = await api.redis.clusterInfo(
+        connectionId,
+        database || undefined,
+      );
       setClusterData(data);
     } catch {
       // Cluster info may not be available on non-cluster servers
@@ -142,7 +173,8 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
     if (!configFilter) return entries;
     const lower = configFilter.toLowerCase();
     return entries.filter(
-      ([k, v]) => k.toLowerCase().includes(lower) || v.toLowerCase().includes(lower),
+      ([k, v]) =>
+        k.toLowerCase().includes(lower) || v.toLowerCase().includes(lower),
     );
   }, [config, configFilter]);
 
@@ -213,8 +245,14 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
           <MetricCard
             icon={<Database className="h-4 w-4" />}
             label="Total Keys"
-            value={totalKeys > 0 ? totalKeys.toLocaleString() : dbsize.toLocaleString()}
-            sub={totalKeys > 0 ? `DBSIZE: ${dbsize.toLocaleString()}` : undefined}
+            value={
+              totalKeys > 0
+                ? totalKeys.toLocaleString()
+                : dbsize.toLocaleString()
+            }
+            sub={
+              totalKeys > 0 ? `DBSIZE: ${dbsize.toLocaleString()}` : undefined
+            }
           />
           <MetricCard
             icon={<MemoryStick className="h-4 w-4" />}
@@ -226,13 +264,23 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
             icon={<Users className="h-4 w-4" />}
             label="Connected Clients"
             value={connectedClients ?? "N/A"}
-            sub={clientsSection["blocked_clients"] ? `${clientsSection["blocked_clients"]} blocked` : undefined}
+            sub={
+              clientsSection["blocked_clients"]
+                ? `${clientsSection["blocked_clients"]} blocked`
+                : undefined
+            }
           />
           <MetricCard
             icon={<Clock className="h-4 w-4" />}
             label="Uptime"
-            value={uptimeSeconds ? formatUptime(parseInt(uptimeSeconds, 10)) : "N/A"}
-            sub={serverSection["tcp_port"] ? `Port: ${serverSection["tcp_port"]}` : undefined}
+            value={
+              uptimeSeconds ? formatUptime(parseInt(uptimeSeconds, 10)) : "N/A"
+            }
+            sub={
+              serverSection["tcp_port"]
+                ? `Port: ${serverSection["tcp_port"]}`
+                : undefined
+            }
           />
         </div>
 
@@ -280,11 +328,16 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
                 <CardContent className="p-0">
                   <div className="divide-y">
                     {filteredConfig.map(([key, value]) => (
-                      <div key={key} className="flex items-start gap-3 px-4 py-2 text-sm">
+                      <div
+                        key={key}
+                        className="flex items-start gap-3 px-4 py-2 text-sm"
+                      >
                         <span className="font-mono text-xs text-muted-foreground min-w-[200px] shrink-0">
                           {key}
                         </span>
-                        <span className="font-mono text-xs break-all">{value}</span>
+                        <span className="font-mono text-xs break-all">
+                          {value}
+                        </span>
                       </div>
                     ))}
                     {filteredConfig.length === 0 && (
@@ -338,9 +391,13 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="px-4 py-2 font-medium text-xs">ID</th>
-                        <th className="px-4 py-2 font-medium text-xs">Duration</th>
+                        <th className="px-4 py-2 font-medium text-xs">
+                          Duration
+                        </th>
                         <th className="px-4 py-2 font-medium text-xs">Time</th>
-                        <th className="px-4 py-2 font-medium text-xs">Command</th>
+                        <th className="px-4 py-2 font-medium text-xs">
+                          Command
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -351,7 +408,13 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
                           </td>
                           <td className="px-4 py-2">
                             <Badge
-                              variant={entry.durationMs > 10000 ? "destructive" : entry.durationMs > 1000 ? "secondary" : "outline"}
+                              variant={
+                                entry.durationMs > 10000
+                                  ? "destructive"
+                                  : entry.durationMs > 1000
+                                    ? "secondary"
+                                    : "outline"
+                              }
                               className="text-xs font-mono"
                             >
                               {entry.durationMs >= 1000
@@ -390,25 +453,42 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
                       icon={<Network className="h-4 w-4" />}
                       label="Cluster State"
                       value={clusterData.info["cluster_state"] ?? "N/A"}
-                      sub={clusterData.info["cluster_slots_ok"] ? `${clusterData.info["cluster_slots_ok"]} slots` : undefined}
+                      sub={
+                        clusterData.info["cluster_slots_ok"]
+                          ? `${clusterData.info["cluster_slots_ok"]} slots`
+                          : undefined
+                      }
                     />
                     <MetricCard
                       icon={<Database className="h-4 w-4" />}
                       label="Known Nodes"
-                      value={clusterData.info["cluster_known_nodes"] ?? String(clusterData.nodes.length)}
+                      value={
+                        clusterData.info["cluster_known_nodes"] ??
+                        String(clusterData.nodes.length)
+                      }
                       sub={`${clusterData.nodes.filter((n) => n.linkState === "connected").length} connected`}
                     />
                     <MetricCard
                       icon={<Server className="h-4 w-4" />}
                       label="Slots Assigned"
-                      value={clusterData.info["cluster_slots_assigned"] ?? "N/A"}
-                      sub={clusterData.info["cluster_slots_pfail"] ? `${clusterData.info["cluster_slots_pfail"]} pfail` : undefined}
+                      value={
+                        clusterData.info["cluster_slots_assigned"] ?? "N/A"
+                      }
+                      sub={
+                        clusterData.info["cluster_slots_pfail"]
+                          ? `${clusterData.info["cluster_slots_pfail"]} pfail`
+                          : undefined
+                      }
                     />
                     <MetricCard
                       icon={<Clock className="h-4 w-4" />}
                       label="Current Epoch"
                       value={clusterData.info["cluster_current_epoch"] ?? "N/A"}
-                      sub={clusterData.info["cluster_my_epoch"] ? `My epoch: ${clusterData.info["cluster_my_epoch"]}` : undefined}
+                      sub={
+                        clusterData.info["cluster_my_epoch"]
+                          ? `My epoch: ${clusterData.info["cluster_my_epoch"]}`
+                          : undefined
+                      }
                     />
                   </div>
 
@@ -421,33 +501,63 @@ export function RedisServerInfoView({ connectionId, database }: Props) {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b text-left text-muted-foreground">
-                            <th className="px-4 py-2 font-medium text-xs">Address</th>
-                            <th className="px-4 py-2 font-medium text-xs">ID</th>
-                            <th className="px-4 py-2 font-medium text-xs">Role</th>
-                            <th className="px-4 py-2 font-medium text-xs">Link</th>
-                            <th className="px-4 py-2 font-medium text-xs">Slots</th>
+                            <th className="px-4 py-2 font-medium text-xs">
+                              Address
+                            </th>
+                            <th className="px-4 py-2 font-medium text-xs">
+                              ID
+                            </th>
+                            <th className="px-4 py-2 font-medium text-xs">
+                              Role
+                            </th>
+                            <th className="px-4 py-2 font-medium text-xs">
+                              Link
+                            </th>
+                            <th className="px-4 py-2 font-medium text-xs">
+                              Slots
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
                           {clusterData.nodes.map((node) => {
                             const role = node.flags.includes("master")
                               ? "master"
-                              : node.flags.includes("slave") || node.flags.includes("replica")
+                              : node.flags.includes("slave") ||
+                                  node.flags.includes("replica")
                                 ? "replica"
                                 : node.flags.join(", ");
                             return (
                               <tr key={node.id} className="hover:bg-muted/30">
-                                <td className="px-4 py-2 font-mono text-xs">{node.addr}</td>
-                                <td className="px-4 py-2 font-mono text-xs text-muted-foreground max-w-[120px] truncate" title={node.id}>
+                                <td className="px-4 py-2 font-mono text-xs">
+                                  {node.addr}
+                                </td>
+                                <td
+                                  className="px-4 py-2 font-mono text-xs text-muted-foreground max-w-[120px] truncate"
+                                  title={node.id}
+                                >
                                   {node.id.substring(0, 8)}…
                                 </td>
                                 <td className="px-4 py-2">
-                                  <Badge variant={role === "master" ? "default" : "secondary"} className="text-xs">
+                                  <Badge
+                                    variant={
+                                      role === "master"
+                                        ? "default"
+                                        : "secondary"
+                                    }
+                                    className="text-xs"
+                                  >
                                     {role}
                                   </Badge>
                                 </td>
                                 <td className="px-4 py-2">
-                                  <Badge variant={node.linkState === "connected" ? "outline" : "destructive"} className="text-xs">
+                                  <Badge
+                                    variant={
+                                      node.linkState === "connected"
+                                        ? "outline"
+                                        : "destructive"
+                                    }
+                                    className="text-xs"
+                                  >
                                     {node.linkState}
                                   </Badge>
                                 </td>
@@ -552,7 +662,10 @@ function SectionCard({
       {expanded && (
         <div className="divide-y">
           {entries.map(([key, value]) => (
-            <div key={key} className="flex items-start gap-3 px-4 py-1.5 text-sm">
+            <div
+              key={key}
+              className="flex items-start gap-3 px-4 py-1.5 text-sm"
+            >
               <span className="font-mono text-xs text-muted-foreground min-w-[220px] shrink-0">
                 {key}
               </span>

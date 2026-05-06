@@ -1011,14 +1011,20 @@ export const api = {
       startId: string,
       mkstream?: boolean,
     ) =>
-      invoke<boolean>("redis_xgroup_create", { id, database, key, group, startId, mkstream }),
+      invoke<boolean>("redis_xgroup_create", {
+        id,
+        database,
+        key,
+        group,
+        startId,
+        mkstream,
+      }),
     xgroupDel: (
       id: number,
       database: string | undefined,
       key: string,
       group: string,
-    ) =>
-      invoke<boolean>("redis_xgroup_del", { id, database, key, group }),
+    ) => invoke<boolean>("redis_xgroup_del", { id, database, key, group }),
     xgroupSetId: (
       id: number,
       database: string | undefined,
@@ -1026,15 +1032,20 @@ export const api = {
       group: string,
       startId: string,
     ) =>
-      invoke<boolean>("redis_xgroup_setid", { id, database, key, group, startId }),
+      invoke<boolean>("redis_xgroup_setid", {
+        id,
+        database,
+        key,
+        group,
+        startId,
+      }),
     xack: (
       id: number,
       database: string | undefined,
       key: string,
       group: string,
       ids: string[],
-    ) =>
-      invoke<number>("redis_xack", { id, database, key, group, ids }),
+    ) => invoke<number>("redis_xack", { id, database, key, group, ids }),
     xpending: (
       id: number,
       database: string | undefined,
@@ -1046,7 +1057,14 @@ export const api = {
       consumer?: string,
     ) =>
       invoke<RedisXPendingSummary | RedisXPendingEntry[]>("redis_xpending", {
-        id, database, key, group, start, end, count, consumer,
+        id,
+        database,
+        key,
+        group,
+        start,
+        end,
+        count,
+        consumer,
       }),
     xclaim: (
       id: number,
@@ -1057,7 +1075,15 @@ export const api = {
       minIdleMs: number,
       ids: string[],
     ) =>
-      invoke<RedisXClaimEntry[]>("redis_xclaim", { id, database, key, group, consumer, minIdleMs, ids }),
+      invoke<RedisXClaimEntry[]>("redis_xclaim", {
+        id,
+        database,
+        key,
+        group,
+        consumer,
+        minIdleMs,
+        ids,
+      }),
     xtrim: (
       id: number,
       database: string | undefined,
@@ -1066,7 +1092,14 @@ export const api = {
       threshold: string,
       approximate?: boolean,
     ) =>
-      invoke<number>("redis_xtrim", { id, database, key, strategy, threshold, approximate }),
+      invoke<number>("redis_xtrim", {
+        id,
+        database,
+        key,
+        strategy,
+        threshold,
+        approximate,
+      }),
     xreadgroup: (
       id: number,
       database: string | undefined,
@@ -1077,7 +1110,13 @@ export const api = {
       count?: number,
     ) =>
       invoke<RedisStreamEntry[]>("redis_xreadgroup", {
-        id, database, key, group, consumer, startId, count,
+        id,
+        database,
+        key,
+        group,
+        consumer,
+        startId,
+        count,
       }),
     executeRaw: (id: number, database: string | undefined, command: string) =>
       invoke<RedisRawResult>("redis_execute_raw", { id, database, command }),
@@ -1087,22 +1126,100 @@ export const api = {
       payload: RedisKeyPatchPayload,
     ) =>
       invoke<RedisMutationResult>("redis_patch_key", { id, database, payload }),
-    bitmapGetBit: (id: number, database: string | undefined, key: string, offset: number) =>
-      invoke<boolean>("redis_bitmap_get_bit", { id, database, key, offset }),
-    bitmapCount: (id: number, database: string | undefined, key: string, start?: number, end?: number) =>
+    bitmapGetBit: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      offset: number,
+    ) => invoke<boolean>("redis_bitmap_get_bit", { id, database, key, offset }),
+    bitmapCount: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      start?: number,
+      end?: number,
+    ) =>
       invoke<number>("redis_bitmap_count", { id, database, key, start, end }),
-    bitmapPos: (id: number, database: string | undefined, key: string, bit: boolean, start?: number, end?: number, count?: number) =>
-      invoke<number[]>("redis_bitmap_pos", { id, database, key, bit, start, end, count }),
-    hllPfadd: (id: number, database: string | undefined, key: string, elements: string[]) =>
-      invoke<boolean>("redis_hll_pfadd", { id, database, key, elements }),
-    geoAdd: (id: number, database: string | undefined, key: string, members: RedisGeoMember[]) =>
-      invoke<number>("redis_geo_add", { id, database, key, members }),
-    geoPos: (id: number, database: string | undefined, key: string, members: string[]) =>
-      invoke<(RedisGeoPosition | null)[]>("redis_geo_pos", { id, database, key, members }),
-    geoDist: (id: number, database: string | undefined, key: string, member1: string, member2: string, unit?: string) =>
-      invoke<number>("redis_geo_dist", { id, database, key, member1, member2, unit }),
-    geoSearch: (id: number, database: string | undefined, key: string, params: { member?: string; longitude?: number; latitude?: number; radius: number; unit: string; withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number }) =>
-      invoke<RedisGeoSearchResult[]>("redis_geo_search", { id, database, key, ...params }),
+    bitmapPos: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      bit: boolean,
+      start?: number,
+      end?: number,
+      count?: number,
+    ) =>
+      invoke<number[]>("redis_bitmap_pos", {
+        id,
+        database,
+        key,
+        bit,
+        start,
+        end,
+        count,
+      }),
+    hllPfadd: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      elements: string[],
+    ) => invoke<boolean>("redis_hll_pfadd", { id, database, key, elements }),
+    geoAdd: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      members: RedisGeoMember[],
+    ) => invoke<number>("redis_geo_add", { id, database, key, members }),
+    geoPos: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      members: string[],
+    ) =>
+      invoke<(RedisGeoPosition | null)[]>("redis_geo_pos", {
+        id,
+        database,
+        key,
+        members,
+      }),
+    geoDist: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      member1: string,
+      member2: string,
+      unit?: string,
+    ) =>
+      invoke<number>("redis_geo_dist", {
+        id,
+        database,
+        key,
+        member1,
+        member2,
+        unit,
+      }),
+    geoSearch: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      params: {
+        member?: string;
+        longitude?: number;
+        latitude?: number;
+        radius: number;
+        unit: string;
+        withCoord?: boolean;
+        withDist?: boolean;
+        withHash?: boolean;
+        count?: number;
+      },
+    ) =>
+      invoke<RedisGeoSearchResult[]>("redis_geo_search", {
+        id,
+        database,
+        key,
+        ...params,
+      }),
     serverInfo: (id: number, database: string | undefined) =>
       invoke<RedisServerInfo>("redis_server_info", { id, database }),
     serverConfig: (id: number, database: string | undefined) =>
@@ -1134,21 +1251,25 @@ export const api = {
       member: string,
       reverse?: boolean,
     ) =>
-      invoke<number | null>("redis_zrank", { id, database, key, member, reverse }),
+      invoke<number | null>("redis_zrank", {
+        id,
+        database,
+        key,
+        member,
+        reverse,
+      }),
     setOperation: (
       id: number,
       database: string | undefined,
       keys: string[],
       op: RedisSetOperation,
-    ) =>
-      invoke<string[]>("redis_set_operation", { id, database, keys, op }),
+    ) => invoke<string[]>("redis_set_operation", { id, database, keys, op }),
     sismember: (
       id: number,
       database: string | undefined,
       key: string,
       member: string,
-    ) =>
-      invoke<boolean>("redis_sismember", { id, database, key, member }),
+    ) => invoke<boolean>("redis_sismember", { id, database, key, member }),
     smove: (
       id: number,
       database: string | undefined,
@@ -1156,23 +1277,50 @@ export const api = {
       destination: string,
       member: string,
     ) =>
-      invoke<boolean>("redis_smove", { id, database, source, destination, member }),
+      invoke<boolean>("redis_smove", {
+        id,
+        database,
+        source,
+        destination,
+        member,
+      }),
     batchKeyOps: (
       id: number,
       database: string | undefined,
       operations: RedisBatchKeyOp[],
     ) =>
-      invoke<RedisBatchKeyOpResult[]>("redis_batch_key_ops", { id, database, operations }),
+      invoke<RedisBatchKeyOpResult[]>("redis_batch_key_ops", {
+        id,
+        database,
+        operations,
+      }),
     mget: (id: number, database: string | undefined, keys: string[]) =>
       invoke<RedisMgetEntry[]>("redis_mget", { id, database, keys }),
-    mset: (id: number, database: string | undefined, entries: Record<string, string>) =>
-      invoke<RedisMutationResult>("redis_mset", { id, database, entries }),
+    mset: (
+      id: number,
+      database: string | undefined,
+      entries: Record<string, string>,
+    ) => invoke<RedisMutationResult>("redis_mset", { id, database, entries }),
     clusterInfo: (id: number, database: string | undefined) =>
       invoke<RedisClusterInfo>("redis_cluster_info", { id, database }),
-    zscore: (id: number, database: string | undefined, key: string, member: string) =>
-      invoke<number | null>("redis_zscore", { id, database, key, member }),
-    zmscore: (id: number, database: string | undefined, key: string, members: string[]) =>
-      invoke<(number | null)[]>("redis_zmscore", { id, database, key, members }),
+    zscore: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      member: string,
+    ) => invoke<number | null>("redis_zscore", { id, database, key, member }),
+    zmscore: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      members: string[],
+    ) =>
+      invoke<(number | null)[]>("redis_zmscore", {
+        id,
+        database,
+        key,
+        members,
+      }),
     zrangebylex: (
       id: number,
       database: string | undefined,
@@ -1183,16 +1331,51 @@ export const api = {
       limit?: number,
     ) =>
       invoke<RedisZRangeByLexResult>("redis_zrangebylex", {
-        id, database, key, min, max, offset, limit,
+        id,
+        database,
+        key,
+        min,
+        max,
+        offset,
+        limit,
       }),
-    zlexcount: (id: number, database: string | undefined, key: string, min: string, max: string) =>
-      invoke<number>("redis_zlexcount", { id, database, key, min, max }),
-    zpopmin: (id: number, database: string | undefined, key: string, count?: number) =>
-      invoke<{ member: string; score: number }[]>("redis_zpopmin", { id, database, key, count }),
-    zpopmax: (id: number, database: string | undefined, key: string, count?: number) =>
-      invoke<{ member: string; score: number }[]>("redis_zpopmax", { id, database, key, count }),
-    lindex: (id: number, database: string | undefined, key: string, index: number) =>
-      invoke<string | null>("redis_lindex", { id, database, key, index }),
+    zlexcount: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      min: string,
+      max: string,
+    ) => invoke<number>("redis_zlexcount", { id, database, key, min, max }),
+    zpopmin: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      count?: number,
+    ) =>
+      invoke<{ member: string; score: number }[]>("redis_zpopmin", {
+        id,
+        database,
+        key,
+        count,
+      }),
+    zpopmax: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      count?: number,
+    ) =>
+      invoke<{ member: string; score: number }[]>("redis_zpopmax", {
+        id,
+        database,
+        key,
+        count,
+      }),
+    lindex: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      index: number,
+    ) => invoke<string | null>("redis_lindex", { id, database, key, index }),
     lpos: (
       id: number,
       database: string | undefined,
@@ -1201,9 +1384,23 @@ export const api = {
       rank?: number,
       count?: number,
       maxlen?: number,
-    ) => invoke<number[]>("redis_lpos", { id, database, key, element, rank, count, maxlen }),
-    ltrim: (id: number, database: string | undefined, key: string, start: number, stop: number) =>
-      invoke<boolean>("redis_ltrim", { id, database, key, start, stop }),
+    ) =>
+      invoke<number[]>("redis_lpos", {
+        id,
+        database,
+        key,
+        element,
+        rank,
+        count,
+        maxlen,
+      }),
+    ltrim: (
+      id: number,
+      database: string | undefined,
+      key: string,
+      start: number,
+      stop: number,
+    ) => invoke<boolean>("redis_ltrim", { id, database, key, start, stop }),
     linsert: (
       id: number,
       database: string | undefined,
@@ -1211,7 +1408,15 @@ export const api = {
       position: RedisLInsertPosition,
       pivot: string,
       element: string,
-    ) => invoke<number>("redis_linsert", { id, database, key, position, pivot, element }),
+    ) =>
+      invoke<number>("redis_linsert", {
+        id,
+        database,
+        key,
+        position,
+        pivot,
+        element,
+      }),
     lmove: (
       id: number,
       database: string | undefined,

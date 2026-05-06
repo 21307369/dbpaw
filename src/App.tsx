@@ -204,9 +204,7 @@ const RedisBrowserView = lazy(async () => {
 });
 
 const RedisServerInfoView = lazy(async () => {
-  const mod = await import(
-    "@/components/business/Redis/RedisServerInfoView"
-  );
+  const mod = await import("@/components/business/Redis/RedisServerInfoView");
   return { default: mod.RedisServerInfoView };
 });
 

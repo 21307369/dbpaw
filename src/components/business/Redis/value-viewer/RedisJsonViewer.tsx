@@ -9,7 +9,12 @@ interface Props {
   readOnly?: boolean;
 }
 
-export function RedisJsonViewer({ value, onChange, moduleMissing, readOnly }: Props) {
+export function RedisJsonViewer({
+  value,
+  onChange,
+  moduleMissing,
+  readOnly,
+}: Props) {
   const [text, setText] = useState(value);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,8 +77,8 @@ export function RedisJsonViewer({ value, onChange, moduleMissing, readOnly }: Pr
         <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>
-            RedisJSON module is not loaded on this server. Displaying the stored payload in
-            read-only mode to avoid an unsafe overwrite.
+            RedisJSON module is not loaded on this server. Displaying the stored
+            payload in read-only mode to avoid an unsafe overwrite.
           </span>
         </div>
       )}

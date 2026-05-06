@@ -183,10 +183,8 @@ export function RedisStringViewer({
           <Info className="w-3.5 h-3.5 shrink-0" />
           <span>
             HyperLogLog detected. Cardinality estimate:{" "}
-            <strong>
-              {extra?.hllCount?.toLocaleString() ?? "unknown"}
-            </strong>
-            . Use Console for PFADD / PFMERGE operations.
+            <strong>{extra?.hllCount?.toLocaleString() ?? "unknown"}</strong>.
+            Use Console for PFADD / PFMERGE operations.
           </span>
         </div>
       )}

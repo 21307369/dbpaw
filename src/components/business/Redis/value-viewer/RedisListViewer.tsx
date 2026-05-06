@@ -361,9 +361,7 @@ export function RedisListViewer({
                       {lindexResult}
                     </span>
                   ) : (
-                    <span className="text-muted-foreground italic">
-                      (nil)
-                    </span>
+                    <span className="text-muted-foreground italic">(nil)</span>
                   )}
                 </div>
               )}
@@ -421,9 +419,7 @@ export function RedisListViewer({
                       [{lposResult.join(", ")}]
                     </span>
                   ) : (
-                    <span className="text-muted-foreground italic">
-                      (nil)
-                    </span>
+                    <span className="text-muted-foreground italic">(nil)</span>
                   )}
                 </div>
               )}
@@ -620,9 +616,9 @@ export function RedisListViewer({
           <AlertDialogHeader>
             <AlertDialogTitle>LTRIM</AlertDialogTitle>
             <AlertDialogDescription>
-              Trim the list to only include elements within the specified
-              range. Elements outside the range will be removed. This action
-              cannot be undone.
+              Trim the list to only include elements within the specified range.
+              Elements outside the range will be removed. This action cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="grid grid-cols-2 gap-3 py-2">
@@ -646,17 +642,13 @@ export function RedisListViewer({
             </div>
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isTrimming}>
-              Cancel
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={isTrimming}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => void handleLtrim()}
               disabled={isTrimming}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isTrimming && (
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              )}
+              {isTrimming && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
               Trim
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -728,9 +720,7 @@ export function RedisListViewer({
               disabled={isInserting || !insertPivot.trim()}
               onClick={() => void handleLinsert()}
             >
-              {isInserting && (
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              )}
+              {isInserting && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
               Insert
             </Button>
           </DialogFooter>
@@ -768,9 +758,7 @@ export function RedisListViewer({
                 <Label className="text-xs">Source direction</Label>
                 <Select
                   value={moveSrcDir}
-                  onValueChange={(v) =>
-                    setMoveSrcDir(v as RedisLMoveDirection)
-                  }
+                  onValueChange={(v) => setMoveSrcDir(v as RedisLMoveDirection)}
                 >
                   <SelectTrigger className="h-7 text-xs">
                     <SelectValue />
@@ -785,9 +773,7 @@ export function RedisListViewer({
                 <Label className="text-xs">Destination direction</Label>
                 <Select
                   value={moveDstDir}
-                  onValueChange={(v) =>
-                    setMoveDstDir(v as RedisLMoveDirection)
-                  }
+                  onValueChange={(v) => setMoveDstDir(v as RedisLMoveDirection)}
                 >
                   <SelectTrigger className="h-7 text-xs">
                     <SelectValue />
@@ -813,9 +799,7 @@ export function RedisListViewer({
               disabled={isMoving || !moveDest.trim()}
               onClick={() => void handleLmove()}
             >
-              {isMoving && (
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              )}
+              {isMoving && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
               Move
             </Button>
           </DialogFooter>

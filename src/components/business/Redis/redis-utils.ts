@@ -28,7 +28,8 @@ export function isRedisClusterDatabaseList(
 }
 
 export function countRedisValueItems(value: RedisValue): number {
-  if (value.kind === "string" || value.kind === "json" || value.kind === "none") return 0;
+  if (value.kind === "string" || value.kind === "json" || value.kind === "none")
+    return 0;
   if (value.kind === "hash") return Object.keys(value.value).length;
   return value.value.length;
 }
@@ -60,7 +61,9 @@ export function parseMsetInput(raw: string): Record<string, string> | null {
     if (!lineTrimmed || lineTrimmed.startsWith("#")) continue;
     const idx = lineTrimmed.indexOf(":");
     if (idx === -1) continue;
-    entries[lineTrimmed.slice(0, idx).trim()] = lineTrimmed.slice(idx + 1).trim();
+    entries[lineTrimmed.slice(0, idx).trim()] = lineTrimmed
+      .slice(idx + 1)
+      .trim();
     valid = true;
   }
   return valid ? entries : null;

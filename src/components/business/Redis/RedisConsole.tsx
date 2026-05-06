@@ -42,7 +42,11 @@ export function RedisConsole({ connectionId, database }: RedisConsoleProps) {
 
       const id = nextIdRef.current++;
       try {
-        const result = await api.redis.executeRaw(connectionId, database, trimmed);
+        const result = await api.redis.executeRaw(
+          connectionId,
+          database,
+          trimmed,
+        );
         setHistory((prev) => [
           ...prev,
           { id, command: trimmed, output: result.output, isError: false },
@@ -126,7 +130,9 @@ export function RedisConsole({ connectionId, database }: RedisConsoleProps) {
           history.map((entry) => (
             <div key={entry.id} className="mb-4">
               <div className="flex items-start gap-2 text-muted-foreground mb-1">
-                <span className="text-green-500 dark:text-green-400 shrink-0">❯</span>
+                <span className="text-green-500 dark:text-green-400 shrink-0">
+                  ❯
+                </span>
                 <span>{entry.command}</span>
               </div>
               <pre
@@ -144,7 +150,9 @@ export function RedisConsole({ connectionId, database }: RedisConsoleProps) {
       </div>
 
       <div className="flex gap-2 px-4 py-3 border-t border-border shrink-0 items-center">
-        <span className="text-green-500 dark:text-green-400 font-mono shrink-0">❯</span>
+        <span className="text-green-500 dark:text-green-400 font-mono shrink-0">
+          ❯
+        </span>
         <Input
           ref={inputRef}
           className="flex-1 font-mono text-sm h-8"

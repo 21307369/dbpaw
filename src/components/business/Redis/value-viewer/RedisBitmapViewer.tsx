@@ -130,7 +130,8 @@ export function RedisBitmapViewer({ value, isBinary, onPatch, extra }: Props) {
       for (let col = 0; col < cols && start + col < pageEnd; col++) {
         const offset = start + col;
         const pendingVal = pending.get(offset);
-        const val = pendingVal !== undefined ? pendingVal : getBit(bytes, offset);
+        const val =
+          pendingVal !== undefined ? pendingVal : getBit(bytes, offset);
         row.push({ offset, value: val, pending: pendingVal !== undefined });
       }
       rows.push(row);
@@ -295,10 +296,7 @@ export function RedisBitmapViewer({ value, isBinary, onPatch, extra }: Props) {
                           {bit.value ? "1" : "0"}
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="text-xs font-mono"
-                      >
+                      <TooltipContent side="top" className="text-xs font-mono">
                         offset {bit.offset} = {bit.value ? "1" : "0"}
                         {bit.pending ? " (modified)" : ""}
                       </TooltipContent>

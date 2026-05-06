@@ -611,8 +611,12 @@ describe("generateAlterTableSQL: DEFAULT change", () => {
       "mssql",
     );
     expect(unsupportedOps).toEqual([]);
-    expect(sql).toContain("ALTER TABLE [dbo].[t] DROP CONSTRAINT [DF_t_status];");
-    expect(sql).toContain("ALTER TABLE [dbo].[t] ADD CONSTRAINT [DF_t_status] DEFAULT");
+    expect(sql).toContain(
+      "ALTER TABLE [dbo].[t] DROP CONSTRAINT [DF_t_status];",
+    );
+    expect(sql).toContain(
+      "ALTER TABLE [dbo].[t] ADD CONSTRAINT [DF_t_status] DEFAULT",
+    );
     expect(sql).toContain("FOR [status];");
   });
 
@@ -633,7 +637,9 @@ describe("generateAlterTableSQL: DEFAULT change", () => {
     );
     expect(unsupportedOps).toEqual([]);
     expect(sql).not.toContain("DROP CONSTRAINT");
-    expect(sql).toContain("ALTER TABLE [dbo].[t] ADD CONSTRAINT [DF_t_status] DEFAULT");
+    expect(sql).toContain(
+      "ALTER TABLE [dbo].[t] ADD CONSTRAINT [DF_t_status] DEFAULT",
+    );
     expect(sql).toContain("FOR [status];");
   });
 
