@@ -102,6 +102,7 @@ const createSqlSyntaxTheme = (palette: SqlSyntaxPalette): Extension[] => [
       { tag: t.className, color: palette.type },
       { tag: t.function(t.variableName), color: palette.function },
       { tag: t.function(t.propertyName), color: palette.function },
+      { tag: t.name, color: palette.variable },
       { tag: t.propertyName, color: palette.variable },
       { tag: t.variableName, color: palette.variable },
       { tag: t.string, color: palette.string },
