@@ -551,10 +551,8 @@ impl ElasticsearchClient {
     pub fn connect(form: &ConnectionForm) -> Result<Self, String> {
         let timeout_ms = form
             .connect_timeout_ms
+            .filter(|&v| v > 0)
             .unwrap_or(DEFAULT_CONNECT_TIMEOUT_MS);
-        if timeout_ms <= 0 {
-            return Err("[VALIDATION_ERROR] connect timeout must be greater than 0".to_string());
-        }
 
         let mut effective_form = form.clone();
         let ssh_tunnel = if let Some(true) = form.ssh_enabled {
