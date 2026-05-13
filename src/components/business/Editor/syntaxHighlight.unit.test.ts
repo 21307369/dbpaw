@@ -23,7 +23,7 @@ const createSqlSyntaxTheme = (palette: SqlSyntaxPalette) => [
     { tag: t.className, color: palette.type },
     { tag: t.function(t.variableName), color: palette.function },
     { tag: t.function(t.propertyName), color: palette.function },
-    { tag: t.name, color: palette.variable },  // 新增的映射
+    { tag: t.name, color: palette.variable }, // 新增的映射
     { tag: t.propertyName, color: palette.variable },
     { tag: t.variableName, color: palette.variable },
     { tag: t.string, color: palette.string },
@@ -52,10 +52,10 @@ describe("SQL Syntax Highlighting", () => {
   it("should include t.name mapping for field names", () => {
     const theme = createSqlSyntaxTheme(testPalette);
     const highlightStyle = theme[0];
-    
+
     // 检查是否包含 t.name 规则
     const hasNameRule = highlightStyle.specs.some(
-      (spec: any) => spec.tag === t.name
+      (spec: any) => spec.tag === t.name,
     );
     expect(hasNameRule).toBe(true);
   });
@@ -63,12 +63,12 @@ describe("SQL Syntax Highlighting", () => {
   it("should map t.name to variable color", () => {
     const theme = createSqlSyntaxTheme(testPalette);
     const highlightStyle = theme[0];
-    
+
     // 找到 t.name 规则
     const nameRule = highlightStyle.specs.find(
-      (spec: any) => spec.tag === t.name
+      (spec: any) => spec.tag === t.name,
     );
-    
+
     expect(nameRule).toBeDefined();
     expect(nameRule.color).toBe(testPalette.variable);
   });

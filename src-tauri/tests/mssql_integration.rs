@@ -518,7 +518,7 @@ async fn test_mssql_metadata_includes_indexes_and_foreign_keys() {
     let _ = driver
         .execute_query(format!(
             "IF OBJECT_ID(N'dbo.{}', N'U') IS NOT NULL DROP TABLE {};",
-            table_name, qualified
+            parent, parent_qualified
         ))
         .await;
     driver.close().await;

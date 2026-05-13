@@ -120,15 +120,21 @@ export const validateConnectionFormInput = (
     const mssqlAuth = form.authMode || "sql_server";
     if (mssqlAuth === "sql_server" || mssqlAuth === "windows") {
       if (!form.username) {
-        issues.push({ key: "connection.dialog.inputValidation.usernameRequired" });
+        issues.push({
+          key: "connection.dialog.inputValidation.usernameRequired",
+        });
       }
       if (mode === "create" && !form.password) {
-        issues.push({ key: "connection.dialog.inputValidation.passwordRequired" });
+        issues.push({
+          key: "connection.dialog.inputValidation.passwordRequired",
+        });
       }
     }
     if (mssqlAuth === "aad_token") {
       if (mode === "create" && !form.password) {
-        issues.push({ key: "connection.dialog.inputValidation.passwordRequired" });
+        issues.push({
+          key: "connection.dialog.inputValidation.passwordRequired",
+        });
       }
     }
     // integrated: no username/password required
@@ -137,7 +143,11 @@ export const validateConnectionFormInput = (
   if (!form.host) {
     issues.push({ key: "connection.dialog.inputValidation.hostRequired" });
   }
-  if (form.driver !== "mssql" && requiresUsername(form.driver) && !form.username) {
+  if (
+    form.driver !== "mssql" &&
+    requiresUsername(form.driver) &&
+    !form.username
+  ) {
     issues.push({ key: "connection.dialog.inputValidation.usernameRequired" });
   }
   if (!isPortInRange(form.port)) {

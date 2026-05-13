@@ -1,14 +1,19 @@
-import { Key, Database, Plus, LayoutDashboard, Terminal, Server } from "lucide-react";
+import {
+  Key,
+  Database,
+  Plus,
+  LayoutDashboard,
+  Terminal,
+  Server,
+} from "lucide-react";
 import type { TreeConfig, TreeMenuItem, DatabaseContext } from "./types";
 
-export function createRedisTreeConfig(
-  callbacks: {
-    onCreateKey?: (ctx: DatabaseContext) => void;
-    onOpenBrowser?: (ctx: DatabaseContext) => void;
-    onOpenConsole?: (ctx: DatabaseContext) => void;
-    onOpenServerInfo?: (ctx: DatabaseContext) => void;
-  },
-): TreeConfig {
+export function createRedisTreeConfig(callbacks: {
+  onCreateKey?: (ctx: DatabaseContext) => void;
+  onOpenBrowser?: (ctx: DatabaseContext) => void;
+  onOpenConsole?: (ctx: DatabaseContext) => void;
+  onOpenServerInfo?: (ctx: DatabaseContext) => void;
+}): TreeConfig {
   return {
     supportsSavedQueries: false,
     databaseExpandable: false,

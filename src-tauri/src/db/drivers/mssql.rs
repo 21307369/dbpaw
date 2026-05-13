@@ -564,6 +564,7 @@ struct MssqlColumnInfo {
     computed_definition: Option<String>,
     default_definition: Option<String>,
     default_constraint_name: Option<String>,
+    comment: Option<String>,
 }
 
 struct MssqlKeyConstraint {
@@ -587,8 +588,7 @@ fn mssql_full_type_string(data_type: &str, max_length: i64, precision: i64, scal
             let len = if max_length == -1 {
                 "MAX".to_string()
             } else {
-                // nvarchar stores 2 bytes per char
-                (max_length / 2).to_string()
+                max_length.to_string()
             };
             format!("{}({})", data_type, len)
         }
@@ -835,18 +835,19 @@ impl MssqlDriver {
     }
 
     fn parse_i64(row: &Row, idx: usize) -> i64 {
-        if let Ok(Some(v)) = row.try_get::<i64, _>(idx) {
-            return v;
+        macro_rules! try_get {
+            ($ty:ty, $conv:expr) => {
+                if let Ok(Some(v)) = row.try_get::<$ty, _>(idx) {
+                    return $conv(v);
+                }
+            };
         }
-        if let Ok(Some(v)) = row.try_get::<i32, _>(idx) {
-            return v as i64;
-        }
-        if let Ok(Some(v)) = row.try_get::<bool, _>(idx) {
-            return if v { 1 } else { 0 };
-        }
-        if let Ok(Some(v)) = row.try_get::<&str, _>(idx) {
-            return v.parse::<i64>().unwrap_or(0);
-        }
+        try_get!(i64, |v: i64| v);
+        try_get!(i32, |v: i32| v as i64);
+        try_get!(i16, |v: i16| v as i64);
+        try_get!(u8, |v: u8| v as i64);
+        try_get!(bool, |v: bool| if v { 1 } else { 0 });
+        try_get!(&str, |v: &str| v.parse::<i64>().unwrap_or(0));
         0
     }
 
@@ -858,6 +859,34 @@ impl MssqlDriver {
             return String::from_utf8_lossy(v).to_string();
         }
         String::new()
+    }
+
+    fn is_mssql_read_query(sql: &str) -> bool {
+        let Some(first_keyword) = super::first_sql_keyword(sql) else {
+            return false;
+        };
+        match first_keyword.as_str() {
+            "SELECT" | "WITH" | "SHOW" => true,
+            "EXEC" | "EXECUTE" => {
+                let upper = sql.to_uppercase();
+                if !upper.contains("SP_EXECUTESQL") {
+                    return true;
+                }
+                let Some(inner_start) = upper.find("N'") else {
+                    return true;
+                };
+                let inner_sql = &sql[inner_start + 2..];
+                let Some(inner_end) = inner_sql.find('\'') else {
+                    return true;
+                };
+                let inner = &inner_sql[..inner_end];
+                matches!(
+                    super::first_sql_keyword(inner).as_deref(),
+                    Some("SELECT") | Some("WITH")
+                )
+            }
+            _ => false,
+        }
     }
 
     /// Load columns with identity, computed, and precision/scale/length info.
@@ -887,10 +916,44 @@ impl MssqlDriver {
             escape_literal(table)
         );
         let rows = self.fetch_rows(&sql).await?;
+
+        let comment_sql = format!(
+            "SELECT c.name, CAST(ep.value AS NVARCHAR(4000)) \
+             FROM sys.extended_properties ep \
+             JOIN sys.columns c \
+               ON ep.major_id = c.object_id AND ep.minor_id = c.column_id \
+             JOIN sys.tables t ON t.object_id = c.object_id \
+             JOIN sys.schemas s ON s.schema_id = t.schema_id \
+             WHERE ep.name = 'MS_Description' \
+               AND s.name = '{}' AND t.name = '{}'",
+            escape_literal(schema),
+            escape_literal(table)
+        );
+        let comment_rows = self.fetch_rows(&comment_sql).await?;
+        let comment_map: HashMap<String, String> = comment_rows
+            .iter()
+            .filter_map(|row| {
+                let val = Self::parse_string(row, 1);
+                if val.is_empty() {
+                    None
+                } else {
+                    Some((Self::parse_string(row, 0), val))
+                }
+            })
+            .collect();
+
         let mut cols = Vec::new();
         for row in rows {
             let data_type = Self::parse_string(&row, 1);
             let max_length = Self::parse_i64(&row, 3);
+            // sys.columns.max_length is in bytes; convert to chars for unicode types
+            let max_length = if data_type.eq_ignore_ascii_case("nvarchar")
+                || data_type.eq_ignore_ascii_case("nchar")
+            {
+                max_length / 2
+            } else {
+                max_length
+            };
             let precision = Self::parse_i64(&row, 4);
             let scale = Self::parse_i64(&row, 5);
             let is_identity = Self::parse_i64(&row, 6) == 1;
@@ -900,12 +963,13 @@ impl MssqlDriver {
             let default_cn = Self::parse_string(&row, 10);
 
             let full_type = mssql_full_type_string(&data_type, max_length, precision, scale);
+            let name = Self::parse_string(&row, 0);
 
             cols.push(MssqlColumnInfo {
-                name: Self::parse_string(&row, 0),
+                name: name.clone(),
                 data_type,
                 full_type,
-                is_nullable: Self::parse_string(&row, 2).eq_ignore_ascii_case("1"),
+                is_nullable: Self::parse_i64(&row, 2) == 1,
                 is_identity,
                 is_computed,
                 computed_definition: if computed_def.is_empty() {
@@ -923,6 +987,7 @@ impl MssqlDriver {
                 } else {
                     Some(default_cn)
                 },
+                comment: comment_map.get(&name).cloned(),
             });
         }
         Ok(cols)
@@ -1346,10 +1411,10 @@ mod tests {
 
     #[test]
     fn test_mssql_full_type_string_nvarchar() {
-        // nvarchar max_length is in bytes (2 bytes per char)
-        assert_eq!(super::mssql_full_type_string("nvarchar", 100, 0, 0), "nvarchar(50)");
+        // mssql_full_type_string expects logical (char) length
+        assert_eq!(super::mssql_full_type_string("nvarchar", 50, 0, 0), "nvarchar(50)");
         assert_eq!(super::mssql_full_type_string("nvarchar", -1, 0, 0), "nvarchar(MAX)");
-        assert_eq!(super::mssql_full_type_string("nchar", 20, 0, 0), "nchar(10)");
+        assert_eq!(super::mssql_full_type_string("nchar", 10, 0, 0), "nchar(10)");
     }
 
     #[test]
@@ -1645,83 +1710,19 @@ impl DatabaseDriver for MssqlDriver {
             .map(|row| Self::parse_string(row, 0))
             .collect();
 
-        let dc_sql = format!(
-            "SELECT c.name AS column_name, dc.name AS constraint_name \
-             FROM sys.default_constraints dc \
-             JOIN sys.columns c \
-               ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id \
-             JOIN sys.tables tbl ON tbl.object_id = c.object_id \
-             JOIN sys.schemas s ON s.schema_id = tbl.schema_id \
-             WHERE s.name = '{}' AND tbl.name = '{}'",
-            escape_literal(&schema),
-            escape_literal(&table)
-        );
-        let dc_rows = self.fetch_rows(&dc_sql).await?;
-        let dc_map: HashMap<String, String> = dc_rows
-            .iter()
-            .map(|row| (Self::parse_string(row, 0), Self::parse_string(row, 1)))
-            .collect();
-
-        let sql = format!(
-            "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, \
-                    CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE \
-             FROM INFORMATION_SCHEMA.COLUMNS \
-             WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}' \
-             ORDER BY ORDINAL_POSITION",
-            escape_literal(&schema),
-            escape_literal(&table)
-        );
-
-        let rows = self.fetch_rows(&sql).await?;
-
-        let comment_sql = format!(
-            "SELECT c.name, CAST(ep.value AS NVARCHAR(4000)) \
-             FROM sys.extended_properties ep \
-             JOIN sys.columns c \
-               ON ep.major_id = c.object_id AND ep.minor_id = c.column_id \
-             JOIN sys.tables t ON t.object_id = c.object_id \
-             JOIN sys.schemas s ON s.schema_id = t.schema_id \
-             WHERE ep.name = 'MS_Description' \
-               AND s.name = '{}' AND t.name = '{}'",
-            escape_literal(&schema),
-            escape_literal(&table)
-        );
-        let comment_rows = self.fetch_rows(&comment_sql).await?;
-        let comment_map: HashMap<String, String> = comment_rows
-            .iter()
-            .filter_map(|row| {
-                let val = Self::parse_string(row, 1);
-                if val.is_empty() {
-                    None
-                } else {
-                    Some((Self::parse_string(row, 0), val))
-                }
+        let mssql_cols = self.load_mssql_columns(&schema, &table).await?;
+        let columns = mssql_cols
+            .into_iter()
+            .map(|col| ColumnInfo {
+                name: col.name.clone(),
+                r#type: col.full_type,
+                nullable: col.is_nullable,
+                default_value: col.default_definition,
+                primary_key: pk_set.contains(&col.name),
+                comment: col.comment,
+                default_constraint_name: col.default_constraint_name,
             })
             .collect();
-
-        let mut columns = Vec::new();
-        for row in rows {
-            let name = Self::parse_string(&row, 0);
-            let data_type = Self::parse_string(&row, 1);
-            let max_length = Self::parse_i64(&row, 4);
-            let precision = Self::parse_i64(&row, 5);
-            let scale = Self::parse_i64(&row, 6);
-            let full_type = mssql_full_type_string(&data_type, max_length, precision, scale);
-            let default_raw = Self::parse_string(&row, 3);
-            columns.push(ColumnInfo {
-                name: name.clone(),
-                r#type: full_type,
-                nullable: Self::parse_string(&row, 2).eq_ignore_ascii_case("YES"),
-                default_value: if default_raw.is_empty() {
-                    None
-                } else {
-                    Some(default_raw)
-                },
-                primary_key: pk_set.contains(&name),
-                comment: comment_map.get(&name).cloned(),
-                default_constraint_name: dc_map.get(&name).cloned(),
-            });
-        }
 
         Ok(TableStructure { columns })
     }
@@ -1932,11 +1933,7 @@ impl DatabaseDriver for MssqlDriver {
 
         // Execute the last statement and return its result
         let last_sql = statements.last().unwrap();
-        let first_keyword = super::first_sql_keyword(last_sql);
-        let is_read_query = matches!(
-            first_keyword.as_deref(),
-            Some("SELECT") | Some("WITH") | Some("SHOW") | Some("EXEC") | Some("EXECUTE")
-        );
+        let is_read_query = Self::is_mssql_read_query(last_sql);
 
         if is_read_query {
             let (data, columns) = self.fetch_query_result_json(last_sql).await?;

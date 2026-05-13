@@ -70,7 +70,7 @@ fn normalize_redis_options(form: &mut ConnectionForm) -> Result<(), String> {
 
     if let Some(timeout_ms) = form.connect_timeout_ms {
         if timeout_ms <= 0 {
-            return Err("[VALIDATION_ERROR] connect timeout must be greater than 0".to_string());
+            form.connect_timeout_ms = None;
         }
     }
 

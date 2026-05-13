@@ -1,13 +1,16 @@
 import { Database, FileBox, Plus, Trash2, Edit3 } from "lucide-react";
-import type { TreeConfig, TreeMenuItem, DatabaseContext, LeafContext } from "./types";
+import type {
+  TreeConfig,
+  TreeMenuItem,
+  DatabaseContext,
+  LeafContext,
+} from "./types";
 
-export function createMongodbTreeConfig(
-  callbacks: {
-    onCreateCollection?: (ctx: DatabaseContext) => void;
-    onCollectionSelect?: (ctx: LeafContext) => void;
-    onCollectionAction?: (ctx: LeafContext, action: "drop" | "rename") => void;
-  },
-): TreeConfig {
+export function createMongodbTreeConfig(callbacks: {
+  onCreateCollection?: (ctx: DatabaseContext) => void;
+  onCollectionSelect?: (ctx: LeafContext) => void;
+  onCollectionAction?: (ctx: LeafContext, action: "drop" | "rename") => void;
+}): TreeConfig {
   return {
     supportsSavedQueries: false,
     databaseExpandable: true,

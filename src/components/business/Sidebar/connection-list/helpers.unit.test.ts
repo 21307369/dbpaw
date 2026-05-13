@@ -221,7 +221,11 @@ describe("mergeConnections", () => {
         isConnected: false,
       }),
     ];
-    const next = [makeConnection("1"), makeConnection("2"), makeConnection("3")];
+    const next = [
+      makeConnection("1"),
+      makeConnection("2"),
+      makeConnection("3"),
+    ];
 
     const result = mergeConnections(next, prev);
     expect(result).toHaveLength(3);

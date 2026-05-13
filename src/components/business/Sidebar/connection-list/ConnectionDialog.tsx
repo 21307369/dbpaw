@@ -470,7 +470,9 @@ export function ConnectionDialog({
                               />
                               {isMssql && (
                                 <p className="text-xs text-muted-foreground">
-                                  {t("connection.dialog.hints.mssqlNamedInstance")}
+                                  {t(
+                                    "connection.dialog.hints.mssqlNamedInstance",
+                                  )}
                                 </p>
                               )}
                             </div>
@@ -654,13 +656,24 @@ export function ConnectionDialog({
                           <Select
                             value={form.authMode || "sql_server"}
                             onValueChange={(
-                              value: "sql_server" | "windows" | "integrated" | "aad_token",
+                              value:
+                                | "sql_server"
+                                | "windows"
+                                | "integrated"
+                                | "aad_token",
                             ) =>
                               setForm((current) => ({
                                 ...current,
                                 authMode: value,
-                                username: value === "integrated" || value === "aad_token" ? "" : current.username,
-                                password: value === "integrated" ? "" : current.password,
+                                username:
+                                  value === "integrated" ||
+                                  value === "aad_token"
+                                    ? ""
+                                    : current.username,
+                                password:
+                                  value === "integrated"
+                                    ? ""
+                                    : current.password,
                               }))
                             }
                           >

@@ -92,7 +92,9 @@ export interface TreeConfig {
   onDatabaseDoubleClick?: (ctx: DatabaseContext) => void;
 
   // 数据库节点 Footer
-  renderDatabaseFooter?: (ctx: DatabaseContext & { level: number }) => ReactNode;
+  renderDatabaseFooter?: (
+    ctx: DatabaseContext & { level: number },
+  ) => ReactNode;
 
   // 数据库右键菜单
   getDatabaseContextMenuItems?: (ctx: DatabaseContext) => TreeMenuItem[];

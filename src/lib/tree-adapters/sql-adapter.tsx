@@ -1,5 +1,10 @@
 import { Table, Database, FileCode, Download } from "lucide-react";
-import type { TreeConfig, TreeMenuItem, DatabaseContext, LeafContext } from "./types";
+import type {
+  TreeConfig,
+  TreeMenuItem,
+  DatabaseContext,
+  LeafContext,
+} from "./types";
 
 export function createSqlTreeConfig(
   overrides?: Partial<TreeConfig>,

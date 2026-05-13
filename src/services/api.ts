@@ -1561,7 +1561,9 @@ export const api = {
     testConnection: (id: number) =>
       invoke<MongodbConnectionInfo>("mongodb_test_connection", { id }),
     testConnectionEphemeral: (form: ConnectionForm) =>
-      invoke<TestConnectionResult>("mongodb_test_connection_ephemeral", { form }),
+      invoke<TestConnectionResult>("mongodb_test_connection_ephemeral", {
+        form,
+      }),
     listDatabases: (id: number) =>
       invoke<MongodbDatabaseInfo[]>("mongodb_list_databases", { id }),
     listCollections: (id: number, database: string) =>

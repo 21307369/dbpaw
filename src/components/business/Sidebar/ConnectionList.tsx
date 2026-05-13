@@ -1441,9 +1441,14 @@ export function ConnectionList({
     connection: Connection,
   ): DatasourceTreeAdapter => {
     const config = getTreeConfig(connection.type, treeCallbacks);
-    const driverKind = connection.type === "redis" ? "kv" :
-                       connection.type === "elasticsearch" ? "search" :
-                       connection.type === "mongodb" ? "document" : "sql";
+    const driverKind =
+      connection.type === "redis"
+        ? "kv"
+        : connection.type === "elasticsearch"
+          ? "search"
+          : connection.type === "mongodb"
+            ? "document"
+            : "sql";
 
     // Build context for callbacks
     const buildContext = () => ({
@@ -1460,13 +1465,24 @@ export function ConnectionList({
         openCreateElasticsearchIndexDialog(ctx.connectionId, ctx.databaseName);
         treeCallbacks?.onCreateIndex?.(ctx);
       },
-      onIndexAction: async (ctx: any, action: "refresh" | "open" | "close" | "delete") => {
-        await handleElasticsearchIndexAction(ctx.connectionId, ctx.databaseName, ctx.leafName, action);
+      onIndexAction: async (
+        ctx: any,
+        action: "refresh" | "open" | "close" | "delete",
+      ) => {
+        await handleElasticsearchIndexAction(
+          ctx.connectionId,
+          ctx.databaseName,
+          ctx.leafName,
+          action,
+        );
         treeCallbacks?.onIndexAction?.(ctx, action);
       },
     };
 
-    const configWithEnhancedCallbacks = getTreeConfig(connection.type, enhancedCallbacks);
+    const configWithEnhancedCallbacks = getTreeConfig(
+      connection.type,
+      enhancedCallbacks,
+    );
 
     return {
       supportsSchemaNode: config.supportsSchemaNode,
@@ -1540,7 +1556,10 @@ export function ConnectionList({
           databaseName: database.name,
           leafName: table.name,
           leafSchema: table.schema,
-          leafMeta: { isSystem: table.isSystem, indexStatus: table.indexStatus },
+          leafMeta: {
+            isSystem: table.isSystem,
+            indexStatus: table.indexStatus,
+          },
         };
 
         if (configWithEnhancedCallbacks.onLeafActivate) {
@@ -1685,7 +1704,9 @@ export function ConnectionList({
                 {t("connection.menu.newQuery")}
               </ContextMenuItem>
               <ContextMenuItem
-                onClick={() => handleTableExportDialog(connection, database, table)}
+                onClick={() =>
+                  handleTableExportDialog(connection, database, table)
+                }
               >
                 <Download className="mr-2 h-4 w-4" />
                 {t("connection.menu.exportTable")}
@@ -1717,7 +1738,10 @@ export function ConnectionList({
           databaseName: database.name,
           leafName: table.name,
           leafSchema: table.schema,
-          leafMeta: { isSystem: table.isSystem, indexStatus: table.indexStatus },
+          leafMeta: {
+            isSystem: table.isSystem,
+            indexStatus: table.indexStatus,
+          },
         };
         const items = configWithEnhancedCallbacks.getLeafContextMenuItems(ctx);
         if (items.length === 0) return null;
@@ -1736,32 +1760,34 @@ export function ConnectionList({
           </>
         );
       },
-      renderDatabaseContextMenu: configWithEnhancedCallbacks.getDatabaseContextMenuItems
-        ? (databaseName) => {
-            const ctx = {
-              ...buildContext(),
-              databaseName,
-            };
-            const items = configWithEnhancedCallbacks.getDatabaseContextMenuItems!(ctx);
-            return (
-              <>
-                {items.map((item) => (
-                  <button
-                    key={item.key}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
-                    onClick={() => {
-                      item.onClick();
-                      setContextMenu((prev) => ({ ...prev, visible: false }));
-                    }}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </button>
-                ))}
-              </>
-            );
-          }
-        : undefined,
+      renderDatabaseContextMenu:
+        configWithEnhancedCallbacks.getDatabaseContextMenuItems
+          ? (databaseName) => {
+              const ctx = {
+                ...buildContext(),
+                databaseName,
+              };
+              const items =
+                configWithEnhancedCallbacks.getDatabaseContextMenuItems!(ctx);
+              return (
+                <>
+                  {items.map((item) => (
+                    <button
+                      key={item.key}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                      onClick={() => {
+                        item.onClick();
+                        setContextMenu((prev) => ({ ...prev, visible: false }));
+                      }}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </button>
+                  ))}
+                </>
+              );
+            }
+          : undefined,
     };
   };
 
