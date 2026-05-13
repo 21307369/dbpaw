@@ -12,6 +12,8 @@ import {
   useTheme,
   MIN_FONT_SIZE_PX,
   MAX_FONT_SIZE_PX,
+  MIN_EDITOR_FONT_SIZE_PX,
+  MAX_EDITOR_FONT_SIZE_PX,
 } from "@/components/theme-provider";
 import { ThemeId, THEME_PRESETS } from "@/theme/themeRegistry";
 import { useState, useEffect } from "react";
@@ -235,7 +237,14 @@ export function SettingsDialog({
   onShowColumnCommentsChange,
 }: SettingsDialogProps) {
   const { t } = useTranslation();
-  const { theme, setTheme, fontSizePx, setFontSizePx } = useTheme();
+  const {
+    theme,
+    setTheme,
+    fontSizePx,
+    setFontSizePx,
+    editorFontSizePx,
+    setEditorFontSizePx,
+  } = useTheme();
   const [activeSection, setActiveSection] =
     useState<SettingsSection>("general");
   const [autoUpdate, setAutoUpdate] = useState(true);
@@ -260,11 +269,22 @@ export function SettingsDialog({
   const [providerHasApiKey, setProviderHasApiKey] = useState(false);
   const [showProviderApiKey, setShowProviderApiKey] = useState(false);
   const [fontSizeInput, setFontSizeInput] = useState(String(fontSizePx));
+  const [editorFontSizeInput, setEditorFontSizeInput] = useState(
+    String(editorFontSizePx),
+  );
   const [layoutMode, setLayoutMode] = useState<"tabs" | "tree">(sidebarLayout);
 
   const clampFontSize = (size: number) => {
     const rounded = Math.round(size);
     return Math.min(MAX_FONT_SIZE_PX, Math.max(MIN_FONT_SIZE_PX, rounded));
+  };
+
+  const clampEditorFontSize = (size: number) => {
+    const rounded = Math.round(size);
+    return Math.min(
+      MAX_EDITOR_FONT_SIZE_PX,
+      Math.max(MIN_EDITOR_FONT_SIZE_PX, rounded),
+    );
   };
 
   useEffect(() => {
@@ -278,6 +298,7 @@ export function SettingsDialog({
     if (open) {
       setActiveSection("general");
       setFontSizeInput(String(fontSizePx));
+      setEditorFontSizeInput(String(editorFontSizePx));
       setLayoutMode(sidebarLayout);
       setShowColumnComments(showColumnCommentsProp);
       getSetting("autoUpdate", true).then(setAutoUpdate);
@@ -297,11 +318,22 @@ export function SettingsDialog({
           toast.error(t("settings.aiProviders.loadFailed"));
         });
     }
-  }, [fontSizePx, open, showColumnCommentsProp, sidebarLayout, t]);
+  }, [
+    fontSizePx,
+    editorFontSizePx,
+    open,
+    showColumnCommentsProp,
+    sidebarLayout,
+    t,
+  ]);
 
   useEffect(() => {
     setFontSizeInput(String(fontSizePx));
   }, [fontSizePx]);
+
+  useEffect(() => {
+    setEditorFontSizeInput(String(editorFontSizePx));
+  }, [editorFontSizePx]);
 
   function applyProviderToForm(
     providerType: AIProviderType,
@@ -480,6 +512,24 @@ export function SettingsDialog({
     setFontSizeInput(String(normalized));
   };
 
+  const commitEditorFontSizeInput = () => {
+    const trimmed = editorFontSizeInput.trim();
+    if (!trimmed) {
+      setEditorFontSizeInput(String(editorFontSizePx));
+      return;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      setEditorFontSizeInput(String(editorFontSizePx));
+      return;
+    }
+
+    const normalized = clampEditorFontSize(parsed);
+    setEditorFontSizePx(normalized);
+    setEditorFontSizeInput(String(normalized));
+  };
+
   const handleLayoutChange = async (value: "tabs" | "tree") => {
     setLayoutMode(value);
     await saveSetting("sidebarLayout", value);
@@ -629,6 +679,38 @@ export function SettingsDialog({
                           if (e.key === "Enter") {
                             e.preventDefault();
                             commitFontSizeInput();
+                          }
+                        }}
+                      />
+                      <span className="text-sm text-muted-foreground">px</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 items-center">
+                    <div className="space-y-1">
+                      <Label className="text-base">
+                        {t("settings.appearance.editorFontSizeTitle")}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.appearance.editorFontSizeDescription", {
+                          min: MIN_EDITOR_FONT_SIZE_PX,
+                          max: MAX_EDITOR_FONT_SIZE_PX,
+                        })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={MIN_EDITOR_FONT_SIZE_PX}
+                        max={MAX_EDITOR_FONT_SIZE_PX}
+                        step={1}
+                        value={editorFontSizeInput}
+                        onChange={(e) => setEditorFontSizeInput(e.target.value)}
+                        onBlur={commitEditorFontSizeInput}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            commitEditorFontSizeInput();
                           }
                         }}
                       />

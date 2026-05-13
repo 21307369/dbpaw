@@ -75,12 +75,6 @@ import { CLICKHOUSE_COMPLETIONS } from "./clickhouseKeywords";
 import { useTranslation } from "react-i18next";
 import { buildSqlContextualCompletion } from "./sqlCompletionContext";
 
-const editorFontSizeExtension = EditorView.theme({
-  ".cm-scroller": {
-    fontSize: "1rem",
-  },
-});
-
 type SqlSyntaxPalette = {
   keyword: string;
   function: string;
@@ -264,7 +258,7 @@ export function SqlEditor({
 }: SqlEditorProps) {
   const { t } = useTranslation();
   const [internalSql, setInternalSql] = useState("");
-  const { theme } = useTheme();
+  const { theme, editorFontSizePx } = useTheme();
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
@@ -614,9 +608,14 @@ export function SqlEditor({
 
   // Extensions
   const extensions = useMemo(() => {
+    const fontSizeExt = EditorView.theme({
+      ".cm-scroller": {
+        fontSize: `${editorFontSizePx}px`,
+      },
+    });
     const exts: Extension[] = [
       EditorView.lineWrapping,
-      editorFontSizeExtension,
+      fontSizeExt,
       sql({
         dialect,
         schema: sqlSchema,
@@ -662,7 +661,7 @@ export function SqlEditor({
     }
 
     return exts;
-  }, [dialect, sqlSchema, customCompletion]);
+  }, [dialect, sqlSchema, customCompletion, editorFontSizePx]);
 
   // Theme
   const editorTheme = useMemo(() => {

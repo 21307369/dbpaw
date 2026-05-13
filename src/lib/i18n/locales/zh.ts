@@ -100,6 +100,9 @@ export const zh: Translations = {
       selectTheme: "选择主题",
       fontSizeTitle: "字体大小",
       fontSizeDescription: "调整应用全局文字大小（范围：{{min}}-{{max}}px）",
+      editorFontSizeTitle: "编辑器字体大小",
+      editorFontSizeDescription:
+        "独立调整 SQL 编辑器的字体大小（范围：{{min}}-{{max}}px）",
     },
     dataGrid: {
       title: "数据表格",

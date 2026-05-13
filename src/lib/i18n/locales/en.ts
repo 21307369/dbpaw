@@ -100,6 +100,9 @@ export const en = {
       fontSizeTitle: "Font Size",
       fontSizeDescription:
         "Adjust global text size across the app (Range: {{min}}-{{max}}px)",
+      editorFontSizeTitle: "Editor Font Size",
+      editorFontSizeDescription:
+        "Adjust SQL editor font size independently (Range: {{min}}-{{max}}px)",
     },
     dataGrid: {
       title: "Data Grid",

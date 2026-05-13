@@ -11,11 +11,17 @@ export const MIN_FONT_SIZE_PX = 10;
 export const MAX_FONT_SIZE_PX = 24;
 export const DEFAULT_FONT_SIZE_PX = 14;
 
+export const MIN_EDITOR_FONT_SIZE_PX = 8;
+export const MAX_EDITOR_FONT_SIZE_PX = 32;
+export const DEFAULT_EDITOR_FONT_SIZE_PX = 14;
+
 interface ThemeProviderState {
   theme: ThemeId;
   setTheme: (theme: ThemeId) => void;
   fontSizePx: number;
   setFontSizePx: (size: number) => void;
+  editorFontSizePx: number;
+  setEditorFontSizePx: (size: number) => void;
 }
 
 const initialState: ThemeProviderState = {
@@ -23,6 +29,8 @@ const initialState: ThemeProviderState = {
   setTheme: () => null,
   fontSizePx: DEFAULT_FONT_SIZE_PX,
   setFontSizePx: () => null,
+  editorFontSizePx: DEFAULT_EDITOR_FONT_SIZE_PX,
+  setEditorFontSizePx: () => null,
 };
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
@@ -38,6 +46,9 @@ export function ThemeProvider({
   const [theme, setThemeState] = useState<ThemeId>(defaultTheme);
   const [fontSizePx, setFontSizePxState] =
     useState<number>(DEFAULT_FONT_SIZE_PX);
+  const [editorFontSizePx, setEditorFontSizePxState] = useState<number>(
+    DEFAULT_EDITOR_FONT_SIZE_PX,
+  );
   const [isLoaded, setIsLoaded] = useState(false);
 
   const clampFontSize = (size: number) => {
@@ -47,6 +58,18 @@ export function ThemeProvider({
 
     const rounded = Math.round(size);
     return Math.min(MAX_FONT_SIZE_PX, Math.max(MIN_FONT_SIZE_PX, rounded));
+  };
+
+  const clampEditorFontSize = (size: number) => {
+    if (!Number.isFinite(size)) {
+      return DEFAULT_EDITOR_FONT_SIZE_PX;
+    }
+
+    const rounded = Math.round(size);
+    return Math.min(
+      MAX_EDITOR_FONT_SIZE_PX,
+      Math.max(MIN_EDITOR_FONT_SIZE_PX, rounded),
+    );
   };
 
   const applyTheme = (themeId: ThemeId) => {
@@ -73,9 +96,15 @@ export function ThemeProvider({
         DEFAULT_FONT_SIZE_PX,
       );
       const normalizedFontSize = clampFontSize(savedFontSize);
+      const savedEditorFontSize = await getSetting<number>(
+        "editorFontSizePx",
+        DEFAULT_EDITOR_FONT_SIZE_PX,
+      );
+      const normalizedEditorFontSize = clampEditorFontSize(savedEditorFontSize);
 
       setThemeState(savedTheme);
       setFontSizePxState(normalizedFontSize);
+      setEditorFontSizePxState(normalizedEditorFontSize);
 
       applyTheme(savedTheme);
       applyFontSizePx(normalizedFontSize);
@@ -103,6 +132,12 @@ export function ThemeProvider({
     void saveSetting("fontSizePx", normalizedSize);
   };
 
+  const setEditorFontSizePx = (size: number) => {
+    const normalizedSize = clampEditorFontSize(size);
+    setEditorFontSizePxState(normalizedSize);
+    void saveSetting("editorFontSizePx", normalizedSize);
+  };
+
   if (!isLoaded) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background">
@@ -116,6 +151,8 @@ export function ThemeProvider({
     setTheme,
     fontSizePx,
     setFontSizePx,
+    editorFontSizePx,
+    setEditorFontSizePx,
   };
 
   return (

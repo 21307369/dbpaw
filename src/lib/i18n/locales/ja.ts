@@ -102,6 +102,9 @@ export const ja: Translations = {
       fontSizeTitle: "フォントサイズ",
       fontSizeDescription:
         "アプリ全体の文字サイズを調整します（範囲：{{min}}-{{max}}px）",
+      editorFontSizeTitle: "エディタフォントサイズ",
+      editorFontSizeDescription:
+        "SQLエディタのフォントサイズを個別に調整します（範囲：{{min}}-{{max}}px）",
     },
     dataGrid: {
       title: "データグリッド",
