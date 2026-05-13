@@ -929,14 +929,20 @@ export function ConnectionList({
       setExpandedTableGroups((prev) => {
         const next = new Set(prev);
         filteredConnections.forEach((conn) => {
-          if (conn.type !== "mssql") return;
+          const supportsSchemaNode = supportsSchemaNodeForDriver(conn.type);
           conn.databases.forEach((db) => {
             const databaseKey = `${conn.id}-${db.name}`;
-            db.schemas.forEach((schema) => {
-              if (schema.tables.length > 0) {
-                next.add(getTableGroupNodeKey(databaseKey, schema.name));
+            if (supportsSchemaNode) {
+              db.schemas.forEach((schema) => {
+                if (schema.tables.length > 0) {
+                  next.add(getTableGroupNodeKey(databaseKey, schema.name));
+                }
+              });
+            } else {
+              if (db.tables.length > 0) {
+                next.add(getTableGroupNodeKey(databaseKey, db.name));
               }
-            });
+            }
           });
         });
         return next;
@@ -3270,9 +3276,41 @@ export function ConnectionList({
                   })
                 ) : (
                   <>
-                    {database.tables.map((table) =>
-                      renderTableNode(table, level + 1),
-                    )}
+                    {(() => {
+                      const tableGroupKey = getTableGroupNodeKey(
+                        dbKey,
+                        database.name,
+                      );
+                      return (
+                        <TreeNode
+                          key={tableGroupKey}
+                          level={level + 1}
+                          icon={<FolderOpen className="w-4 h-4" />}
+                          label={t("connection.tree.tables")}
+                          isExpanded={expandedTableGroups.has(
+                            tableGroupKey,
+                          )}
+                          onToggle={() =>
+                            toggleTableGroup(tableGroupKey)
+                          }
+                        >
+                          {database.tables.length === 0 ? (
+                            <div
+                              className="px-2 py-1 text-xs text-muted-foreground"
+                              style={{
+                                paddingLeft: `${(level + 2) * 12 + 8}px`,
+                              }}
+                            >
+                              {t("connection.tree.noTables")}
+                            </div>
+                          ) : (
+                            database.tables.map((table) =>
+                              renderTableNode(table, level + 2),
+                            )
+                          )}
+                        </TreeNode>
+                      );
+                    })()}
                     {supportsRoutines(connection.type) &&
                       (() => {
                         const virtualSchema: SchemaInfo = {
