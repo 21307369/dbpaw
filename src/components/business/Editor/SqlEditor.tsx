@@ -74,6 +74,7 @@ import { getThemePreset, type ThemeId } from "@/theme/themeRegistry";
 import { CLICKHOUSE_COMPLETIONS } from "./clickhouseKeywords";
 import { useTranslation } from "react-i18next";
 import { buildSqlContextualCompletion } from "./sqlCompletionContext";
+import { SingleResultState } from "@/lib/queryExecutionState";
 
 type SqlSyntaxPalette = {
   keyword: string;
@@ -220,6 +221,8 @@ interface SqlEditorProps {
     columns: string[];
     executionTime?: string;
     error?: string;
+    resultSets?: SingleResultState[];
+    activeResultSetIndex?: number;
   } | null;
   onExecute?: (sql: string) => void;
   onCancel?: () => void;
@@ -262,6 +265,7 @@ export function SqlEditor({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
+  const [activeResultSetIndex, setActiveResultSetIndex] = useState(0);
   const canSwitchDatabase =
     !!databaseName &&
     !!onDatabaseChange &&
@@ -274,6 +278,20 @@ export function SqlEditor({
         text: t("sqlEditor.result.failed"),
         toneClass: "text-destructive",
         Icon: XCircle,
+      };
+    }
+
+    const hasMultipleResults =
+      queryResults.resultSets && queryResults.resultSets.length > 1;
+    if (hasMultipleResults) {
+      const totalRows = queryResults.resultSets!.reduce(
+        (sum, rs) => sum + rs.rowCount,
+        0,
+      );
+      return {
+        text: `${t("sqlEditor.result.success")} ${queryResults.resultSets!.length} results (${totalRows} rows)`,
+        toneClass: "text-emerald-600 dark:text-emerald-400",
+        Icon: CheckCircle2,
       };
     }
 
@@ -291,6 +309,20 @@ export function SqlEditor({
       Icon: CheckCircle2,
     };
   }, [queryResults, t]);
+
+  const hasMultipleResults =
+    queryResults?.resultSets && queryResults.resultSets.length > 1;
+  const currentResultSet = useMemo(() => {
+    if (!queryResults) return null;
+    if (hasMultipleResults && queryResults.resultSets) {
+      return queryResults.resultSets[activeResultSetIndex] || null;
+    }
+    return null;
+  }, [queryResults, hasMultipleResults, activeResultSetIndex]);
+
+  const displayData = currentResultSet?.data ?? queryResults?.data ?? [];
+  const displayColumns =
+    currentResultSet?.columns ?? queryResults?.columns ?? [];
 
   // Use controlled value if provided, otherwise internal state
   const code = value !== undefined ? value : internalSql;
@@ -895,13 +927,32 @@ export function SqlEditor({
                       {queryResults.error}
                     </div>
                   ) : (
-                    <div className="flex-1 overflow-hidden">
-                      <TableView
-                        data={queryResults.data}
-                        columns={queryResults.columns}
-                        hideHeader
-                      />
-                    </div>
+                    <>
+                      {hasMultipleResults && (
+                        <div className="flex border-b bg-muted/30">
+                          {queryResults.resultSets!.map((rs, idx) => (
+                            <button
+                              key={idx}
+                              className={`px-3 py-1.5 text-sm ${
+                                idx === activeResultSetIndex
+                                  ? "border-b-2 border-primary bg-background"
+                                  : "text-muted-foreground hover:bg-muted/50"
+                              }`}
+                              onClick={() => setActiveResultSetIndex(idx)}
+                            >
+                              Result {idx + 1} ({rs.rowCount} rows)
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex-1 overflow-hidden">
+                        <TableView
+                          data={displayData}
+                          columns={displayColumns}
+                          hideHeader
+                        />
+                      </div>
+                    </>
                   )}
                 </div>
               </ResizablePanel>

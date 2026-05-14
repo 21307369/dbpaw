@@ -571,6 +571,48 @@ export const mockQueryResult: QueryResult = {
   success: true,
 };
 
+export const mockMultipleResultSets: QueryResult = {
+  data: [],
+  rowCount: 0,
+  columns: [],
+  timeTakenMs: 120,
+  success: true,
+  resultSets: [
+    {
+      data: mockTableData.data.slice(0, 3),
+      rowCount: 3,
+      columns: [
+        { name: "id", type: "integer" },
+        { name: "username", type: "varchar" },
+        { name: "email", type: "varchar" },
+      ],
+      index: 0,
+      statement: "SELECT id, username, email FROM users LIMIT 3",
+    },
+    {
+      data: mockTableData.data.slice(3, 6),
+      rowCount: 3,
+      columns: [
+        { name: "id", type: "integer" },
+        { name: "username", type: "varchar" },
+        { name: "created_at", type: "timestamp" },
+      ],
+      index: 1,
+      statement: "SELECT id, username, created_at FROM users LIMIT 3 OFFSET 3",
+    },
+    {
+      data: mockTableData.data.slice(6, 8),
+      rowCount: 2,
+      columns: [
+        { name: "id", type: "integer" },
+        { name: "email", type: "varchar" },
+      ],
+      index: 2,
+      statement: "SELECT id, email FROM users LIMIT 2 OFFSET 6",
+    },
+  ],
+};
+
 let mockSqlExecutionLogId = 1;
 const mockSqlExecutionLogs: SqlExecutionLog[] = [];
 
@@ -800,8 +842,27 @@ export async function mockExecuteQuery(
     throw new Error(error);
   }
 
+  // Check if query contains multiple statements (separated by semicolons)
+  const statements = query
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const hasMultipleStatements = statements.length > 1;
+
   // Return different data based on query type
   if (lower.includes("select")) {
+    // Check for multiple result sets request
+    if (hasMultipleStatements || lower.includes("multiple")) {
+      appendSqlExecutionLog({
+        sql: query,
+        source: source || "unknown",
+        connectionId: id,
+        database,
+        success: true,
+      });
+      return mockMultipleResultSets;
+    }
+
     // Dedicated array-type dataset: SELECT * FROM pg_arrays
     const isArrayQuery = lower.includes("pg_arrays") || lower.includes("array");
     // Dedicated complex-type dataset: SELECT * FROM json_test

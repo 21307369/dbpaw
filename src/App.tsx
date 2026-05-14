@@ -79,7 +79,10 @@ import {
 } from "@dnd-kit/sortable";
 import { SortableTab } from "@/components/ui/sortable-tab";
 import { useTranslation } from "react-i18next";
-import { applyQueryCompletionToTab } from "@/lib/queryExecutionState";
+import {
+  applyQueryCompletionToTab,
+  SingleResultState,
+} from "@/lib/queryExecutionState";
 import {
   normalizeDatabaseOptions,
   resolvePreferredDatabase,
@@ -129,6 +132,8 @@ interface TabItem {
     columns: string[];
     executionTime: string;
     error?: string;
+    resultSets?: SingleResultState[];
+    activeResultSetIndex?: number;
   } | null;
   activeQueryId?: string;
   lastQueryId?: string;
@@ -785,12 +790,22 @@ export default function App() {
         result.timeTakenMs ?? performance.now() - start,
       );
 
+      const resultSets = result.resultSets?.map((rs) => ({
+        data: rs.data,
+        columns: rs.columns.map((c) => c.name),
+        rowCount: rs.rowCount,
+        statement: rs.statement,
+        index: rs.index,
+      }));
+
       setTabs((prev) =>
         prev.map((t) =>
           applyQueryCompletionToTab(t, tabId, queryId, {
             data: result.data || [],
             columns,
             executionTime: `${execMs}ms`,
+            resultSets,
+            activeResultSetIndex: resultSets?.length ? 0 : undefined,
           }),
         ),
       );

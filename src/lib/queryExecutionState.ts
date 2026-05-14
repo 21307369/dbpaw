@@ -1,8 +1,18 @@
+export type SingleResultState = {
+  data: unknown[];
+  columns: string[];
+  rowCount: number;
+  statement: string;
+  index: number;
+};
+
 export type QueryResultsState = {
   data: unknown[];
   columns: string[];
   executionTime: string;
   error?: string;
+  resultSets?: SingleResultState[];
+  activeResultSetIndex?: number;
 };
 
 type QueryTabState = {

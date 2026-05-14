@@ -431,12 +431,12 @@ const currentResultSet = hasMultipleResults
 |-------|------|---------|------|
 | Phase 1 | 后端模型扩展 | 0.5h | ✅ 已完成 |
 | Phase 2 | 前端类型同步 | 0.5h | ✅ 已完成 |
-| Phase 3 | 驱动改造 (8个) | 4h | 待开始 |
-| Phase 4 | 前端状态管理 | 1h | 待开始 |
-| Phase 5 | App.tsx 逻辑改造 | 1h | 待开始 |
-| Phase 6 | SqlEditor UI 改造 | 2h | 待开始 |
-| Phase 7 | Mock 系统更新 | 0.5h | 待开始 |
-| Phase 8 | 测试更新 | 2h | 待开始 |
+| Phase 3 | 驱动改造 (8个) | 4h | ✅ 已完成 |
+| Phase 4 | 前端状态管理 | 1h | ✅ 已完成 |
+| Phase 5 | App.tsx 逻辑改造 | 1h | ✅ 已完成 |
+| Phase 6 | SqlEditor UI 改造 | 2h | ✅ 已完成 |
+| Phase 7 | Mock 系统更新 | 0.5h | ✅ 已完成 |
+| Phase 8 | 测试更新 | 2h | ✅ 已完成 |
 | **总计** | | **11.5h** | |
 
 ---
@@ -480,3 +480,55 @@ const currentResultSet = hasMultipleResults
   - 新增 `SingleResultSet` 接口
   - 扩展 `QueryResult` 添加 `resultSets` 字段
   - `bun run typecheck` 验证通过
+
+### 2026-05-14
+- ✅ Phase 3 完成：驱动改造 - 逐条执行并收集结果
+  - 所有 7 个数据库驱动已改造完成：
+    - MySQL (mysql.rs) - 添加 `execute_single_statement` 方法
+    - PostgreSQL (postgres.rs) - 添加 `execute_single_statement` 方法
+    - SQLite (sqlite.rs) - 添加 `execute_single_statement` 方法
+    - DuckDB (duckdb.rs) - 在 `run_blocking` 闭包内处理多结果集
+    - MSSQL (mssql.rs) - 添加 `execute_single_statement` 方法
+    - ClickHouse (clickhouse.rs) - 为 HTTP 协议适配多结果集
+    - Oracle (oracle.rs) - 在 `run_blocking` 闭包内处理多结果集
+  - 改造策略：
+    - 单条 SQL：行为不变，`result_sets` 为 `None`
+    - 多条 SQL：逐条执行，收集所有结果到 `result_sets`
+    - 部分失败：返回已有结果 + 错误信息
+  - 新增 4 个单元测试用例（SQLite 驱动）：
+    - `test_execute_query_multiple_select_returns_result_sets` - 测试多 SELECT 返回结果集
+    - `test_execute_query_single_select_no_result_sets` - 测试单 SELECT 不返回结果集
+    - `test_execute_query_multiple_mixed_statements` - 测试混合 DML/SELECT 语句
+    - `test_execute_query_multiple_partial_failure` - 测试部分失败场景
+  - `cargo test --lib` 验证通过（321 个测试全部通过）
+- ✅ Phase 4 完成：前端状态管理改造
+  - 新增 `SingleResultState` 类型定义
+  - 扩展 `QueryResultsState` 添加 `resultSets` 和 `activeResultSetIndex` 字段
+  - `bun run typecheck` 验证通过
+  - `bun run test:unit` 验证通过（542 个测试全部通过）
+- ✅ Phase 5 完成：App.tsx 逻辑改造
+  - 导入 `SingleResultState` 类型
+  - 扩展 `TabItem` 接口添加 `resultSets` 和 `activeResultSetIndex` 字段
+  - 改造 `handleExecuteQuery` 函数处理多结果集响应
+  - `bun run typecheck` 验证通过
+- ✅ Phase 6 完成：SqlEditor UI 改造
+  - 导入 `SingleResultState` 类型
+  - 扩展 `SqlEditorProps` 接口添加 `resultSets` 和 `activeResultSetIndex` 字段
+  - 添加 `activeResultSetIndex` 状态管理
+  - 添加 `hasMultipleResults` 和 `currentResultSet` 计算属性
+  - 添加 `displayData` 和 `displayColumns` 计算属性
+  - 实现结果集切换 Tab UI
+  - 更新 `resultStatus` 逻辑支持多结果集显示
+  - `bun run typecheck` 验证通过
+- ✅ Phase 7 完成：Mock 系统更新
+  - 新增 `mockMultipleResultSets` 测试数据
+  - 更新 `mockExecuteQuery` 函数支持多结果集
+  - 支持多语句查询返回多个结果集
+  - `bun run typecheck` 验证通过
+- ✅ Phase 8 完成：测试更新
+  - 新增多结果集测试用例（4个）：
+    - `should update results with multiple result sets` - 测试多结果集更新
+    - `should preserve multiple result sets structure` - 测试多结果集结构保持
+    - `should handle multiple result sets with error` - 测试多结果集错误处理
+    - `should handle single result set (backward compatibility)` - 测试单结果集向后兼容
+  - `bun run test:unit` 验证通过（546 个测试全部通过）
