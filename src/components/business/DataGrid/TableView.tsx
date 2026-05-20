@@ -2011,7 +2011,12 @@ export function TableView({
                     {colIndex + 1}
                   </td>
                   <td className="px-4 py-2 text-xs font-semibold text-foreground border-r border-border bg-muted/30">
-                    {column}
+                    <div>{column}</div>
+                    {showColumnComments && columnComments[column] && (
+                      <span className="block truncate text-[10px] text-muted-foreground/60 leading-tight font-normal">
+                        {columnComments[column]}
+                      </span>
+                    )}
                   </td>
                   {currentData.map((row, rowIndex) => {
                     const modified = isCellModified(rowIndex, column);
