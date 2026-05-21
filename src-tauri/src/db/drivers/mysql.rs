@@ -1,8 +1,8 @@
 use super::{strip_trailing_statement_terminator, DatabaseDriver};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    RoutineInfo, SchemaOverview, SingleResultSet, SpecialTypeSummary, TableDataResponse,
-    TableInfo, TableMetadata, TableSchema, TableStructure,
+    RoutineInfo, SchemaOverview, SingleResultSet, SpecialTypeSummary, TableDataResponse, TableInfo,
+    TableMetadata, TableSchema, TableStructure,
 };
 use async_trait::async_trait;
 use sqlx::{
@@ -14,11 +14,35 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
 
 #[cfg(test)]
 use sqlx::ConnectOptions;
 
 use crate::ssh::SshTunnel;
+
+type MysqlQueryThreadRegistry = HashMap<String, u64>;
+
+fn mysql_query_threads() -> &'static Mutex<MysqlQueryThreadRegistry> {
+    static REGISTRY: OnceLock<Mutex<MysqlQueryThreadRegistry>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+async fn register_mysql_query_thread(query_id: &str, thread_id: u64) {
+    let mut guard = mysql_query_threads().lock().await;
+    guard.insert(query_id.to_string(), thread_id);
+}
+
+async fn unregister_mysql_query_thread(query_id: &str) {
+    let mut guard = mysql_query_threads().lock().await;
+    guard.remove(query_id);
+}
+
+async fn lookup_mysql_query_thread(query_id: &str) -> Option<u64> {
+    let guard = mysql_query_threads().lock().await;
+    guard.get(query_id).copied()
+}
 
 pub struct MysqlDriver {
     pub pool: sqlx::MySqlPool,
@@ -760,17 +784,17 @@ fn decode_mysql_cell_to_json(
     }
     if let Ok(v) = row.try_get::<Option<chrono::NaiveDateTime>, _>(column_name) {
         return v
-            .map(|value| serde_json::Value::String(value.to_string()))
+            .map(|value| serde_json::Value::String(super::format_naive_datetime(&value)))
             .unwrap_or(serde_json::Value::Null);
     }
     if let Ok(v) = row.try_get::<Option<chrono::NaiveDate>, _>(column_name) {
         return v
-            .map(|value| serde_json::Value::String(value.to_string()))
+            .map(|value| serde_json::Value::String(super::format_naive_date(&value)))
             .unwrap_or(serde_json::Value::Null);
     }
     if let Ok(v) = row.try_get::<Option<chrono::NaiveTime>, _>(column_name) {
         return v
-            .map(|value| serde_json::Value::String(value.to_string()))
+            .map(|value| serde_json::Value::String(super::format_naive_time(&value)))
             .unwrap_or(serde_json::Value::Null);
     }
     if let Ok(v) = row.try_get::<Option<String>, _>(column_name) {
@@ -838,6 +862,13 @@ fn decode_mysql_json_cell(
     Err("[QUERY_ERROR] Failed to decode MySQL JSON cell".to_string())
 }
 
+fn is_mysql_temporal_type(data_type: &str) -> bool {
+    matches!(
+        data_type.trim().to_ascii_lowercase().as_str(),
+        "timestamp" | "datetime" | "date" | "time"
+    )
+}
+
 fn build_mysql_json_object_expr(columns: &[(String, String)], table_alias: Option<&str>) -> String {
     if columns.is_empty() {
         return "JSON_OBJECT()".to_string();
@@ -854,6 +885,14 @@ fn build_mysql_json_object_expr(columns: &[(String, String)], table_alias: Optio
         };
         if is_high_precision_mysql_data_type(data_type) {
             args.push(format!("CAST({base_ref} AS CHAR)"));
+        } else if is_mysql_temporal_type(data_type) {
+            // MySQL's JSON_OBJECT formats timestamps with trailing .000000;
+            // use DATE_FORMAT + TRIM to emit a clean representation without
+            // fractional zeros.  If the column actually stores sub-second
+            // precision the non-zero digits are preserved.
+            args.push(format!(
+                "TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM DATE_FORMAT({base_ref}, '%Y-%m-%d %H:%i:%s.%f')))"
+            ));
         } else {
             args.push(base_ref);
         }
@@ -862,7 +901,10 @@ fn build_mysql_json_object_expr(columns: &[(String, String)], table_alias: Optio
 }
 
 fn is_json_projectable_statement(sql: &str) -> bool {
-    matches!(super::first_sql_keyword(sql).as_deref(), Some("SELECT" | "WITH"))
+    matches!(
+        super::first_sql_keyword(sql).as_deref(),
+        Some("SELECT" | "WITH")
+    )
 }
 
 fn is_affected_rows_statement(sql: &str) -> bool {
@@ -984,6 +1026,19 @@ impl MysqlDriver {
             pk_set.insert(decode_mysql_text_cell(&row, 0)?);
         }
         Ok(pk_set)
+    }
+
+    pub async fn kill_query(&self, thread_id: u64) -> Result<(), String> {
+        let sql = format!("KILL QUERY {}", thread_id);
+        self.execute_sql(&sql).await.map(|_| ())
+    }
+
+    pub async fn lookup_query_thread(query_id: &str) -> Option<u64> {
+        lookup_mysql_query_thread(query_id).await
+    }
+
+    pub async fn unregister_query_thread(query_id: &str) {
+        unregister_mysql_query_thread(query_id).await;
     }
 }
 
@@ -1507,6 +1562,29 @@ impl DatabaseDriver for MysqlDriver {
             error: None,
             result_sets: Some(result_sets),
         })
+    }
+
+    async fn execute_query_with_id(
+        &self,
+        sql: String,
+        query_id: Option<&str>,
+    ) -> Result<QueryResult, String> {
+        if query_id.is_none() {
+            return self.execute_query(sql).await;
+        }
+
+        let query_id = query_id.unwrap();
+        let thread_id: u64 = sqlx::query_scalar("SELECT CONNECTION_ID()")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| format!("[QUERY_ERROR] Failed to get connection id: {e}"))?;
+
+        register_mysql_query_thread(query_id, thread_id).await;
+
+        let result = self.execute_query(sql).await;
+
+        unregister_mysql_query_thread(query_id).await;
+        result
     }
 
     async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {

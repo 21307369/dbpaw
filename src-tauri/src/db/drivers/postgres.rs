@@ -251,7 +251,7 @@ impl PostgresDriver {
                         "TIME" | "TIMETZ" | "INTERVAL" => row
                             .try_get::<NaiveTime, _>(name)
                             .ok()
-                            .map(|v| serde_json::Value::String(v.to_string()))
+                            .map(|v| serde_json::Value::String(super::format_naive_time(&v)))
                             .or_else(|| {
                                 row.try_get::<String, _>(name)
                                     .ok()
@@ -261,7 +261,7 @@ impl PostgresDriver {
                         "TIMESTAMP" => row
                             .try_get::<NaiveDateTime, _>(name)
                             .ok()
-                            .map(|v| serde_json::Value::String(v.to_string()))
+                            .map(|v| serde_json::Value::String(super::format_naive_datetime(&v)))
                             .or_else(|| {
                                 row.try_get::<String, _>(name)
                                     .ok()
@@ -271,7 +271,7 @@ impl PostgresDriver {
                         "TIMESTAMPTZ" => row
                             .try_get::<DateTime<Utc>, _>(name)
                             .ok()
-                            .map(|v| serde_json::Value::String(v.to_string()))
+                            .map(|v| serde_json::Value::String(super::format_datetime_utc(&v)))
                             .or_else(|| {
                                 row.try_get::<String, _>(name)
                                     .ok()
@@ -1080,8 +1080,6 @@ fn render_pg_create_table_ddl(
 fn pg_quote_literal(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
 }
-
-
 
 fn is_json_projectable_statement(sql: &str) -> bool {
     matches!(
