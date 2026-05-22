@@ -595,7 +595,7 @@ export function ConnectionList({
   const handledRedisRefreshIdRef = useRef<number | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [expandedConnections, setExpandedConnections] = useState<Set<string>>(
-    new Set(["1"]),
+    new Set(),
   );
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(
     new Set(),
