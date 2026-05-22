@@ -7,7 +7,7 @@ use crate::datasources::redis::{
     RedisZRangeByLexResult, RedisZRangeByScoreResult, RedisZSetMember,
 };
 use crate::datasources::redis::{connect, RedisConnection};
-use crate::models::ConnectionForm;
+use crate::models::{ConnectionForm, RedisCommandLog};
 use crate::state::AppState;
 use std::collections::HashMap;
 use tauri::State;
@@ -396,6 +396,29 @@ pub async fn redis_get_stream_view(
     }
 }
 
+async fn append_redis_command_log(
+    state: &AppState,
+    command: String,
+    connection_id: i64,
+    database: Option<String>,
+    success: bool,
+    error: Option<String>,
+) {
+    let db = {
+        let lock = state.local_db.lock().await;
+        lock.clone()
+    };
+
+    if let Some(local_db) = db {
+        if let Err(e) = local_db
+            .insert_redis_command_log(command, Some(connection_id), database, success, error)
+            .await
+        {
+            eprintln!("[REDIS_LOG_APPEND_ERROR] {}", e);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn redis_execute_raw(
     state: State<'_, AppState>,
@@ -406,14 +429,25 @@ pub async fn redis_execute_raw(
     let form = connection_form(&state, id).await?;
     let db = database.as_deref();
     let mut conn = acquire(&state, id, &form, db).await?;
-    match redis::execute_raw(&mut conn, command.clone()).await {
+    let result = match redis::execute_raw(&mut conn, command.clone()).await {
         Err(ref e) if is_io_error(e) => {
             evict(&state, id, &form, db).await;
             let mut conn = acquire(&state, id, &form, db).await?;
-            redis::execute_raw(&mut conn, command).await
+            redis::execute_raw(&mut conn, command.clone()).await
         }
         r => r,
+    };
+
+    match &result {
+        Ok(_) => {
+            append_redis_command_log(&state, command, id, database, true, None).await;
+        }
+        Err(e) => {
+            append_redis_command_log(&state, command, id, database, false, Some(e.clone())).await;
+        }
     }
+
+    result
 }
 
 #[tauri::command]
@@ -1380,5 +1414,27 @@ pub async fn redis_lmove(
             redis::lmove(&mut conn, source, destination, src_direction, dst_direction).await
         }
         r => r,
+    }
+}
+
+fn clamp_redis_command_logs_limit(limit: Option<i64>) -> i64 {
+    limit.unwrap_or(100).clamp(1, 100)
+}
+
+#[tauri::command]
+pub async fn list_redis_command_logs(
+    state: State<'_, AppState>,
+    limit: Option<i64>,
+) -> Result<Vec<RedisCommandLog>, String> {
+    let safe_limit = clamp_redis_command_logs_limit(limit);
+    let local_db = {
+        let lock = state.local_db.lock().await;
+        lock.clone()
+    };
+
+    if let Some(db) = local_db {
+        db.list_redis_command_logs(safe_limit).await
+    } else {
+        Err("Local DB not initialized".to_string())
     }
 }

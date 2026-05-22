@@ -1,6 +1,6 @@
 use crate::models::{
     AiConversation, AiMessage, AiProvider, AiProviderForm, AiProviderPublic, Connection,
-    ConnectionForm, SavedQuery, SqlExecutionLog,
+    ConnectionForm, RedisCommandLog, SavedQuery, SqlExecutionLog,
 };
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
@@ -259,10 +259,26 @@ impl LocalDb {
         .map_err(|e| format!("[MIGRATION_015_CHECK_ERROR] {e}"))?;
 
         if !has_auth_source_column {
-            sqlx::query(include_str!("../../migrations/015_add_mongodb_auth_source.sql"))
+            sqlx::query(include_str!(
+                "../../migrations/015_add_mongodb_auth_source.sql"
+            ))
+            .execute(&pool)
+            .await
+            .map_err(|e| format!("[MIGRATION_015_ERROR] {e}"))?;
+        }
+
+        let has_redis_command_logs: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='redis_command_logs')",
+        )
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| format!("[MIGRATION_016_CHECK_ERROR] {e}"))?;
+
+        if !has_redis_command_logs {
+            sqlx::query(include_str!("../../migrations/016_redis_command_logs.sql"))
                 .execute(&pool)
                 .await
-                .map_err(|e| format!("[MIGRATION_015_ERROR] {e}"))?;
+                .map_err(|e| format!("[MIGRATION_016_ERROR] {e}"))?;
         }
 
         Ok(Self {
@@ -735,6 +751,49 @@ impl LocalDb {
         .map_err(|e| format!("[LIST_SQL_EXECUTION_LOGS_ERROR] {e}"))
     }
 
+    pub async fn insert_redis_command_log(
+        &self,
+        command: String,
+        connection_id: Option<i64>,
+        database: Option<String>,
+        success: bool,
+        error: Option<String>,
+    ) -> Result<(), String> {
+        sqlx::query(
+            "INSERT INTO redis_command_logs (command, connection_id, database, success, error) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(command)
+        .bind(connection_id)
+        .bind(database)
+        .bind(success)
+        .bind(error)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| format!("[INSERT_REDIS_COMMAND_LOG_ERROR] {e}"))?;
+
+        sqlx::query(
+            "DELETE FROM redis_command_logs WHERE id NOT IN (SELECT id FROM redis_command_logs ORDER BY id DESC LIMIT 100)",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| format!("[PRUNE_REDIS_COMMAND_LOGS_ERROR] {e}"))?;
+
+        Ok(())
+    }
+
+    pub async fn list_redis_command_logs(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<RedisCommandLog>, String> {
+        sqlx::query_as::<_, RedisCommandLog>(
+            "SELECT id, command, connection_id, database, success, error, executed_at FROM redis_command_logs ORDER BY id DESC LIMIT ?",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| format!("[LIST_REDIS_COMMAND_LOGS_ERROR] {e}"))
+    }
+
     pub async fn list_ai_providers(&self) -> Result<Vec<AiProvider>, String> {
         sqlx::query_as::<_, AiProvider>(
             "SELECT id, name, provider_type, base_url, model, api_key, is_default, enabled, extra_json, created_at, updated_at FROM ai_providers ORDER BY is_default DESC, updated_at DESC",
@@ -1126,6 +1185,7 @@ mod tests {
             include_str!("../../migrations/013_add_elasticsearch_connection_options.sql"),
             include_str!("../../migrations/014_add_sentinel_fields.sql"),
             include_str!("../../migrations/015_add_mongodb_auth_source.sql"),
+            include_str!("../../migrations/016_redis_command_logs.sql"),
         ] {
             sqlx::query(migration)
                 .execute(&pool)

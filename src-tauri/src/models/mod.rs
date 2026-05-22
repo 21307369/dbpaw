@@ -66,6 +66,18 @@ pub struct SqlExecutionLog {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct RedisCommandLog {
+    pub id: i64,
+    pub command: String,
+    pub connection_id: Option<i64>,
+    pub database: Option<String>,
+    pub success: bool,
+    pub error: Option<String>,
+    pub executed_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct AiProvider {
     pub id: i64,
     pub name: String,
