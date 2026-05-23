@@ -887,7 +887,11 @@ async fn test_mysql_multi_statement_execution() {
         qualified, qualified
     );
     let result = driver.execute_query(multi_sql).await;
-    assert!(result.is_ok(), "Multi-statement INSERT failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Multi-statement INSERT failed: {:?}",
+        result.err()
+    );
 
     // Verify both rows were inserted
     let select_res = driver
@@ -959,12 +963,16 @@ async fn test_mysql_list_routines_and_get_routine_ddl() {
         .await
         .expect("list_routines failed");
     assert!(
-        routines.iter().any(|r| r.name == "sp_dbpaw_test" && r.r#type == "procedure"),
+        routines
+            .iter()
+            .any(|r| r.name == "sp_dbpaw_test" && r.r#type == "procedure"),
         "list_routines should include sp_dbpaw_test as procedure, got: {:?}",
         routines
     );
     assert!(
-        routines.iter().any(|r| r.name == "fn_dbpaw_test" && r.r#type == "function"),
+        routines
+            .iter()
+            .any(|r| r.name == "fn_dbpaw_test" && r.r#type == "function"),
         "list_routines should include fn_dbpaw_test as function, got: {:?}",
         routines
     );
@@ -981,7 +989,11 @@ async fn test_mysql_list_routines_and_get_routine_ddl() {
 
     // get_routine_ddl for procedure
     let proc_ddl = driver
-        .get_routine_ddl(database.clone(), "sp_dbpaw_test".to_string(), "procedure".to_string())
+        .get_routine_ddl(
+            database.clone(),
+            "sp_dbpaw_test".to_string(),
+            "procedure".to_string(),
+        )
         .await
         .expect("get_routine_ddl for procedure failed");
     assert!(
@@ -997,7 +1009,11 @@ async fn test_mysql_list_routines_and_get_routine_ddl() {
 
     // get_routine_ddl for function
     let func_ddl = driver
-        .get_routine_ddl(database.clone(), "fn_dbpaw_test".to_string(), "function".to_string())
+        .get_routine_ddl(
+            database.clone(),
+            "fn_dbpaw_test".to_string(),
+            "function".to_string(),
+        )
         .await
         .expect("get_routine_ddl for function failed");
     assert!(
@@ -1013,15 +1029,29 @@ async fn test_mysql_list_routines_and_get_routine_ddl() {
 
     // get_routine_ddl with invalid type should error
     let bad_type = driver
-        .get_routine_ddl(database.clone(), "sp_dbpaw_test".to_string(), "invalid_type".to_string())
+        .get_routine_ddl(
+            database.clone(),
+            "sp_dbpaw_test".to_string(),
+            "invalid_type".to_string(),
+        )
         .await;
-    assert!(bad_type.is_err(), "get_routine_ddl with invalid type should fail");
+    assert!(
+        bad_type.is_err(),
+        "get_routine_ddl with invalid type should fail"
+    );
 
     // get_routine_ddl for non-existent routine should error
     let missing = driver
-        .get_routine_ddl(database.clone(), "nonexistent_routine".to_string(), "procedure".to_string())
+        .get_routine_ddl(
+            database.clone(),
+            "nonexistent_routine".to_string(),
+            "procedure".to_string(),
+        )
         .await;
-    assert!(missing.is_err(), "get_routine_ddl for non-existent routine should fail");
+    assert!(
+        missing.is_err(),
+        "get_routine_ddl for non-existent routine should fail"
+    );
 
     // Cleanup
     let _ = driver

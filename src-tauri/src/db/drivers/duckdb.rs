@@ -53,8 +53,6 @@ fn duckdb_table_ref(schema: &str, table: &str) -> String {
     }
 }
 
-
-
 fn sql_contains_keyword(sql: &str, keyword: &str) -> bool {
     let keyword_bytes = keyword.as_bytes();
     if keyword_bytes.is_empty() {

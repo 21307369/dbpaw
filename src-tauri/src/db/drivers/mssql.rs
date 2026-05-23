@@ -8,8 +8,8 @@ use async_trait::async_trait;
 use bb8::{Pool, RunError};
 use futures_util::TryStreamExt;
 use std::collections::{HashMap, HashSet};
-use tiberius::{AuthMethod, Client, ColumnData, Config, EncryptionLevel, QueryItem, Row};
 use tiberius::SqlBrowser;
+use tiberius::{AuthMethod, Client, ColumnData, Config, EncryptionLevel, QueryItem, Row};
 use tokio::net::TcpStream;
 use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 
@@ -164,13 +164,21 @@ fn column_data_to_json(col: &ColumnData<'static>) -> serde_json::Value {
             let ns = (v.seconds_fragments() as i64) * (1e9 as i64) / 300;
             let time = chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
                 + chrono::Duration::nanoseconds(ns);
-            serde_json::json!(chrono::NaiveDateTime::new(date, time).format("%Y-%m-%dT%H:%M:%S%.3f").to_string())
+            serde_json::json!(chrono::NaiveDateTime::new(date, time)
+                .format("%Y-%m-%dT%H:%M:%S%.3f")
+                .to_string())
         }
         ColumnData::SmallDateTime(Some(v)) => {
             let base = chrono::NaiveDate::from_ymd_opt(1900, 1, 1).unwrap();
             let date = base + chrono::Duration::days(v.days() as i64);
-            let time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(v.seconds_fragments() as u32, 0).unwrap_or_default();
-            serde_json::json!(chrono::NaiveDateTime::new(date, time).format("%Y-%m-%dT%H:%M:%S").to_string())
+            let time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(
+                v.seconds_fragments() as u32,
+                0,
+            )
+            .unwrap_or_default();
+            serde_json::json!(chrono::NaiveDateTime::new(date, time)
+                .format("%Y-%m-%dT%H:%M:%S")
+                .to_string())
         }
         ColumnData::Time(Some(v)) => {
             let ns = v.increments() as i64 * 10i64.pow(9 - v.scale() as u32);
@@ -190,7 +198,9 @@ fn column_data_to_json(col: &ColumnData<'static>) -> serde_json::Value {
             let ns = t.increments() as i64 * 10i64.pow(9 - t.scale() as u32);
             let time = chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
                 + chrono::Duration::nanoseconds(ns);
-            serde_json::json!(chrono::NaiveDateTime::new(date, time).format("%Y-%m-%dT%H:%M:%S%.f").to_string())
+            serde_json::json!(chrono::NaiveDateTime::new(date, time)
+                .format("%Y-%m-%dT%H:%M:%S%.f")
+                .to_string())
         }
         ColumnData::DateTimeOffset(Some(v)) => {
             let base = chrono::NaiveDate::from_ymd_opt(1, 1, 1).unwrap();
@@ -258,8 +268,6 @@ fn quote_ident(ident: &str) -> Result<String, String> {
 fn table_ref(schema: &str, table: &str) -> Result<String, String> {
     Ok(format!("{}.{}", quote_ident(schema)?, quote_ident(table)?))
 }
-
-
 
 /// Check whether the SQL already contains a `FOR JSON` clause.
 /// Scans the statement while skipping string literals and comments.
@@ -444,10 +452,7 @@ impl MssqlConnectionManager {
             "windows" => {
                 #[cfg(target_os = "windows")]
                 {
-                    AuthMethod::windows(
-                        self.config.username.clone(),
-                        self.config.password.clone(),
-                    )
+                    AuthMethod::windows(self.config.username.clone(), self.config.password.clone())
                 }
                 #[cfg(not(target_os = "windows"))]
                 {
@@ -461,10 +466,7 @@ impl MssqlConnectionManager {
                 }
             }
             "aad_token" => AuthMethod::aad_token(self.config.password.clone()),
-            _ => AuthMethod::sql_server(
-                self.config.username.clone(),
-                self.config.password.clone(),
-            ),
+            _ => AuthMethod::sql_server(self.config.username.clone(), self.config.password.clone()),
         }
     }
 
@@ -1314,9 +1316,13 @@ mod tests {
         assert!(already_has_for_json("SELECT 1 FOR JSON PATH"));
         assert!(already_has_for_json("SELECT 1 FOR JSON AUTO"));
         assert!(already_has_for_json("SELECT 1 FOR JSON EXPLICIT"));
-        assert!(already_has_for_json("SELECT 1 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER"));
+        assert!(already_has_for_json(
+            "SELECT 1 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER"
+        ));
         assert!(already_has_for_json("SELECT 1 FOR JSON PATH, ROOT('data')"));
-        assert!(already_has_for_json("SELECT 1 FOR JSON PATH, INCLUDE_NULL_VALUES"));
+        assert!(already_has_for_json(
+            "SELECT 1 FOR JSON PATH, INCLUDE_NULL_VALUES"
+        ));
         // Should not match partial words
         assert!(!already_has_for_json("SELECT * FROM performance_json_log"));
         assert!(!already_has_for_json("SELECT 'FOR JSON' AS label"));
@@ -1326,7 +1332,9 @@ mod tests {
     fn test_has_top_level_union_detects_union() {
         assert!(has_top_level_union("SELECT 1 UNION SELECT 2"));
         assert!(has_top_level_union("SELECT 1 UNION ALL SELECT 2"));
-        assert!(!has_top_level_union("SELECT * FROM (SELECT 1 UNION SELECT 2) AS t"));
+        assert!(!has_top_level_union(
+            "SELECT * FROM (SELECT 1 UNION SELECT 2) AS t"
+        ));
         assert!(!has_top_level_union("SELECT 'union' AS word"));
     }
 
@@ -1337,7 +1345,9 @@ mod tests {
         assert!(is_for_json_safe("  -- comment\nSELECT id FROM t"));
 
         // Unsafe: CTE
-        assert!(!is_for_json_safe("WITH cte AS (SELECT 1) SELECT * FROM cte"));
+        assert!(!is_for_json_safe(
+            "WITH cte AS (SELECT 1) SELECT * FROM cte"
+        ));
 
         // Unsafe: UNION
         assert!(!is_for_json_safe("SELECT 1 UNION SELECT 2"));
@@ -1421,32 +1431,68 @@ mod tests {
 
     #[test]
     fn test_mssql_full_type_string_varchar() {
-        assert_eq!(super::mssql_full_type_string("varchar", 255, 0, 0), "varchar(255)");
-        assert_eq!(super::mssql_full_type_string("varchar", -1, 0, 0), "varchar(MAX)");
+        assert_eq!(
+            super::mssql_full_type_string("varchar", 255, 0, 0),
+            "varchar(255)"
+        );
+        assert_eq!(
+            super::mssql_full_type_string("varchar", -1, 0, 0),
+            "varchar(MAX)"
+        );
         assert_eq!(super::mssql_full_type_string("char", 10, 0, 0), "char(10)");
-        assert_eq!(super::mssql_full_type_string("varbinary", -1, 0, 0), "varbinary(MAX)");
-        assert_eq!(super::mssql_full_type_string("binary", 16, 0, 0), "binary(16)");
+        assert_eq!(
+            super::mssql_full_type_string("varbinary", -1, 0, 0),
+            "varbinary(MAX)"
+        );
+        assert_eq!(
+            super::mssql_full_type_string("binary", 16, 0, 0),
+            "binary(16)"
+        );
     }
 
     #[test]
     fn test_mssql_full_type_string_nvarchar() {
         // mssql_full_type_string expects logical (char) length
-        assert_eq!(super::mssql_full_type_string("nvarchar", 50, 0, 0), "nvarchar(50)");
-        assert_eq!(super::mssql_full_type_string("nvarchar", -1, 0, 0), "nvarchar(MAX)");
-        assert_eq!(super::mssql_full_type_string("nchar", 10, 0, 0), "nchar(10)");
+        assert_eq!(
+            super::mssql_full_type_string("nvarchar", 50, 0, 0),
+            "nvarchar(50)"
+        );
+        assert_eq!(
+            super::mssql_full_type_string("nvarchar", -1, 0, 0),
+            "nvarchar(MAX)"
+        );
+        assert_eq!(
+            super::mssql_full_type_string("nchar", 10, 0, 0),
+            "nchar(10)"
+        );
     }
 
     #[test]
     fn test_mssql_full_type_string_decimal() {
-        assert_eq!(super::mssql_full_type_string("decimal", 0, 10, 2), "decimal(10,2)");
-        assert_eq!(super::mssql_full_type_string("numeric", 0, 18, 0), "numeric(18,0)");
+        assert_eq!(
+            super::mssql_full_type_string("decimal", 0, 10, 2),
+            "decimal(10,2)"
+        );
+        assert_eq!(
+            super::mssql_full_type_string("numeric", 0, 18, 0),
+            "numeric(18,0)"
+        );
     }
 
     #[test]
     fn test_mssql_full_type_string_datetime_with_scale() {
-        assert_eq!(super::mssql_full_type_string("datetime2", 0, 0, 7), "datetime2(7)");
-        assert_eq!(super::mssql_full_type_string("datetime2", 0, 0, 0), "datetime2");
-        assert_eq!(super::mssql_full_type_string("datetimeoffset", 0, 0, 3), "datetimeoffset(3)");
+        assert_eq!(
+            super::mssql_full_type_string("datetime2", 0, 0, 7),
+            "datetime2(7)"
+        );
+        assert_eq!(
+            super::mssql_full_type_string("datetime2", 0, 0, 0),
+            "datetime2"
+        );
+        assert_eq!(
+            super::mssql_full_type_string("datetimeoffset", 0, 0, 3),
+            "datetimeoffset(3)"
+        );
         assert_eq!(super::mssql_full_type_string("time", 0, 0, 4), "time(4)");
     }
 
@@ -1455,7 +1501,10 @@ mod tests {
         assert_eq!(super::mssql_full_type_string("int", 0, 0, 0), "int");
         assert_eq!(super::mssql_full_type_string("bigint", 0, 0, 0), "bigint");
         assert_eq!(super::mssql_full_type_string("bit", 0, 0, 0), "bit");
-        assert_eq!(super::mssql_full_type_string("uniqueidentifier", 0, 0, 0), "uniqueidentifier");
+        assert_eq!(
+            super::mssql_full_type_string("uniqueidentifier", 0, 0, 0),
+            "uniqueidentifier"
+        );
     }
 }
 
@@ -1870,12 +1919,17 @@ impl DatabaseDriver for MssqlDriver {
         } else {
             // ROW_NUMBER() based pagination for subsequent pages (compatible with SQL Server 2005+)
             // Extract the ORDER BY columns for ROW_NUMBER() OVER clause
-            let row_num_order = if order_clause.trim().is_empty() || order_clause.contains("SELECT NULL") {
-                "(SELECT NULL)".to_string()
-            } else {
-                // Remove "ORDER BY" prefix to get just the columns
-                order_clause.strip_prefix(" ORDER BY").unwrap_or(&order_clause).trim().to_string()
-            };
+            let row_num_order =
+                if order_clause.trim().is_empty() || order_clause.contains("SELECT NULL") {
+                    "(SELECT NULL)".to_string()
+                } else {
+                    // Remove "ORDER BY" prefix to get just the columns
+                    order_clause
+                        .strip_prefix(" ORDER BY")
+                        .unwrap_or(&order_clause)
+                        .trim()
+                        .to_string()
+                };
 
             format!(
                 "SELECT * FROM ( \
@@ -1884,7 +1938,12 @@ impl DatabaseDriver for MssqlDriver {
                 ) AS __paged \
                 WHERE __row_num > {} \
                 ORDER BY __row_num",
-                offset + safe_limit, select_list, row_num_order, qualified, where_clause, offset
+                offset + safe_limit,
+                select_list,
+                row_num_order,
+                qualified,
+                where_clause,
+                offset
             )
         };
         let (mut data, mut columns) = self.fetch_query_result_json(&sql).await?;

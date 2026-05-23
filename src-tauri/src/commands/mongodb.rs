@@ -25,10 +25,7 @@ async fn connection_form(
     Ok(form)
 }
 
-async fn client_from_id(
-    state: &State<'_, AppState>,
-    id: i64,
-) -> Result<MongodbClient, String> {
+async fn client_from_id(state: &State<'_, AppState>, id: i64) -> Result<MongodbClient, String> {
     MongodbClient::connect(&connection_form(state, id).await?).await
 }
 

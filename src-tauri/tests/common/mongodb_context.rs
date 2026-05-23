@@ -20,8 +20,8 @@ pub fn mongodb_form_from_test_context<'a>(
     let image = GenericImage::new("mongo", "7.0")
         .with_wait_for(WaitFor::seconds(15))
         .with_exposed_port(27017);
-    let runnable = RunnableImage::from(image)
-        .with_container_name(shared::unique_container_name("mongodb"));
+    let runnable =
+        RunnableImage::from(image).with_container_name(shared::unique_container_name("mongodb"));
     let container = docker.run(runnable);
     let port = container.get_host_port_ipv4(27017);
     shared::wait_for_port("127.0.0.1", port, Duration::from_secs(60));

@@ -1529,7 +1529,11 @@ async fn test_postgres_multi_statement_execution() {
         qualified, qualified
     );
     let result = driver.execute_query(multi_sql).await;
-    assert!(result.is_ok(), "Multi-statement INSERT failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Multi-statement INSERT failed: {:?}",
+        result.err()
+    );
 
     // Verify both rows were inserted
     let select_res = driver

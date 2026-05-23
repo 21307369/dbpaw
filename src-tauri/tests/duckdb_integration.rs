@@ -943,14 +943,20 @@ async fn test_duckdb_multi_statement_execution() {
         .await;
 
     driver
-        .execute_query("CREATE TABLE multi_stmt_test (id INTEGER PRIMARY KEY, name VARCHAR)".to_string())
+        .execute_query(
+            "CREATE TABLE multi_stmt_test (id INTEGER PRIMARY KEY, name VARCHAR)".to_string(),
+        )
         .await
         .expect("create table failed");
 
     // Multi-statement: two INSERTs separated by semicolon
     let multi_sql = "INSERT INTO multi_stmt_test (id, name) VALUES (1, 'Alice'); INSERT INTO multi_stmt_test (id, name) VALUES (2, 'Bob')".to_string();
     let result = driver.execute_query(multi_sql).await;
-    assert!(result.is_ok(), "Multi-statement INSERT failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Multi-statement INSERT failed: {:?}",
+        result.err()
+    );
 
     // Verify both rows were inserted
     let select_res = driver

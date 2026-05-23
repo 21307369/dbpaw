@@ -177,7 +177,10 @@ pub fn normalize_connection_form(mut form: ConnectionForm) -> Result<ConnectionF
 
     let driver = form.driver.to_ascii_lowercase();
     form.driver = driver.clone();
-    if crate::db::drivers::is_mysql_family_driver(&driver) || driver == "elasticsearch" || driver == "mongodb" {
+    if crate::db::drivers::is_mysql_family_driver(&driver)
+        || driver == "elasticsearch"
+        || driver == "mongodb"
+    {
         if let Some(host) = form.host.clone() {
             let (normalized_host, normalized_port) = parse_host_embedded_port(&host, form.port);
             form.host = Some(normalized_host);

@@ -144,9 +144,10 @@ impl MongodbClient {
         if effective_form.ssl.unwrap_or(false) {
             let ssl_mode = trim_to_option(effective_form.ssl_mode.as_ref());
             if ssl_mode.as_deref() == Some("verify_ca") {
-                let ca_cert = trim_to_option(effective_form.ssl_ca_cert.as_ref()).ok_or_else(|| {
-                    "[VALIDATION_ERROR] sslCaCert cannot be empty in verify_ca mode".to_string()
-                })?;
+                let ca_cert =
+                    trim_to_option(effective_form.ssl_ca_cert.as_ref()).ok_or_else(|| {
+                        "[VALIDATION_ERROR] sslCaCert cannot be empty in verify_ca mode".to_string()
+                    })?;
                 let tls_options = TlsOptions::builder()
                     .ca_file_path(std::path::PathBuf::from(ca_cert))
                     .build();
@@ -156,26 +157,21 @@ impl MongodbClient {
 
         let client = Client::with_options(options).map_err(|e| normalize_mongo_error(e))?;
 
-        Ok(Self {
-            client,
-            ssh_tunnel,
-        })
+        Ok(Self { client, ssh_tunnel })
     }
 
     pub async fn test_connection(&self) -> Result<MongodbConnectionInfo, String> {
-        let db = self.client.default_database().unwrap_or_else(|| {
-            self.client.database("admin")
-        });
+        let db = self
+            .client
+            .default_database()
+            .unwrap_or_else(|| self.client.database("admin"));
 
         let result = db
             .run_command(doc! { "serverStatus": 1 })
             .await
             .map_err(|e| normalize_mongo_error(e))?;
 
-        let version = result
-            .get_str("version")
-            .ok()
-            .map(|s| s.to_string());
+        let version = result.get_str("version").ok().map(|s| s.to_string());
 
         let node_count = result
             .get_document("connections")

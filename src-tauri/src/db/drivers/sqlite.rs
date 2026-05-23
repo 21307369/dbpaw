@@ -394,8 +394,6 @@ fn pragma_table_info_sql(schema: &str, table: &str) -> String {
     )
 }
 
-
-
 #[async_trait]
 impl DatabaseDriver for SqliteDriver {
     async fn close(&self) {

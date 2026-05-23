@@ -8,8 +8,7 @@ use testcontainers::clients::Cli;
 #[ignore]
 async fn test_mongodb_connection_and_list_databases() {
     let docker = (!mongodb_context::should_reuse_local_db()).then(Cli::default);
-    let (_container, form) =
-        mongodb_context::mongodb_form_from_test_context(docker.as_ref());
+    let (_container, form) = mongodb_context::mongodb_form_from_test_context(docker.as_ref());
     let client = MongodbClient::connect(&form).await.expect("connect client");
 
     let info = client.test_connection().await.expect("test_connection");
@@ -35,8 +34,7 @@ async fn test_mongodb_connection_and_list_databases() {
 #[ignore]
 async fn test_mongodb_list_collections() {
     let docker = (!mongodb_context::should_reuse_local_db()).then(Cli::default);
-    let (_container, form) =
-        mongodb_context::mongodb_form_from_test_context(docker.as_ref());
+    let (_container, form) = mongodb_context::mongodb_form_from_test_context(docker.as_ref());
     let client = MongodbClient::connect(&form).await.expect("connect client");
 
     let collections = client

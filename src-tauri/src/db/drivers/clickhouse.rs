@@ -89,8 +89,6 @@ fn build_config(form: &ConnectionForm) -> Result<ClickHouseConfig, String> {
     })
 }
 
-
-
 fn quote_ident(ident: &str) -> String {
     format!("`{}`", ident.replace('`', "``"))
 }
@@ -983,12 +981,10 @@ impl DatabaseDriver for ClickHouseDriver {
 
             let result = if should_fetch_rows {
                 if has_format_clause(statement) && !is_json_format(statement) {
-                    self.execute_raw(statement, query_id)
-                        .await
-                        .map(|raw| {
-                            let qr = raw_text_to_query_result(raw.body, 0);
-                            (qr.columns, qr.data, qr.row_count)
-                        })
+                    self.execute_raw(statement, query_id).await.map(|raw| {
+                        let qr = raw_text_to_query_result(raw.body, 0);
+                        (qr.columns, qr.data, qr.row_count)
+                    })
                 } else {
                     let query_sql = ensure_json_format(statement);
                     self.execute_json(&query_sql, query_id).await.map(|resp| {

@@ -540,11 +540,18 @@ async fn test_clickhouse_multi_statement_execution() {
         qualified, qualified
     );
     let result = driver.execute_query(multi_sql).await;
-    assert!(result.is_ok(), "Multi-statement INSERT failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Multi-statement INSERT failed: {:?}",
+        result.err()
+    );
 
     // Verify both rows were inserted
     let select_res = driver
-        .execute_query(format!("SELECT * FROM {} ORDER BY id FORMAT JSON", qualified))
+        .execute_query(format!(
+            "SELECT * FROM {} ORDER BY id FORMAT JSON",
+            qualified
+        ))
         .await
         .expect("SELECT failed");
     assert_eq!(select_res.row_count, 2);

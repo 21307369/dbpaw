@@ -555,7 +555,11 @@ async fn test_mssql_multi_statement_execution() {
         qualified, qualified
     );
     let result = driver.execute_query(multi_sql).await;
-    assert!(result.is_ok(), "Multi-statement INSERT failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Multi-statement INSERT failed: {:?}",
+        result.err()
+    );
 
     // Verify both rows were inserted
     let select_res = driver
@@ -1334,10 +1338,7 @@ async fn test_mssql_column_type_length_comments_and_index_unique() {
         Some("Biography text"),
         "bio should have comment"
     );
-    assert!(
-        score_col.comment.is_none(),
-        "score should have no comment"
-    );
+    assert!(score_col.comment.is_none(), "score should have no comment");
 
     // --- Verify index unique flag ---
     let metadata = driver

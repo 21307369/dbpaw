@@ -35,8 +35,6 @@ fn escape_literal(value: &str) -> String {
     value.replace('\'', "''")
 }
 
-
-
 /// Convert a single Oracle column value (by index) into a `serde_json::Value`.
 ///
 /// Strategy: try integer → float → bytes → string → null. This cascade avoids
