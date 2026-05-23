@@ -1,21 +1,12 @@
-use font_kit::source::SystemSource;
+use fontique::Collection;
 
 #[tauri::command]
 pub async fn list_system_fonts() -> Result<Vec<String>, String> {
-    let source = SystemSource::new();
-    let fonts = source.all_fonts().map_err(|e| e.to_string())?;
-
-    let mut families: Vec<String> = Vec::new();
-
-    for font_handle in fonts {
-        if let Ok(font) = font_handle.load() {
-            let family = font.family_name();
-            if !family.is_empty() {
-                families.push(family);
-            }
-        }
-    }
-
+    let mut collection = Collection::default();
+    let mut families: Vec<String> = collection
+        .family_names()
+        .map(|s| s.to_string())
+        .collect();
     families.sort();
     families.dedup();
     Ok(families)
