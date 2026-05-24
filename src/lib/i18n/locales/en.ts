@@ -471,7 +471,9 @@ export const en = {
       deleting: "Deleting...",
     },
     toast: {
+      loadConnectionsFailed: "Failed to load connections",
       loadDatabasesFailed: "Failed to load databases",
+      loadQueriesFailed: "Failed to load saved queries",
       newQueryNoDatabase:
         "Cannot create query: no available database for this connection.",
       duplicateSuccess: "Connection duplicated successfully",
@@ -559,6 +561,10 @@ export const en = {
     error: {
       executingQuery: "Error executing query:",
       formatFailed: "Failed to format SQL",
+    },
+    save: {
+      success: "Query saved successfully",
+      failed: "Failed to save query",
     },
     untitled: "Untitled",
   },

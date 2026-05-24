@@ -476,7 +476,9 @@ export const ja: Translations = {
       deleting: "削除中...",
     },
     toast: {
+      loadConnectionsFailed: "接続リストの読み込みに失敗しました",
       loadDatabasesFailed: "データベースの読み込みに失敗しました",
+      loadQueriesFailed: "保存済みクエリの読み込みに失敗しました",
       newQueryNoDatabase:
         "クエリを作成できません: この接続で利用可能なデータベースがありません。",
       duplicateSuccess: "接続を複製しました",
@@ -575,6 +577,10 @@ export const ja: Translations = {
     error: {
       executingQuery: "クエリ実行エラー:",
       formatFailed: "SQL の整形に失敗しました",
+    },
+    save: {
+      success: "クエリを保存しました",
+      failed: "クエリの保存に失敗しました",
     },
     untitled: "無題",
   },

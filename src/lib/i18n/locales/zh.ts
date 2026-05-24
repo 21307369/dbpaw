@@ -456,7 +456,9 @@ export const zh: Translations = {
       deleting: "删除中...",
     },
     toast: {
+      loadConnectionsFailed: "加载连接列表失败",
       loadDatabasesFailed: "加载数据库失败",
+      loadQueriesFailed: "加载保存的查询失败",
       newQueryNoDatabase: "无法新建查询：当前连接没有可用数据库。",
       duplicateSuccess: "连接复制成功",
       duplicateFailed: "连接复制失败",
@@ -547,6 +549,10 @@ export const zh: Translations = {
     error: {
       executingQuery: "执行查询出错：",
       formatFailed: "格式化 SQL 失败",
+    },
+    save: {
+      success: "查询保存成功",
+      failed: "保存查询失败",
     },
     untitled: "未命名",
   },
