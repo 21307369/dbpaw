@@ -246,6 +246,13 @@ export function TableView({
     null,
   );
   const [isRowSelecting, setIsRowSelecting] = useState(false);
+  const [cellSelectionRange, setCellSelectionRange] = useState<{
+    anchor: { row: number; colIndex: number };
+    tip: { row: number; colIndex: number };
+  } | null>(null);
+  const [isCellSelecting, setIsCellSelecting] = useState(false);
+  const cellSelectionRangeRef = useRef(cellSelectionRange);
+  cellSelectionRangeRef.current = cellSelectionRange;
   const [editingCell, setEditingCell] = useState<{
     row: number;
     col: string;
@@ -567,12 +574,68 @@ export function TableView({
       setSelectedRows(nextSelectedRows);
       setRowSelectionAnchor(null);
       setIsRowSelecting(false);
+      setCellSelectionRange(null);
+      setIsCellSelecting(false);
       const nextSelectedCell = { row: rowIndex, col };
       selectedCellRef.current = nextSelectedCell;
       setSelectedCell(nextSelectedCell);
     },
     [editingCell],
   );
+
+  // --- Cell range selection (drag to select) ---
+  const isCellInRange = useCallback(
+    (rowIndex: number, colIndex: number) => {
+      const range = cellSelectionRange;
+      if (!range) return false;
+      const minRow = Math.min(range.anchor.row, range.tip.row);
+      const maxRow = Math.max(range.anchor.row, range.tip.row);
+      const minCol = Math.min(range.anchor.colIndex, range.tip.colIndex);
+      const maxCol = Math.max(range.anchor.colIndex, range.tip.colIndex);
+      return (
+        rowIndex >= minRow &&
+        rowIndex <= maxRow &&
+        colIndex >= minCol &&
+        colIndex <= maxCol
+      );
+    },
+    [cellSelectionRange],
+  );
+
+  const handleCellMouseDownForRange = useCallback(
+    (e: React.MouseEvent, rowIndex: number, colIndex: number) => {
+      if (e.button !== 0) return;
+      if (editingCell) return;
+      e.preventDefault();
+      setIsCellSelecting(true);
+      setCellSelectionRange({
+        anchor: { row: rowIndex, colIndex },
+        tip: { row: rowIndex, colIndex },
+      });
+      setSelectedCell({ row: rowIndex, col: columns[colIndex] });
+      selectedCellRef.current = { row: rowIndex, col: columns[colIndex] };
+      setSelectedRows(new Set());
+      selectedRowsRef.current = new Set();
+    },
+    [editingCell, columns],
+  );
+
+  const handleCellMouseMoveForRange = useCallback(
+    (rowIndex: number, colIndex: number) => {
+      if (!isCellSelecting) return;
+      setCellSelectionRange((prev) => {
+        if (!prev) return prev;
+        if (prev.tip.row === rowIndex && prev.tip.colIndex === colIndex)
+          return prev;
+        return { ...prev, tip: { row: rowIndex, colIndex } };
+      });
+    },
+    [isCellSelecting],
+  );
+
+  const handleCellMouseUpForRange = useCallback(() => {
+    setIsCellSelecting(false);
+  }, []);
 
   const handleCellDoubleClick = useCallback(
     (rowIndex: number, col: string, currentValue: any) => {
@@ -652,8 +715,12 @@ export function TableView({
     setSaveError(null);
   }, []);
 
-  const handleCopy = useCallback((text: string) => {
-    void navigator.clipboard.writeText(text).catch((error) => {
+  const handleCopy = useCallback((text: string, label?: string) => {
+    void navigator.clipboard.writeText(text).then(() => {
+      if (label) {
+        toast.success(label);
+      }
+    }).catch((error) => {
       toast.error("Failed to copy", {
         description: error instanceof Error ? error.message : String(error),
       });
@@ -1140,6 +1207,206 @@ export function TableView({
     return cellValueToString(value);
   }, [currentData, getCellDisplayValue]);
 
+  // --- Cell range copy & paste ---
+  const getNormalizedCellRange = useCallback(() => {
+    const range = cellSelectionRange;
+    if (!range) return null;
+    const minRow = Math.min(range.anchor.row, range.tip.row);
+    const maxRow = Math.max(range.anchor.row, range.tip.row);
+    const minCol = Math.min(range.anchor.colIndex, range.tip.colIndex);
+    const maxCol = Math.max(range.anchor.colIndex, range.tip.colIndex);
+    return { minRow, maxRow, minCol, maxCol };
+  }, [cellSelectionRange]);
+
+  const handleCopySelection = useCallback(() => {
+    const range = getNormalizedCellRange();
+    if (!range) {
+      const text = getSelectedCellCopyText();
+      if (text !== null) handleCopy(text, "Cell copied");
+      return;
+    }
+    const lines: string[] = [];
+    for (let r = range.minRow; r <= range.maxRow; r++) {
+      const row = currentData[r];
+      if (!row) continue;
+      const cells: string[] = [];
+      for (let c = range.minCol; c <= range.maxCol; c++) {
+        const col = columns[c];
+        const val = getCellDisplayValue(r, col, row[col]);
+        cells.push(
+          val === null || val === undefined ? "" : cellValueToString(val),
+        );
+      }
+      lines.push(cells.join("\t"));
+    }
+    const rowCount = range.maxRow - range.minRow + 1;
+    const colCount = range.maxCol - range.minCol + 1;
+    handleCopy(lines.join("\n"), `Copied ${rowCount}×${colCount} cells`);
+  }, [
+    getNormalizedCellRange,
+    currentData,
+    columns,
+    getCellDisplayValue,
+    handleCopy,
+    getSelectedCellCopyText,
+  ]);
+
+  const buildSelectionCSV = useCallback(() => {
+    const range = getNormalizedCellRange();
+    if (!range) return "";
+    const lines: string[] = [];
+    for (let r = range.minRow; r <= range.maxRow; r++) {
+      const row = currentData[r];
+      if (!row) continue;
+      const cells: string[] = [];
+      for (let c = range.minCol; c <= range.maxCol; c++) {
+        const col = columns[c];
+        const val = getCellDisplayValue(r, col, row[col]);
+        const str = val === null || val === undefined ? "" : cellValueToString(val);
+        if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+          cells.push(`"${str.replace(/"/g, '""')}"`);
+        } else {
+          cells.push(str);
+        }
+      }
+      lines.push(cells.join(","));
+    }
+    return lines.join("\n");
+  }, [getNormalizedCellRange, currentData, columns, getCellDisplayValue]);
+
+  const buildSelectionInsertSQL = useCallback(() => {
+    const range = getNormalizedCellRange();
+    if (!range || !tableContext) return "";
+    const { schema, table, driver } = tableContext;
+    const tableName = getQualifiedTableName(driver, schema, table);
+    const selectedCols: string[] = [];
+    for (let c = range.minCol; c <= range.maxCol; c++) {
+      selectedCols.push(columns[c]);
+    }
+    const colNames = selectedCols.map((c) => quoteIdent(driver, c)).join(", ");
+
+    const lines: string[] = [];
+    for (let r = range.minRow; r <= range.maxRow; r++) {
+      const row = currentData[r];
+      if (!row) continue;
+      const vals = selectedCols
+        .map((col) => {
+          const val = getCellDisplayValue(r, col, row[col]);
+          return formatSQLValue(
+            val === null || val === undefined ? "" : String(val),
+            row[col],
+            "copy",
+            driver,
+          );
+        })
+        .join(", ");
+      lines.push(`INSERT INTO ${tableName} (${colNames}) VALUES (${vals});`);
+    }
+    return lines.join("\n");
+  }, [getNormalizedCellRange, currentData, columns, getCellDisplayValue, tableContext]);
+
+  const buildSelectionUpdateSQL = useCallback(() => {
+    const range = getNormalizedCellRange();
+    if (!range || !tableContext || !canUpdateDelete || primaryKeys.length === 0) return "";
+    const { schema, table, driver } = tableContext;
+    const tableName = getQualifiedTableName(driver, schema, table);
+    const selectedCols: string[] = [];
+    for (let c = range.minCol; c <= range.maxCol; c++) {
+      selectedCols.push(columns[c]);
+    }
+
+    const lines: string[] = [];
+    for (let r = range.minRow; r <= range.maxRow; r++) {
+      const row = currentData[r];
+      if (!row) continue;
+
+      const setClauses = selectedCols.map((col) => {
+        const val = getCellDisplayValue(r, col, row[col]);
+        const formattedValue = formatSQLValue(
+          val === null || val === undefined ? "" : String(val),
+          row[col],
+          "copy",
+          driver,
+        );
+        return `${quoteIdent(driver, col)} = ${formattedValue}`;
+      });
+
+      const whereClauses = primaryKeys.map((pk) => {
+        const pkValue = row[pk];
+        if (pkValue === null || pkValue === undefined) {
+          return `${quoteIdent(driver, pk)} IS NULL`;
+        }
+        if (typeof pkValue === "number") {
+          return `${quoteIdent(driver, pk)} = ${pkValue}`;
+        }
+        return `${quoteIdent(driver, pk)} = '${escapeSQL(String(pkValue))}'`;
+      });
+
+      lines.push(
+        `${buildUpdateStatement(driver, tableName, setClauses.join(", "), whereClauses.join(" AND "))};`,
+      );
+    }
+    return lines.join("\n");
+  }, [getNormalizedCellRange, currentData, columns, getCellDisplayValue, canUpdateDelete, primaryKeys, tableContext]);
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      if (!isEditableForUpdates) return;
+      const text = e.clipboardData.getData("text/plain");
+      if (!text) return;
+      e.preventDefault();
+
+      const baseCell = selectedCellRef.current;
+      if (!baseCell) return;
+      const baseColIndex = columns.indexOf(baseCell.col);
+      if (baseColIndex < 0) return;
+
+      const rows = text.split("\n");
+      const newChanges = new Map<string, PendingChange>();
+
+      for (let dr = 0; dr < rows.length; dr++) {
+        const line = rows[dr];
+        if (line === "" && dr === rows.length - 1) break;
+        const cells = line.split("\t");
+        const targetRow = baseCell.row + dr;
+        if (targetRow >= currentData.length) break;
+        const originalRow = currentData[targetRow];
+        if (!originalRow) continue;
+        const sourceRowIndex = data.indexOf(originalRow);
+
+        for (let dc = 0; dc < cells.length; dc++) {
+          const targetColIdx = baseColIndex + dc;
+          if (targetColIdx >= columns.length) break;
+          const col = columns[targetColIdx];
+          const newValue = cells[dc];
+          const originalValue = originalRow[col];
+          const originalStr = cellValueToString(originalValue);
+
+          if (newValue !== originalStr) {
+            const key = `${targetRow}_${col}`;
+            newChanges.set(key, {
+              rowIndex: targetRow,
+              sourceRowIndex: sourceRowIndex >= 0 ? sourceRowIndex : targetRow,
+              column: col,
+              originalValue,
+              newValue,
+            });
+          }
+        }
+      }
+
+      if (newChanges.size > 0) {
+        setPendingChanges((prev) => {
+          const next = new Map(prev);
+          newChanges.forEach((v, k) => next.set(k, v));
+          return next;
+        });
+        toast.success(`Pasted ${newChanges.size} cell(s)`);
+      }
+    },
+    [isEditableForUpdates, columns, currentData, data],
+  );
+
   const buildRowsCSV = useCallback(
     (rowIndexes: number[]) => {
       const orderedRows = [...rowIndexes].sort((a, b) => a - b);
@@ -1499,6 +1766,12 @@ export function TableView({
           }
           return;
         }
+        const range = cellSelectionRangeRef.current;
+        if (range) {
+          e.preventDefault();
+          handleCopySelection();
+          return;
+        }
         const selectedCellText = getSelectedCellCopyText();
         if (selectedCellText !== null) {
           e.preventDefault();
@@ -1543,6 +1816,7 @@ export function TableView({
     buildRowsTSV,
     getSelectedCellCopyText,
     handleCopy,
+    handleCopySelection,
   ]);
 
   if (isLoading) {
@@ -1558,7 +1832,12 @@ export function TableView({
   }
 
   return (
-    <div ref={containerRef} className="h-full flex flex-col bg-background">
+    <div
+      ref={containerRef}
+      className="h-full flex flex-col bg-background"
+      onMouseUp={handleCellMouseUpForRange}
+      onPaste={isEditableForUpdates ? handlePaste : undefined}
+    >
       {!hideHeader && (
         <div className="flex flex-col gap-1.5 px-4 py-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-20">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2031,6 +2310,7 @@ export function TableView({
                     const selected =
                       selectedCell?.row === rowIndex &&
                       selectedCell?.col === column;
+                    const inRange = isCellInRange(rowIndex, colIndex);
                     const matched =
                       normalizedSearchKeyword.length > 0 &&
                       matchedCellKeys.has(`${rowIndex}::${column}`);
@@ -2043,6 +2323,9 @@ export function TableView({
                           selected && !editing
                             ? "bg-accent text-accent-foreground"
                             : "",
+                          inRange && !selected && !editing
+                            ? "bg-primary/10"
+                            : "",
                           matched && !editing
                             ? "bg-amber-100/60 dark:bg-amber-900/20"
                             : "",
@@ -2053,6 +2336,12 @@ export function TableView({
                         ]
                           .filter(Boolean)
                           .join(" ")}
+                        onMouseDown={(e) =>
+                          handleCellMouseDownForRange(e, rowIndex, colIndex)
+                        }
+                        onMouseEnter={() =>
+                          handleCellMouseMoveForRange(rowIndex, colIndex)
+                        }
                         onClick={() => handleCellClick(rowIndex, column)}
                         onDoubleClick={() =>
                           handleCellDoubleClick(rowIndex, column, row[column])
@@ -2257,6 +2546,7 @@ export function TableView({
                           );
                           const editing = isEditing(column);
                           const selected = isSelected(column);
+                          const inRange = isCellInRange(rowIndex, colIndex);
                           const matched =
                             normalizedSearchKeyword.length > 0 &&
                             matchedCellKeys.has(`${rowIndex}::${column}`);
@@ -2275,7 +2565,10 @@ export function TableView({
                                 selected && !editing
                                   ? "bg-accent text-accent-foreground"
                                   : "",
-                                isRowSelected && !selected && !editing
+                                inRange && !selected && !editing
+                                  ? "bg-primary/10"
+                                  : "",
+                                isRowSelected && !selected && !editing && !inRange
                                   ? "bg-accent/60"
                                   : "",
                                 matched && !editing
@@ -2295,6 +2588,12 @@ export function TableView({
                                 width: getColWidth(column),
                                 minWidth: 50,
                               }}
+                              onMouseDown={(e) =>
+                                handleCellMouseDownForRange(e, rowIndex, colIndex)
+                              }
+                              onMouseEnter={() =>
+                                handleCellMouseMoveForRange(rowIndex, colIndex)
+                              }
                               onClick={() => handleCellClick(rowIndex, column)}
                               onContextMenu={() => {
                                 if (
@@ -2379,109 +2678,142 @@ export function TableView({
                     <ContextMenuContent>
                       <ContextMenuItem
                         onClick={() => {
-                          if (selectedCell && selectedCell.row === rowIndex) {
-                            const text = getSelectedCellCopyText();
-                            if (text !== null) {
-                              handleCopy(text);
-                            }
-                          }
+                          handleCopySelection();
                         }}
                       >
                         <Copy className="w-4 h-4 mr-2" />
-                        Copy Cell
+                        {getNormalizedCellRange() ? "Copy Selection" : "Copy Cell"}
                       </ContextMenuItem>
-                      <ContextMenuItem
-                        onClick={() => {
-                          if (isMultiRowCopyTarget) {
-                            handleCopy(buildRowsTSV(copyTargetRows));
-                            return;
-                          }
-                          const values = columns
-                            .map((col) => {
-                              const val = getCellDisplayValue(
-                                rowIndex,
-                                col,
-                                row[col],
-                              );
-                              return val === null || val === undefined
-                                ? ""
-                                : String(val);
-                            })
-                            .join("\t");
-                          handleCopy(values);
-                        }}
-                      >
-                        <TableIcon className="w-4 h-4 mr-2" />
-                        {isMultiRowCopyTarget
-                          ? "Copy Selected Rows"
-                          : "Copy Row"}
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                      {canUpdateDelete &&
-                        isCellModified(rowIndex, selectedCell?.col || "") && (
-                          <>
+                      {getNormalizedCellRange() ? (
+                        <ContextMenuSub>
+                          <ContextMenuSubTrigger>
+                            <Files className="w-4 h-4 mr-2" />
+                            Copy Selection as
+                          </ContextMenuSubTrigger>
+                          <ContextMenuSubContent>
                             <ContextMenuItem
                               onClick={() => {
-                                if (
-                                  selectedCell &&
-                                  selectedCell.row === rowIndex
-                                ) {
-                                  const key = `${rowIndex}_${selectedCell.col}`;
-                                  setPendingChanges((prev) => {
-                                    const next = new Map(prev);
-                                    next.delete(key);
-                                    return next;
-                                  });
-                                }
+                                handleCopy(buildSelectionCSV(), "Selection copied as CSV");
                               }}
                             >
-                              <Undo2 className="w-4 h-4 mr-2" />
-                              Undo This Cell
+                              CSV
                             </ContextMenuItem>
-                            <ContextMenuSeparator />
-                          </>
-                        )}
-                      <ContextMenuSub>
-                        <ContextMenuSubTrigger>
-                          <Files className="w-4 h-4 mr-2" />
-                          Copy as
-                        </ContextMenuSubTrigger>
-                        <ContextMenuSubContent>
+                            {!!tableContext && (
+                              <ContextMenuItem
+                                onClick={() => {
+                                  handleCopy(buildSelectionInsertSQL(), "Selection copied as Insert SQL");
+                                }}
+                              >
+                                Insert SQL
+                              </ContextMenuItem>
+                            )}
+                            {canUpdateDelete && (
+                              <ContextMenuItem
+                                onClick={() => {
+                                  handleCopy(buildSelectionUpdateSQL(), "Selection copied as Update SQL");
+                                }}
+                              >
+                                Update SQL
+                              </ContextMenuItem>
+                            )}
+                          </ContextMenuSubContent>
+                        </ContextMenuSub>
+                      ) : (
+                        <>
                           <ContextMenuItem
                             onClick={() => {
-                              handleCopy(buildRowsCSV(copyTargetRows));
+                              if (isMultiRowCopyTarget) {
+                                handleCopy(buildRowsTSV(copyTargetRows), `Copied ${copyTargetRows.length} row(s)`);
+                                return;
+                              }
+                              const values = columns
+                                .map((col) => {
+                                  const val = getCellDisplayValue(
+                                    rowIndex,
+                                    col,
+                                    row[col],
+                                  );
+                                  return val === null || val === undefined
+                                    ? ""
+                                    : String(val);
+                                })
+                                .join("\t");
+                              handleCopy(values, "Row copied");
                             }}
                           >
+                            <TableIcon className="w-4 h-4 mr-2" />
                             {isMultiRowCopyTarget
-                              ? "Copy Selected as CSV"
-                              : "Copy as CSV"}
+                              ? "Copy Selected Rows"
+                              : "Copy Row"}
                           </ContextMenuItem>
-                          {!!tableContext && (
-                            <ContextMenuItem
-                              onClick={() => {
-                                const sql = buildRowsInsertSQL(copyTargetRows);
-                                handleCopy(sql);
-                              }}
-                            >
-                              {isMultiRowCopyTarget
-                                ? "Copy Selected as Insert SQL"
-                                : "Copy as Insert SQL"}
-                            </ContextMenuItem>
-                          )}
-                          {canUpdateDelete && (
-                            <ContextMenuItem
-                              onClick={() => {
-                                const sql = buildRowsUpdateSQL(copyTargetRows);
-                                handleCopy(sql);
-                              }}
-                            >
-                              {isMultiRowCopyTarget
-                                ? "Copy Selected as Update SQL"
-                                : "Copy as Update SQL"}
-                            </ContextMenuItem>
-                          )}
-                        </ContextMenuSubContent>
-                      </ContextMenuSub>
+                          <ContextMenuSeparator />
+                          {canUpdateDelete &&
+                            isCellModified(rowIndex, selectedCell?.col || "") && (
+                              <>
+                                <ContextMenuItem
+                                  onClick={() => {
+                                    if (
+                                      selectedCell &&
+                                      selectedCell.row === rowIndex
+                                    ) {
+                                      const key = `${rowIndex}_${selectedCell.col}`;
+                                      setPendingChanges((prev) => {
+                                        const next = new Map(prev);
+                                        next.delete(key);
+                                        return next;
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <Undo2 className="w-4 h-4 mr-2" />
+                                  Undo This Cell
+                                </ContextMenuItem>
+                                <ContextMenuSeparator />
+                              </>
+                            )}
+                          <ContextMenuSub>
+                            <ContextMenuSubTrigger>
+                              <Files className="w-4 h-4 mr-2" />
+                              Copy as
+                            </ContextMenuSubTrigger>
+                            <ContextMenuSubContent>
+                              <ContextMenuItem
+                                onClick={() => {
+                                  handleCopy(buildRowsCSV(copyTargetRows), isMultiRowCopyTarget ? "Copied as CSV" : "Row copied as CSV");
+                                }}
+                              >
+                                {isMultiRowCopyTarget
+                                  ? "Copy Selected as CSV"
+                                  : "Copy as CSV"}
+                              </ContextMenuItem>
+                              {!!tableContext && (
+                                <ContextMenuItem
+                                  onClick={() => {
+                                    const sql = buildRowsInsertSQL(copyTargetRows);
+                                    handleCopy(sql, isMultiRowCopyTarget ? "Copied as Insert SQL" : "Row copied as Insert SQL");
+                                  }}
+                                >
+                                  {isMultiRowCopyTarget
+                                    ? "Copy Selected as Insert SQL"
+                                    : "Copy as Insert SQL"}
+                                </ContextMenuItem>
+                              )}
+                              {canUpdateDelete && (
+                                <ContextMenuItem
+                                  onClick={() => {
+                                    const sql = buildRowsUpdateSQL(copyTargetRows);
+                                    handleCopy(sql, isMultiRowCopyTarget ? "Copied as Update SQL" : "Row copied as Update SQL");
+                                  }}
+                                >
+                                  {isMultiRowCopyTarget
+                                    ? "Copy Selected as Update SQL"
+                                    : "Copy as Update SQL"}
+                                </ContextMenuItem>
+                              )}
+                            </ContextMenuSubContent>
+                          </ContextMenuSub>
+                        </>
+                      )}
                     </ContextMenuContent>
                   </ContextMenu>
                 );
