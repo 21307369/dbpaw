@@ -1,5 +1,6 @@
 use self::clickhouse::ClickHouseDriver;
 use self::duckdb::DuckdbDriver;
+use self::mongodb::MongoDBDriver;
 use self::mssql::MssqlDriver;
 use self::mysql::MysqlDriver;
 use self::oracle::OracleDriver;
@@ -14,6 +15,7 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 
 pub mod clickhouse;
 pub mod duckdb;
+pub mod mongodb;
 pub mod mssql;
 pub mod mysql;
 pub mod oracle;
@@ -408,6 +410,10 @@ pub async fn connect(form: &ConnectionForm) -> Result<Box<dyn DatabaseDriver>, S
         }
         "oracle" => {
             let driver = OracleDriver::connect(form).await?;
+            Ok(Box::new(driver) as Box<dyn DatabaseDriver>)
+        }
+        "mongodb" => {
+            let driver = MongoDBDriver::connect(form).await?;
             Ok(Box::new(driver) as Box<dyn DatabaseDriver>)
         }
         _ => Err(format!(
