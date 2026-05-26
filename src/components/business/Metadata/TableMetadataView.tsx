@@ -135,6 +135,7 @@ export function TableMetadataView({
     return set;
   }, [metadata]);
   const clickhouseExtra = metadata?.clickhouseExtra ?? null;
+  const cassandraExtra = metadata?.cassandraExtra ?? null;
   const specialTypeSummaries = metadata?.specialTypeSummaries ?? [];
 
   const categoryLabel = (category: string) => {
@@ -369,6 +370,67 @@ export function TableMetadataView({
                   </div>
                 </div>
               )}
+            </div>
+          </>
+        )}
+        {cassandraExtra && (
+          <>
+            <div className="text-sm font-semibold">
+              {t("tableMetadata.cassandra.title")}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="border border-border rounded-md p-2">
+                <div className="text-xs text-muted-foreground">
+                  {t("tableMetadata.cassandra.partitionKey")}
+                </div>
+                <div className="font-mono text-sm break-words">
+                  {cassandraExtra.partitionKey.join(", ")}
+                </div>
+              </div>
+              {cassandraExtra.clusteringColumns.length > 0 && (
+                <div className="border border-border rounded-md p-2">
+                  <div className="text-xs text-muted-foreground">
+                    {t("tableMetadata.cassandra.clusteringColumn")}
+                  </div>
+                  <div className="font-mono text-sm break-words">
+                    {cassandraExtra.clusteringColumns.join(", ")}
+                  </div>
+                </div>
+              )}
+              <div className="border border-border rounded-md p-2">
+                <div className="text-xs text-muted-foreground">
+                  {t("tableMetadata.cassandra.compactionStrategy")}
+                </div>
+                <div className="font-mono text-sm break-words">
+                  {cassandraExtra.compactionStrategy}
+                </div>
+              </div>
+              <div className="border border-border rounded-md p-2">
+                <div className="text-xs text-muted-foreground">
+                  {t("tableMetadata.cassandra.bloomFilterFpChance")}
+                </div>
+                <div className="font-mono text-sm break-words">
+                  {cassandraExtra.bloomFilterFpChance}
+                </div>
+              </div>
+              <div className="border border-border rounded-md p-2">
+                <div className="text-xs text-muted-foreground">
+                  {t("tableMetadata.cassandra.gcGraceSeconds")}
+                </div>
+                <div className="font-mono text-sm break-words">
+                  {cassandraExtra.gcGraceSeconds}s
+                </div>
+              </div>
+              <div className="border border-border rounded-md p-2">
+                <div className="text-xs text-muted-foreground">
+                  {t("tableMetadata.cassandra.defaultTimeToLive")}
+                </div>
+                <div className="font-mono text-sm break-words">
+                  {cassandraExtra.defaultTimeToLive > 0
+                    ? `${cassandraExtra.defaultTimeToLive}s`
+                    : t("tableMetadata.common.no")}
+                </div>
+              </div>
             </div>
           </>
         )}

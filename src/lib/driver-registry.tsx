@@ -19,6 +19,7 @@ import { createSqlTreeConfig } from "./tree-adapters/sql-adapter.tsx";
 import { createRedisTreeConfig } from "./tree-adapters/redis-adapter.tsx";
 import { createElasticsearchTreeConfig } from "./tree-adapters/elasticsearch-adapter.tsx";
 import { createMongodbTreeConfig } from "./tree-adapters/mongodb-adapter.tsx";
+import { createCassandraTreeConfig } from "./tree-adapters/cassandra-adapter.tsx";
 
 export type ImportDriverCapability =
   | "supported"
@@ -308,7 +309,7 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     supportsRoutines: false,
     importCapability: "unsupported",
     icon: () => renderSimpleIcon(siApachecassandra),
-    treeConfig: createSqlTreeConfig(),
+    treeConfig: (callbacks) => createCassandraTreeConfig(callbacks),
   },
 ];
 

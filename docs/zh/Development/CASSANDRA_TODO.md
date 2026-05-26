@@ -4,9 +4,25 @@
 
 ---
 
+## 变更记录
+
+### 2026-05-26: 完成 P1 优先级修复
+
+**修改内容**:
+1. **`create_database_by_id` Cassandra 路由** — 已确认实现，位于 `connection.rs:363-370`
+2. **`TableMetadataView` cassandraExtra 渲染** — 新增 Cassandra 表元数据展示组件，显示分区键、聚类列、压缩策略等
+3. **Cassandra 树适配器** — 新建 `cassandra-adapter.tsx`，提供 Cassandra 专属右键菜单（Drop Keyspace、Copy CQL、Truncate Table）
+
+**涉及文件**:
+- `src/components/business/Metadata/TableMetadataView.tsx`
+- `src/lib/tree-adapters/cassandra-adapter.tsx`（新建）
+- `src/lib/driver-registry.tsx`
+
+---
+
 ## 严重（功能损坏）
 
-### [ ] 1. `create_database_by_id` 缺少 Cassandra 路由
+### [x] 1. `create_database_by_id` 缺少 Cassandra 路由
 
 **现象**: 前端 `driver-registry.tsx` 标记 `supportsCreateDatabase: true`，但后端 `commands/connection.rs` 的 `create_database_by_id` 没有 `"cassandra"` match arm，点击"创建数据库"会返回 `[UNSUPPORTED] Driver cassandra not supported`。
 
@@ -22,7 +38,7 @@
 
 ## 高优先级（UI 缺失）
 
-### [ ] 2. `TableMetadataView` 未渲染 `cassandraExtra`
+### [x] 2. `TableMetadataView` 未渲染 `cassandraExtra`
 
 **现象**: 后端 `get_table_metadata` 已返回 `cassandra_extra`（partition key、clustering columns、compaction strategy、bloom filter、gc_grace_seconds、default_time_to_live），前端 `TableMetadata` 接口也已定义 `CassandraTableExtra`，但 `TableMetadataView.tsx` 组件没有渲染它。
 
@@ -36,7 +52,7 @@
 
 ---
 
-### [ ] 3. 无自定义树适配器
+### [x] 3. 无自定义树适配器
 
 **现象**: Cassandra 复用 `createSqlTreeConfig()`，缺少 Cassandra 专属功能:
 - 右键菜单无 "Truncate Table"、"Drop Keyspace"、"Copy CQL"
