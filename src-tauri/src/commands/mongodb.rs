@@ -1,5 +1,5 @@
-use crate::datasources::mongodb::{
-    MongodbClient, MongodbCollectionInfo, MongodbConnectionInfo, MongodbDatabaseInfo,
+use crate::db::drivers::mongodb::{
+    MongodbCollectionInfo, MongodbConnectionInfo, MongodbDatabaseInfo, MongoDBDriver,
 };
 use crate::models::TestConnectionResult;
 use crate::state::AppState;
@@ -25,8 +25,8 @@ async fn connection_form(
     Ok(form)
 }
 
-async fn client_from_id(state: &State<'_, AppState>, id: i64) -> Result<MongodbClient, String> {
-    MongodbClient::connect(&connection_form(state, id).await?).await
+async fn driver_from_id(state: &State<'_, AppState>, id: i64) -> Result<MongoDBDriver, String> {
+    MongoDBDriver::connect(&connection_form(state, id).await?).await
 }
 
 #[tauri::command]
@@ -34,7 +34,7 @@ pub async fn mongodb_test_connection(
     state: State<'_, AppState>,
     id: i64,
 ) -> Result<MongodbConnectionInfo, String> {
-    client_from_id(&state, id).await?.test_connection().await
+    driver_from_id(&state, id).await?.test_connection_info().await
 }
 
 #[tauri::command]
@@ -42,8 +42,8 @@ pub async fn mongodb_test_connection_ephemeral(
     form: crate::models::ConnectionForm,
 ) -> Result<TestConnectionResult, String> {
     let started = Instant::now();
-    let client = MongodbClient::connect(&form).await?;
-    match client.test_connection().await {
+    let driver = MongoDBDriver::connect(&form).await?;
+    match driver.test_connection_info().await {
         Ok(info) => Ok(TestConnectionResult {
             success: true,
             message: format!(
@@ -61,7 +61,7 @@ pub async fn mongodb_list_databases(
     state: State<'_, AppState>,
     id: i64,
 ) -> Result<Vec<MongodbDatabaseInfo>, String> {
-    client_from_id(&state, id).await?.list_databases().await
+    driver_from_id(&state, id).await?.list_databases_info().await
 }
 
 #[tauri::command]
@@ -70,8 +70,8 @@ pub async fn mongodb_list_collections(
     id: i64,
     database: String,
 ) -> Result<Vec<MongodbCollectionInfo>, String> {
-    client_from_id(&state, id)
+    driver_from_id(&state, id)
         .await?
-        .list_collections(&database)
+        .list_collections_info(&database)
         .await
 }
