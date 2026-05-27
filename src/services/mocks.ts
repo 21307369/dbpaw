@@ -4,6 +4,7 @@ import {
   RedisCommandLog,
   TableMetadata,
   SchemaOverview,
+  SchemaForeignKey,
   ConnectionForm,
   TestConnectionResult,
   SavedQuery,
@@ -184,6 +185,36 @@ export const mockTableMetadata: TableMetadata = {
   ],
   specialTypeSummaries: [],
 };
+
+export const mockSchemaForeignKeys: SchemaForeignKey[] = [
+  {
+    name: "fk_user_role",
+    sourceTable: "users",
+    sourceColumn: "role_id",
+    targetTable: "roles",
+    targetColumn: "id",
+    onUpdate: "CASCADE",
+    onDelete: "SET NULL",
+  },
+  {
+    name: "fk_order_user",
+    sourceTable: "orders",
+    sourceColumn: "user_id",
+    targetTable: "users",
+    targetColumn: "id",
+    onUpdate: "NO ACTION",
+    onDelete: "CASCADE",
+  },
+  {
+    name: "fk_order_item_order",
+    sourceTable: "order_items",
+    sourceColumn: "order_id",
+    targetTable: "orders",
+    targetColumn: "id",
+    onUpdate: "NO ACTION",
+    onDelete: "CASCADE",
+  },
+];
 
 export const mockSchemaOverview: SchemaOverview = {
   tables: [
@@ -1121,6 +1152,14 @@ export async function mockGetTableMetadata(
   return mockTableMetadata;
 }
 
+export async function mockGetSchemaForeignKeys(
+  _id: number,
+  _database?: string,
+): Promise<SchemaForeignKey[]> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return mockSchemaForeignKeys;
+}
+
 /**
  * Mock list tables by connection info
  */
@@ -1685,6 +1724,9 @@ export async function invokeMock<T>(cmd: string, args?: any): Promise<T> {
         args.database,
         args.schema,
       ) as Promise<T>;
+
+    case "get_schema_foreign_keys":
+      return mockGetSchemaForeignKeys(args.id, args.database) as Promise<T>;
 
     // Table data commands
     case "get_table_data":

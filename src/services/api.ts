@@ -603,6 +603,18 @@ export interface TableMetadata {
   specialTypeSummaries: SpecialTypeSummary[];
 }
 
+export interface SchemaForeignKey {
+  name: string;
+  sourceTable: string;
+  sourceSchema?: string | null;
+  sourceColumn: string;
+  targetTable: string;
+  targetSchema?: string | null;
+  targetColumn: string;
+  onUpdate?: string | null;
+  onDelete?: string | null;
+}
+
 export type RoutineType = "procedure" | "function";
 
 export interface RoutineInfo {
@@ -862,6 +874,8 @@ export const api = {
       invoke<string[]>("list_databases_by_id", { id }),
     getSchemaOverview: (id: number, database?: string, schema?: string) =>
       invoke<SchemaOverview>("get_schema_overview", { id, database, schema }),
+    getSchemaForeignKeys: (id: number, database?: string) =>
+      invoke<SchemaForeignKey[]>("get_schema_foreign_keys", { id, database }),
   },
   tableData: {
     get: (params: {
