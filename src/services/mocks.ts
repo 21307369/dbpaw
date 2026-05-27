@@ -1155,6 +1155,7 @@ export async function mockGetTableMetadata(
 export async function mockGetSchemaForeignKeys(
   _id: number,
   _database?: string,
+  _schema?: string,
 ): Promise<SchemaForeignKey[]> {
   await new Promise((resolve) => setTimeout(resolve, 50));
   return mockSchemaForeignKeys;
@@ -1726,7 +1727,7 @@ export async function invokeMock<T>(cmd: string, args?: any): Promise<T> {
       ) as Promise<T>;
 
     case "get_schema_foreign_keys":
-      return mockGetSchemaForeignKeys(args.id, args.database) as Promise<T>;
+      return mockGetSchemaForeignKeys(args.id, args.database, args.schema) as Promise<T>;
 
     // Table data commands
     case "get_table_data":

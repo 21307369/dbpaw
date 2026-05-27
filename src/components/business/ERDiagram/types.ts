@@ -7,7 +7,6 @@ export interface ERDiagramTableNode {
   columns: {
     name: string;
     type: string;
-    isPrimaryKey: boolean;
     isForeignKey: boolean;
   }[];
 }
@@ -45,25 +44,26 @@ export function buildDiagramData(
     schemaByTable.set(table.name, table.schema);
   }
 
-  const nodes: ERDiagramTableNode[] = overview.tables.map((table) => ({
-    id: `${table.schema}.${table.name}`,
-    schema: table.schema,
-    name: table.name,
-    columns: table.columns
-      .filter((col) => {
-        const key = `${table.name}.${col.name}`;
-        return fkSourceSet.has(key) || fkTargetSet.has(key);
-      })
-      .map((col) => ({
-        name: col.name,
-        type: col.type,
-        isPrimaryKey: false,
-        isForeignKey: fkSourceSet.has(`${table.name}.${col.name}`),
-      })),
-  }));
+  const nodes: ERDiagramTableNode[] = overview.tables
+    .map((table) => ({
+      id: `${table.schema}.${table.name}`,
+      schema: table.schema,
+      name: table.name,
+      columns: table.columns
+        .filter((col) => {
+          const key = `${table.name}.${col.name}`;
+          return fkSourceSet.has(key) || fkTargetSet.has(key);
+        })
+        .map((col) => ({
+          name: col.name,
+          type: col.type,
+          isForeignKey: fkSourceSet.has(`${table.name}.${col.name}`),
+        })),
+    }))
+    .filter((node) => node.columns.length > 0);
 
   const edges: ERDiagramEdge[] = foreignKeys.map((fk) => ({
-    id: `${fk.sourceTable}.${fk.sourceColumn}-${fk.targetTable}.${fk.targetColumn}`,
+    id: `${fk.name}-${fk.sourceTable}.${fk.sourceColumn}-${fk.targetTable}.${fk.targetColumn}`,
     source: `${fk.sourceSchema || schemaByTable.get(fk.sourceTable) || "public"}.${fk.sourceTable}`,
     target: `${fk.targetSchema || schemaByTable.get(fk.targetTable) || "public"}.${fk.targetTable}`,
     sourceColumn: fk.sourceColumn,

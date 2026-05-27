@@ -874,8 +874,8 @@ export const api = {
       invoke<string[]>("list_databases_by_id", { id }),
     getSchemaOverview: (id: number, database?: string, schema?: string) =>
       invoke<SchemaOverview>("get_schema_overview", { id, database, schema }),
-    getSchemaForeignKeys: (id: number, database?: string) =>
-      invoke<SchemaForeignKey[]>("get_schema_foreign_keys", { id, database }),
+    getSchemaForeignKeys: (id: number, database?: string, schema?: string) =>
+      invoke<SchemaForeignKey[]>("get_schema_foreign_keys", { id, database, schema }),
   },
   tableData: {
     get: (params: {

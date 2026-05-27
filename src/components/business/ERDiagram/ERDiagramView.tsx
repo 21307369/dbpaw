@@ -30,7 +30,7 @@ export default function ERDiagramView({
 
         const [overview, foreignKeys] = await Promise.all([
           api.metadata.getSchemaOverview(connectionId, database, schema),
-          api.metadata.getSchemaForeignKeys(connectionId, database),
+          api.metadata.getSchemaForeignKeys(connectionId, database, schema),
         ]);
 
         if (cancelled) return;

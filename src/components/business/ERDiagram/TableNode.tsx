@@ -4,7 +4,6 @@ import { Handle, Position } from "@xyflow/react";
 interface ColumnData {
   name: string;
   type: string;
-  isPrimaryKey: boolean;
   isForeignKey: boolean;
 }
 
@@ -29,17 +28,12 @@ function TableNode({ data }: { data: TableNodeData }) {
             key={col.name}
             className="flex items-center gap-1.5 py-0.5 text-xs"
           >
-            {col.isPrimaryKey && (
-              <span className="inline-block w-4 text-center text-[10px] font-bold text-yellow-500 bg-yellow-500/10 rounded px-0.5">
-                PK
-              </span>
-            )}
-            {col.isForeignKey && !col.isPrimaryKey && (
+            {col.isForeignKey && (
               <span className="inline-block w-4 text-center text-[10px] font-bold text-blue-500 bg-blue-500/10 rounded px-0.5">
                 FK
               </span>
             )}
-            {!col.isPrimaryKey && !col.isForeignKey && (
+            {!col.isForeignKey && (
               <span className="inline-block w-4" />
             )}
             <span className="text-foreground truncate max-w-[100px]">
