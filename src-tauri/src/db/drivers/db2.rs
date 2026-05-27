@@ -22,10 +22,18 @@ struct Db2Config {
     password: String,
 }
 
+fn odbc_escape_value(v: &str) -> String {
+    if v.contains(';') || v.contains('{') || v.contains('}') || v.contains('[') {
+        format!("{{{}}}", v.replace('}', "}}"))
+    } else {
+        v.to_string()
+    }
+}
+
 fn build_connection_string(cfg: &Db2Config) -> String {
     format!(
         "DRIVER={{IBM DB2 ODBC DRIVER}};DATABASE={};HOSTNAME={};PORT={};PROTOCOL=TCPIP;UID={};PWD={};",
-        cfg.database, cfg.host, cfg.port, cfg.username, cfg.password
+        cfg.database, cfg.host, cfg.port, odbc_escape_value(&cfg.username), odbc_escape_value(&cfg.password)
     )
 }
 
@@ -162,9 +170,9 @@ impl DatabaseDriver for Db2Driver {
         self.run_blocking(|conn| {
             let cursor = conn
                 .execute("SELECT 1 FROM SYSIBM.SYSDUMMY1", ())
-                .map_err(|e| format!("[CONN_FAILED] {e}"))?;
+                .map_err(|e| conn_failed_error(&e))?;
             if cursor.is_none() {
-                return Err("[CONN_FAILED] Empty response from SYSIBM.SYSDUMMY1".to_string());
+                return Err(conn_failed_error(&"Empty response from SYSIBM.SYSDUMMY1".to_string()));
             }
             Ok(())
         })
@@ -436,7 +444,7 @@ impl DatabaseDriver for Db2Driver {
                      i.INDEXTYPE, ic.COLNAME, ic.COLSEQ \
                      FROM SYSCAT.INDEXES i \
                      JOIN SYSCAT.INDEXCOLUSE ic \
-                       ON ic.INDNAME = i.INDNAME AND IC.INDSCHEMA = i.INDSCHEMA \
+                       ON ic.INDNAME = i.INDNAME AND ic.INDSCHEMA = i.INDSCHEMA \
                      WHERE i.TABSCHEMA = '{}' AND i.TABNAME = '{}' \
                      ORDER BY i.INDNAME, ic.COLSEQ",
                     escape_literal(&schema),
@@ -553,6 +561,8 @@ impl DatabaseDriver for Db2Driver {
         })
     }
 
+    // Db2 has no native GET_DDL; this generates minimal DDL (no indexes,
+    // foreign keys, comments, or tablespaces).
     async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
         let structure = self
             .get_table_structure(schema.clone(), table.clone())
@@ -791,6 +801,7 @@ impl DatabaseDriver for Db2Driver {
                         prepared
                             .execute(())
                             .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                        conn.commit().map_err(|e| format!("[QUERY_ERROR] commit failed: {e}"))?;
                         let row_count = prepared.row_count().map_err(|e| format!("[QUERY_ERROR] {e}")).ok().flatten().unwrap_or(0) as i64;
                         Ok(QueryResult {
                             row_count,
@@ -876,6 +887,7 @@ impl DatabaseDriver for Db2Driver {
                     prepared
                         .execute(())
                         .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                    conn.commit().map_err(|e| format!("[QUERY_ERROR] commit failed: {e}"))?;
                     let row_count = prepared.row_count().map_err(|e| format!("[QUERY_ERROR] {e}")).ok().flatten().unwrap_or(0) as i64;
                     Ok((Vec::new(), Vec::new(), row_count))
                 };
@@ -1066,7 +1078,7 @@ fn format_db2_type(type_name: &str, length: i64, scale: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{escape_literal, format_db2_type, quote_ident};
+    use super::{escape_literal, format_db2_type, odbc_escape_value, quote_ident};
 
     #[test]
     fn quote_ident_wraps_in_double_quotes() {
@@ -1101,6 +1113,21 @@ mod tests {
     #[test]
     fn format_db2_type_timestamp() {
         assert_eq!(format_db2_type("TIMESTAMP", 0, 0), "TIMESTAMP");
+    }
+
+    #[test]
+    fn odbc_escape_value_plain() {
+        assert_eq!(odbc_escape_value("myuser"), "myuser");
+    }
+
+    #[test]
+    fn odbc_escape_value_with_semicolon() {
+        assert_eq!(odbc_escape_value("p@ss;word"), "{p@ss;word}");
+    }
+
+    #[test]
+    fn odbc_escape_value_with_braces() {
+        assert_eq!(odbc_escape_value("a{b}c"), "{a{b}}c}");
     }
 
     #[test]
