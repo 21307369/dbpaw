@@ -1,8 +1,8 @@
 use super::DatabaseDriver;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata, TableSchema,
-    TableStructure,
+    SchemaForeignKey, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata,
+    TableSchema, TableStructure,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, Utc};
@@ -396,6 +396,57 @@ fn pragma_table_info_sql(schema: &str, table: &str) -> String {
 
 #[async_trait]
 impl DatabaseDriver for SqliteDriver {
+    async fn get_schema_foreign_keys(
+        &self,
+        _database: Option<&str>,
+    ) -> Result<Vec<SchemaForeignKey>, String> {
+        let tables: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+
+        let mut foreign_keys = Vec::new();
+        for table in tables {
+            let rows = sqlx::query(&format!(
+                "PRAGMA foreign_key_list('{}')",
+                table.replace('\'', "''")
+            ))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+
+            for row in rows {
+                let target_table: String = row.try_get(2).unwrap_or_default();
+                let source_column: String = row.try_get(3).unwrap_or_default();
+                let target_column: String = row.try_get(4).unwrap_or_default();
+                let on_update: String = row.try_get(5).unwrap_or_default();
+                let on_delete: String = row.try_get(6).unwrap_or_default();
+                foreign_keys.push(SchemaForeignKey {
+                    name: format!("fk_{}_{}", table, source_column),
+                    source_schema: None,
+                    source_table: table.clone(),
+                    source_column,
+                    target_schema: None,
+                    target_table,
+                    target_column,
+                    on_update: if on_update.is_empty() {
+                        None
+                    } else {
+                        Some(on_update)
+                    },
+                    on_delete: if on_delete.is_empty() {
+                        None
+                    } else {
+                        Some(on_delete)
+                    },
+                });
+            }
+        }
+        Ok(foreign_keys)
+    }
+
     async fn close(&self) {
         self.pool.close().await;
     }

@@ -1,8 +1,8 @@
 use super::{conn_failed_error, DatabaseDriver};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata, TableSchema,
-    TableStructure,
+    SchemaForeignKey, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata,
+    TableSchema, TableStructure,
 };
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -157,6 +157,64 @@ impl OracleDriver {
 
 #[async_trait]
 impl DatabaseDriver for OracleDriver {
+    async fn get_schema_foreign_keys(
+        &self,
+        _database: Option<&str>,
+    ) -> Result<Vec<SchemaForeignKey>, String> {
+        self.run_blocking(move |conn| {
+            let sql = "SELECT c.CONSTRAINT_NAME, \
+                            cc.TABLE_NAME, \
+                            cc.COLUMN_NAME, \
+                            rc.TABLE_NAME AS REF_TABLE, \
+                            rcc.COLUMN_NAME AS REF_COLUMN, \
+                            c.DELETE_RULE \
+                     FROM ALL_CONSTRAINTS c \
+                     JOIN ALL_CONS_COLUMNS cc \
+                       ON cc.CONSTRAINT_NAME = c.CONSTRAINT_NAME \
+                      AND cc.OWNER = c.OWNER \
+                     JOIN ALL_CONSTRAINTS rc \
+                       ON rc.CONSTRAINT_NAME = c.R_CONSTRAINT_NAME \
+                      AND rc.OWNER = c.R_OWNER \
+                     JOIN ALL_CONS_COLUMNS rcc \
+                       ON rcc.CONSTRAINT_NAME = rc.CONSTRAINT_NAME \
+                      AND rcc.OWNER = rc.OWNER \
+                      AND rcc.POSITION = cc.POSITION \
+                     WHERE c.CONSTRAINT_TYPE = 'R' \
+                     ORDER BY c.CONSTRAINT_NAME, cc.POSITION";
+            let rows = conn
+                .query(sql, &[] as &[&dyn oracle::sql_type::ToSql])
+                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+
+            let mut foreign_keys = Vec::new();
+            for row_result in rows {
+                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let fk_name: Option<String> = row.get(0).ok().flatten();
+                let src_table: Option<String> = row.get(1).ok().flatten();
+                let src_col: Option<String> = row.get(2).ok().flatten();
+                let tgt_table: Option<String> = row.get(3).ok().flatten();
+                let tgt_col: Option<String> = row.get(4).ok().flatten();
+                let delete_rule: Option<String> = row.get(5).ok().flatten();
+                if let (Some(name), Some(src_table), Some(src_col), Some(tgt_table), Some(tgt_col)) =
+                    (fk_name, src_table, src_col, tgt_table, tgt_col)
+                {
+                    foreign_keys.push(SchemaForeignKey {
+                        name,
+                        source_schema: None,
+                        source_table: src_table,
+                        source_column: src_col,
+                        target_schema: None,
+                        target_table: tgt_table,
+                        target_column: tgt_col,
+                        on_update: None,
+                        on_delete: delete_rule,
+                    });
+                }
+            }
+            Ok(foreign_keys)
+        })
+        .await
+    }
+
     async fn close(&self) {
         // No persistent connection to close.
     }

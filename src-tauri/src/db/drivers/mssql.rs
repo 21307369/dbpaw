@@ -1,8 +1,8 @@
 use super::DatabaseDriver;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    RoutineInfo, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata,
-    TableSchema, TableStructure,
+    RoutineInfo, SchemaForeignKey, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo,
+    TableMetadata, TableSchema, TableStructure,
 };
 use async_trait::async_trait;
 use bb8::{Pool, RunError};
@@ -1641,6 +1641,42 @@ fn quote_ident_or(name: &str) -> String {
 
 #[async_trait]
 impl DatabaseDriver for MssqlDriver {
+    async fn get_schema_foreign_keys(
+        &self,
+        _database: Option<&str>,
+    ) -> Result<Vec<SchemaForeignKey>, String> {
+        let sql = "SELECT fk.name, ss.name, ts.name, cp.name, rs.name, tr.name, cr.name, \
+                    fk.update_referential_action_desc, fk.delete_referential_action_desc \
+             FROM sys.foreign_keys fk \
+             JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id \
+             JOIN sys.tables ts ON fkc.parent_object_id = ts.object_id \
+             JOIN sys.schemas ss ON ts.schema_id = ss.schema_id \
+             JOIN sys.columns cp ON fkc.parent_object_id = cp.object_id AND fkc.parent_column_id = cp.column_id \
+             JOIN sys.tables tr ON fkc.referenced_object_id = tr.object_id \
+             JOIN sys.schemas rs ON tr.schema_id = rs.schema_id \
+             JOIN sys.columns cr ON fkc.referenced_object_id = cr.object_id AND fkc.referenced_column_id = cr.column_id \
+             ORDER BY fk.name, fkc.constraint_column_id";
+        let rows = self.fetch_rows(sql).await?;
+
+        let mut foreign_keys = Vec::new();
+        for row in rows {
+            let source_schema = Self::parse_string(&row, 1);
+            let target_schema = Self::parse_string(&row, 4);
+            foreign_keys.push(SchemaForeignKey {
+                name: Self::parse_string(&row, 0),
+                source_schema: Some(source_schema),
+                source_table: Self::parse_string(&row, 2),
+                source_column: Self::parse_string(&row, 3),
+                target_schema: Some(target_schema),
+                target_table: Self::parse_string(&row, 5),
+                target_column: Self::parse_string(&row, 6),
+                on_update: Some(Self::parse_string(&row, 7)),
+                on_delete: Some(Self::parse_string(&row, 8)),
+            });
+        }
+        Ok(foreign_keys)
+    }
+
     async fn close(&self) {}
 
     async fn test_connection(&self) -> Result<(), String> {

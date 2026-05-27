@@ -1,8 +1,8 @@
 use super::{strip_trailing_statement_terminator, DatabaseDriver};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    RoutineInfo, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata,
-    TableSchema, TableStructure,
+    RoutineInfo, SchemaForeignKey, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo,
+    TableMetadata, TableSchema, TableStructure,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
@@ -1105,6 +1105,72 @@ fn collect_high_precision_query_columns(columns: &[QueryColumn]) -> HashSet<Stri
 
 #[async_trait]
 impl DatabaseDriver for PostgresDriver {
+    async fn get_schema_foreign_keys(
+        &self,
+        _database: Option<&str>,
+    ) -> Result<Vec<SchemaForeignKey>, String> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+              con.conname AS constraint_name,
+              n.nspname AS source_schema,
+              c.relname AS source_table,
+              a.attname AS source_column,
+              fn.nspname AS target_schema,
+              fc.relname AS target_table,
+              fa.attname AS target_column,
+              CASE con.confupdtype::text
+                WHEN 'a' THEN 'NO ACTION'
+                WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'
+                WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT'
+                ELSE NULL
+              END AS on_update,
+              CASE con.confdeltype::text
+                WHEN 'a' THEN 'NO ACTION'
+                WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'
+                WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT'
+                ELSE NULL
+              END AS on_delete
+            FROM pg_constraint con
+            JOIN pg_class c ON c.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_class fc ON fc.oid = con.confrelid
+            JOIN pg_namespace fn ON fn.oid = fc.relnamespace
+            JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS ck(attnum, ord) ON true
+            JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS fk(attnum, ord) ON fk.ord = ck.ord
+            JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ck.attnum
+            JOIN pg_attribute fa ON fa.attrelid = fc.oid AND fa.attnum = fk.attnum
+            WHERE con.contype = 'f'
+            ORDER BY con.conname, ck.ord
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+
+        let mut foreign_keys = Vec::new();
+        for row in rows {
+            let source_schema: String = row.try_get(1).unwrap_or_default();
+            let target_schema: String = row.try_get(4).unwrap_or_default();
+            foreign_keys.push(SchemaForeignKey {
+                name: row.try_get(0).unwrap_or_default(),
+                source_schema: if source_schema.is_empty() { None } else { Some(source_schema) },
+                source_table: row.try_get(2).unwrap_or_default(),
+                source_column: row.try_get(3).unwrap_or_default(),
+                target_schema: if target_schema.is_empty() { None } else { Some(target_schema) },
+                target_table: row.try_get(5).unwrap_or_default(),
+                target_column: row.try_get(6).unwrap_or_default(),
+                on_update: row.try_get::<Option<String>, _>(7).unwrap_or(None),
+                on_delete: row.try_get::<Option<String>, _>(8).unwrap_or(None),
+            });
+        }
+        Ok(foreign_keys)
+    }
+
     async fn close(&self) {
         self.pool.close().await;
         self.cleanup_ca_file();

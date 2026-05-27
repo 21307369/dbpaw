@@ -1,8 +1,8 @@
 use super::{strip_trailing_statement_terminator, DatabaseDriver};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    RoutineInfo, SchemaOverview, SingleResultSet, SpecialTypeSummary, TableDataResponse, TableInfo,
-    TableMetadata, TableSchema, TableStructure,
+    RoutineInfo, SchemaForeignKey, SchemaOverview, SingleResultSet, SpecialTypeSummary,
+    TableDataResponse, TableInfo, TableMetadata, TableSchema, TableStructure,
 };
 use async_trait::async_trait;
 use sqlx::{
@@ -1044,6 +1044,53 @@ impl MysqlDriver {
 
 #[async_trait]
 impl DatabaseDriver for MysqlDriver {
+    async fn get_schema_foreign_keys(
+        &self,
+        _database: Option<&str>,
+    ) -> Result<Vec<SchemaForeignKey>, String> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+              kcu.CONSTRAINT_NAME,
+              kcu.TABLE_SCHEMA,
+              kcu.TABLE_NAME,
+              kcu.COLUMN_NAME,
+              kcu.REFERENCED_TABLE_SCHEMA,
+              kcu.REFERENCED_TABLE_NAME,
+              kcu.REFERENCED_COLUMN_NAME,
+              rc.UPDATE_RULE,
+              rc.DELETE_RULE
+            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+            JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+              ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+              AND kcu.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
+            WHERE kcu.REFERENCED_TABLE_NAME IS NOT NULL
+            ORDER BY kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+
+        let mut foreign_keys = Vec::new();
+        for row in rows {
+            let source_schema: String = row.try_get(1).unwrap_or_default();
+            let target_schema: String = row.try_get(4).unwrap_or_default();
+            foreign_keys.push(SchemaForeignKey {
+                name: row.try_get(0).unwrap_or_default(),
+                source_schema: Some(source_schema),
+                source_table: row.try_get(2).unwrap_or_default(),
+                source_column: row.try_get(3).unwrap_or_default(),
+                target_schema: Some(target_schema),
+                target_table: row.try_get(5).unwrap_or_default(),
+                target_column: row.try_get(6).unwrap_or_default(),
+                on_update: row.try_get(7).unwrap_or(None),
+                on_delete: row.try_get(8).unwrap_or(None),
+            });
+        }
+        Ok(foreign_keys)
+    }
+
     async fn close(&self) {
         self.pool.close().await;
         self.cleanup_ca_file();
