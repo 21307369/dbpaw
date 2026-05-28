@@ -1273,9 +1273,11 @@ impl ElasticsearchClient {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_api_key, build_base_url, build_bulk_action_line, build_reqwest_client,
-        clamp_bulk_batch_size, clamp_search_size, normalize_error, parse_bulk_action_line,
-        parse_search_response, validate_index_name, validate_raw_path, BulkActionKind,
+        build_api_key, build_auth, build_base_url, build_bulk_action_line, build_reqwest_client,
+        build_search_body, clamp_bulk_batch_size, clamp_search_size, normalize_error,
+        parse_bulk_action_line, parse_docs_count, parse_search_response, set_search_pagination,
+        validate_file_path, validate_index_name, validate_raw_path, BulkActionKind,
+        ElasticsearchAuth,
     };
     use crate::models::ConnectionForm;
     use base64::{engine::general_purpose, Engine as _};
@@ -1469,5 +1471,155 @@ mod tests {
             response.aggregations.unwrap()["by_category"]["buckets"][0]["key"],
             "books"
         );
+    }
+
+    #[test]
+    fn build_auth_auto_mode_no_credentials_returns_none() {
+        let form = ConnectionForm { driver: "elasticsearch".to_string(), ..Default::default() };
+        assert!(matches!(build_auth(&form).unwrap(), ElasticsearchAuth::None));
+    }
+
+    #[test]
+    fn build_auth_auto_mode_detects_basic_from_username() {
+        let form = ConnectionForm {
+            driver: "elasticsearch".to_string(),
+            username: Some("user".to_string()),
+            password: Some("pass".to_string()),
+            ..Default::default()
+        };
+        match build_auth(&form).unwrap() {
+            ElasticsearchAuth::Basic { username, password } => {
+                assert_eq!(username, "user");
+                assert_eq!(password.as_deref(), Some("pass"));
+            }
+            _ => panic!("expected Basic auth"),
+        }
+    }
+
+    #[test]
+    fn build_auth_auto_mode_detects_api_key() {
+        let form = ConnectionForm {
+            driver: "elasticsearch".to_string(),
+            api_key_encoded: Some("mykey".to_string()),
+            ..Default::default()
+        };
+        match build_auth(&form).unwrap() {
+            ElasticsearchAuth::ApiKey(key) => assert_eq!(key, "mykey"),
+            _ => panic!("expected ApiKey auth"),
+        }
+    }
+
+    #[test]
+    fn build_auth_unsupported_mode_returns_error() {
+        let form = ConnectionForm {
+            driver: "elasticsearch".to_string(),
+            auth_mode: Some("oauth".to_string()),
+            ..Default::default()
+        };
+        assert!(build_auth(&form).is_err());
+    }
+
+    #[test]
+    fn validate_file_path_rejects_empty() {
+        assert!(validate_file_path("", "export").is_err());
+        assert!(validate_file_path("   ", "export").is_err());
+    }
+
+    #[test]
+    fn validate_file_path_accepts_valid_path() {
+        let result = validate_file_path("/tmp/test.ndjson", "export").unwrap();
+        assert_eq!(result, std::path::PathBuf::from("/tmp/test.ndjson"));
+    }
+
+    #[test]
+    fn build_search_body_dsl_takes_priority() {
+        let result = build_search_body(
+            Some("ignored".to_string()),
+            Some(r#"{"match":{"title":"hello"}}"#.to_string()),
+        ).unwrap();
+        assert_eq!(result["match"]["title"], "hello");
+    }
+
+    #[test]
+    fn build_search_body_query_string_fallback() {
+        let result = build_search_body(Some("status:ok".to_string()), None).unwrap();
+        assert_eq!(result["query"]["query_string"]["query"], "status:ok");
+    }
+
+    #[test]
+    fn build_search_body_match_all_default() {
+        let result = build_search_body(None, None).unwrap();
+        assert!(result["query"]["match_all"].is_object());
+    }
+
+    #[test]
+    fn build_search_body_invalid_dsl_returns_error() {
+        assert!(build_search_body(None, Some("not json".to_string())).is_err());
+    }
+
+    #[test]
+    fn set_search_pagination_sets_from_and_size() {
+        let mut body = serde_json::json!({"query": {"match_all": {}}});
+        set_search_pagination(&mut body, Some(10), 50).unwrap();
+        assert_eq!(body["from"], 10);
+        assert_eq!(body["size"], 50);
+    }
+
+    #[test]
+    fn set_search_pagination_removes_from_when_none() {
+        let mut body = serde_json::json!({"query": {"match_all": {}}, "from": 10});
+        set_search_pagination(&mut body, None, 50).unwrap();
+        assert!(body.get("from").is_none());
+        assert_eq!(body["size"], 50);
+    }
+
+    #[test]
+    fn set_search_pagination_rejects_non_object() {
+        let mut body = serde_json::json!([1, 2, 3]);
+        assert!(set_search_pagination(&mut body, None, 50).is_err());
+    }
+
+    #[test]
+    fn parse_docs_count_parses_valid_number() {
+        assert_eq!(parse_docs_count(Some("42")), Some(42));
+    }
+
+    #[test]
+    fn parse_docs_count_returns_none_for_none() {
+        assert_eq!(parse_docs_count(None), None);
+    }
+
+    #[test]
+    fn parse_docs_count_returns_none_for_non_numeric() {
+        assert_eq!(parse_docs_count(Some("abc")), None);
+    }
+
+    #[test]
+    fn validate_raw_path_rejects_double_dot() {
+        assert!(validate_raw_path("/../secret").is_err());
+    }
+
+    #[test]
+    fn validate_raw_path_auto_prepends_slash() {
+        assert_eq!(validate_raw_path("_cluster/health").unwrap(), "/_cluster/health");
+    }
+
+    #[test]
+    fn normalize_error_falls_back_to_error_type() {
+        let body = r#"{"error":{"type":"search_phase_execution_exception"}}"#;
+        let err = normalize_error(StatusCode::BAD_REQUEST, body);
+        assert!(err.contains("search_phase_execution_exception"));
+    }
+
+    #[test]
+    fn normalize_error_handles_empty_body() {
+        let err = normalize_error(StatusCode::NOT_FOUND, "");
+        assert!(err.contains("HTTP 404"));
+    }
+
+    #[test]
+    fn normalize_error_handles_non_json_body() {
+        let err = normalize_error(StatusCode::INTERNAL_SERVER_ERROR, "server error");
+        assert!(err.contains("server error"));
     }
 }
