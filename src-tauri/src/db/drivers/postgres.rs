@@ -514,9 +514,10 @@ impl PostgresDriver {
         offset: i64,
         high_precision_cols: &HashSet<String>,
     ) -> Result<Vec<serde_json::Value>, String> {
+        let qt = pg_qualified_table(schema, table);
         let query = format!(
-            "SELECT to_jsonb(t) AS __row_json FROM {}.{} t{}{} LIMIT $1 OFFSET $2",
-            schema, table, where_clause, order_clause
+            "SELECT to_jsonb(t) AS __row_json FROM {} t{}{} LIMIT $1 OFFSET $2",
+            qt, where_clause, order_clause
         );
         let rows = sqlx::query(&query)
             .bind(limit)
