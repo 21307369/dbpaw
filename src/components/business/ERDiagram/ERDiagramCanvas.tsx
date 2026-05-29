@@ -44,7 +44,8 @@ export default function ERDiagramCanvas({ data }: ERDiagramCanvasProps) {
         target: e.target,
         type: "smoothstep",
         animated: true,
-        markerEnd: { type: MarkerType.ArrowClosed },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "var(--primary)" },
+        style: { stroke: "var(--primary)" },
         label: e.fkName,
         data: {
           onUpdate: e.onUpdate,
@@ -75,7 +76,11 @@ export default function ERDiagramCanvas({ data }: ERDiagramCanvasProps) {
       >
         <Background />
         <Controls />
-        <MiniMap />
+        <MiniMap
+          nodeColor="var(--primary)"
+          maskColor="color-mix(in srgb, var(--background) 80%, transparent)"
+          style={{ background: "var(--card)" }}
+        />
       </ReactFlow>
     </div>
   );
