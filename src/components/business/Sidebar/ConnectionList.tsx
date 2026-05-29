@@ -1456,6 +1456,20 @@ export function ConnectionList({
     }
   };
 
+  const handleOpenERDiagram = useCallback(
+    (connectionId: string, database: string) => {
+      treeCallbacks?.onOpenERDiagram?.({
+        connectionId,
+        connectionName: "",
+        connectionType: "" as any,
+        driverKind: "sql" as any,
+        databaseName: database,
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   const getDatasourceTreeAdapter = (
     connection: Connection,
   ): DatasourceTreeAdapter => {
@@ -1480,6 +1494,9 @@ export function ConnectionList({
     // Wrap treeCallbacks with ConnectionList internal functions
     const enhancedCallbacks = {
       ...treeCallbacks,
+      onOpenERDiagram: (ctx: any) => {
+        handleOpenERDiagram(ctx.connectionId, ctx.databaseName);
+      },
       onCreateIndex: (ctx: any) => {
         openCreateElasticsearchIndexDialog(ctx.connectionId, ctx.databaseName);
         treeCallbacks?.onCreateIndex?.(ctx);
