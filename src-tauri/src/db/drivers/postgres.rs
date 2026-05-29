@@ -1,13 +1,13 @@
 use super::{strip_trailing_statement_terminator, DatabaseDriver};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    RoutineInfo, SchemaForeignKey, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo,
-    TableMetadata, TableSchema, TableStructure,
+    RoutineInfo, SchemaForeignKey, SchemaOverview, SequenceInfo, SingleResultSet, TableDataResponse,
+    TableInfo, TableMetadata, TableSchema, TableStructure, TypeInfo,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rust_decimal::Decimal;
-use sqlx::{postgres::PgPoolOptions, Column, Executor, Row, TypeInfo};
+use sqlx::{postgres::PgPoolOptions, Column, Executor, Row, TypeInfo as PgTypeInfo};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -1774,6 +1774,69 @@ impl DatabaseDriver for PostgresDriver {
             error: None,
             result_sets: Some(result_sets),
         })
+    }
+
+    async fn list_sequences(&self, schema: Option<String>) -> Result<Vec<SequenceInfo>, String> {
+        let target_schema = schema.unwrap_or_else(|| "public".to_string());
+
+        let rows = sqlx::query(
+            "SELECT schemaname, sequencename, data_type, start_value, increment_by \
+             FROM pg_sequences \
+             WHERE schemaname = $1 \
+             ORDER BY sequencename",
+        )
+        .bind(&target_schema)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+
+        let mut res = Vec::new();
+        for row in rows {
+            res.push(SequenceInfo {
+                schema: row.try_get::<String, _>(0).unwrap_or_default(),
+                name: row.try_get::<String, _>(1).unwrap_or_default(),
+                data_type: row.try_get::<String, _>(2).unwrap_or_default(),
+                start_value: row.try_get::<Option<String>, _>(3).ok().flatten(),
+                increment: row.try_get::<Option<String>, _>(4).ok().flatten(),
+            });
+        }
+        Ok(res)
+    }
+
+    async fn list_types(&self, schema: Option<String>) -> Result<Vec<TypeInfo>, String> {
+        let target_schema = schema.unwrap_or_else(|| "public".to_string());
+
+        let rows = sqlx::query(
+            "SELECT n.nspname, t.typname, \
+                    CASE t.typtype \
+                      WHEN 'e' THEN 'enum' \
+                      WHEN 'c' THEN 'composite' \
+                      WHEN 'r' THEN 'range' \
+                      ELSE t.typtype \
+                    END as category \
+             FROM pg_type t \
+             JOIN pg_namespace n ON t.typnamespace = n.oid \
+             WHERE n.nspname = $1 \
+               AND t.typtype IN ('e', 'c', 'r') \
+               AND NOT EXISTS ( \
+                 SELECT 1 FROM pg_class WHERE reltype = t.oid AND relkind != 'c' \
+               ) \
+             ORDER BY t.typname",
+        )
+        .bind(&target_schema)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+
+        let mut res = Vec::new();
+        for row in rows {
+            res.push(TypeInfo {
+                schema: row.try_get::<String, _>(0).unwrap_or_default(),
+                name: row.try_get::<String, _>(1).unwrap_or_default(),
+                category: row.try_get::<String, _>(2).unwrap_or_default(),
+            });
+        }
+        Ok(res)
     }
 
     async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
