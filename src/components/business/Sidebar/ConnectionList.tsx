@@ -71,7 +71,11 @@ import type {
   RoutineType,
   SavedQuery,
   SavedConnection,
+  EventInfo,
+  SequenceInfo,
+  TypeInfo,
 } from "@/services/api";
+import type { DatabaseGroupConfig } from "@/lib/tree-adapters/types";
 import {
   getConnectionIcon,
   isMysqlFamilyDriver,
@@ -119,6 +123,7 @@ interface TableInfo {
   columns: Column[];
   isSystem?: boolean;
   indexStatus?: string | null;
+  type?: string;
 }
 
 interface RoutineInfo {
@@ -262,6 +267,7 @@ interface DatasourceTreeAdapter {
     table: TableInfo,
   ) => ReactNode;
   renderDatabaseContextMenu?: (databaseName: string) => ReactNode;
+  databaseGroups?: DatabaseGroupConfig[];
 }
 
 const defaultCreateDatabaseForm: CreateDatabaseForm = {
@@ -576,7 +582,6 @@ export function ConnectionList({
   onTableSelect,
   onConnect,
   onCreateQuery,
-  onRoutineSelect,
   onExportTable,
   onExportDatabase,
   onCreateTable,
@@ -615,11 +620,17 @@ export function ConnectionList({
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(
     new Set(),
   );
-  const [expandedRoutineGroups, setExpandedRoutineGroups] = useState<
-    Set<string>
-  >(new Set());
-  const [expandedTableGroups, setExpandedTableGroups] = useState<Set<string>>(
+  const [expandedGroupNodes, setExpandedGroupNodes] = useState<Set<string>>(
     new Set(),
+  );
+  const [databaseEvents, setDatabaseEvents] = useState<
+    Map<string, EventInfo[]>
+  >(new Map());
+  const [databaseSequences, setDatabaseSequences] = useState<
+    Map<string, SequenceInfo[]>
+  >(new Map());
+  const [databaseTypes, setDatabaseTypes] = useState<Map<string, TypeInfo[]>>(
+    new Map(),
   );
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [selectedTableNode, setSelectedTableNode] =
@@ -732,13 +743,6 @@ export function ConnectionList({
     supportsSchemaBrowsing(driver);
   const getSchemaNodeKey = (databaseKey: string, schema: string) =>
     `${databaseKey}::${schema}`;
-  const getRoutineGroupNodeKey = (
-    databaseKey: string,
-    schema: string,
-    routineType: RoutineType,
-  ) => `${databaseKey}::${schema}::${routineType}`;
-  const getTableGroupNodeKey = (databaseKey: string, schema: string) =>
-    `${databaseKey}::${schema}::tables`;
   const getTableNodeKey = (
     connectionId: string,
     databaseName: string,
@@ -904,52 +908,10 @@ export function ConnectionList({
               next.add(getSchemaNodeKey(databaseKey, schema.name));
             });
           });
-        });
-        return next;
       });
-      setExpandedRoutineGroups((prev) => {
-        const next = new Set(prev);
-        filteredConnections.forEach((conn) => {
-          conn.databases.forEach((db) => {
-            const databaseKey = `${conn.id}-${db.name}`;
-            db.schemas.forEach((schema) => {
-              if (schema.procedures.length > 0) {
-                next.add(
-                  getRoutineGroupNodeKey(databaseKey, schema.name, "procedure"),
-                );
-              }
-              if (schema.functions.length > 0) {
-                next.add(
-                  getRoutineGroupNodeKey(databaseKey, schema.name, "function"),
-                );
-              }
-            });
-          });
-        });
-        return next;
-      });
-      setExpandedTableGroups((prev) => {
-        const next = new Set(prev);
-        filteredConnections.forEach((conn) => {
-          const supportsSchemaNode = supportsSchemaNodeForDriver(conn.type);
-          conn.databases.forEach((db) => {
-            const databaseKey = `${conn.id}-${db.name}`;
-            if (supportsSchemaNode) {
-              db.schemas.forEach((schema) => {
-                if (schema.tables.length > 0) {
-                  next.add(getTableGroupNodeKey(databaseKey, schema.name));
-                }
-              });
-            } else {
-              if (db.tables.length > 0) {
-                next.add(getTableGroupNodeKey(databaseKey, db.name));
-              }
-            }
-          });
-        });
-        return next;
-      });
-      if (showSavedQueriesInTree) {
+      return next;
+    });
+    if (showSavedQueriesInTree) {
         setExpandedDatabaseGroups((prev) => {
           const next = new Set(prev);
           filteredConnections.forEach((conn) => {
@@ -1421,6 +1383,42 @@ export function ConnectionList({
     }
   };
 
+  const fetchEvents = async (
+    connectionId: string,
+    databaseName: string,
+  ): Promise<EventInfo[]> => {
+    try {
+      return await api.metadata.listEvents(connectionId, databaseName);
+    } catch (err) {
+      console.error("Failed to fetch events:", err);
+      return [];
+    }
+  };
+
+  const fetchSequences = async (
+    connectionId: string,
+    databaseName: string,
+  ): Promise<SequenceInfo[]> => {
+    try {
+      return await api.metadata.listSequences(connectionId, databaseName);
+    } catch (err) {
+      console.error("Failed to fetch sequences:", err);
+      return [];
+    }
+  };
+
+  const fetchTypes = async (
+    connectionId: string,
+    databaseName: string,
+  ): Promise<TypeInfo[]> => {
+    try {
+      return await api.metadata.listTypes(connectionId, databaseName);
+    } catch (err) {
+      console.error("Failed to fetch types:", err);
+      return [];
+    }
+  };
+
   const openCreateElasticsearchIndexDialog = (
     connectionId: string,
     _databaseName = "Indices",
@@ -1824,6 +1822,7 @@ export function ConnectionList({
               );
             }
           : undefined,
+      databaseGroups: config.databaseGroups,
     };
   };
 
@@ -1852,6 +1851,28 @@ export function ConnectionList({
           targetConnection.type,
         ),
       ]);
+
+      // Load events if the group exists
+      const groups = datasourceAdapter.databaseGroups || [];
+      const eventsGroup = groups.find((g) => g.source === "events");
+      if (eventsGroup) {
+        const events = await fetchEvents(connectionId, databaseName);
+        setDatabaseEvents((prev) => new Map(prev).set(`${connectionId}-${databaseName}`, events));
+      }
+
+      // Load sequences if the group exists
+      const sequencesGroup = groups.find((g) => g.source === "sequences");
+      if (sequencesGroup) {
+        const sequences = await fetchSequences(connectionId, databaseName);
+        setDatabaseSequences((prev) => new Map(prev).set(`${connectionId}-${databaseName}`, sequences));
+      }
+
+      // Load types if the group exists
+      const typesGroup = groups.find((g) => g.source === "types");
+      if (typesGroup) {
+        const types = await fetchTypes(connectionId, databaseName);
+        setDatabaseTypes((prev) => new Map(prev).set(`${connectionId}-${databaseName}`, types));
+      }
       setConnections((prev) =>
         prev.map((conn) => {
           if (conn.id !== connectionId) return conn;
@@ -2079,18 +2100,6 @@ export function ConnectionList({
       );
       return next;
     });
-    setExpandedRoutineGroups((prev) => {
-      const next = new Set(
-        [...prev].filter((key) => !key.startsWith(schemaKeyPrefix)),
-      );
-      return next;
-    });
-    setExpandedTableGroups((prev) => {
-      const next = new Set(
-        [...prev].filter((key) => !key.startsWith(schemaKeyPrefix)),
-      );
-      return next;
-    });
     setExpandedTables((prev) => {
       const next = new Set(
         [...prev].filter((key) => !key.startsWith(tableKeyPrefix)),
@@ -2203,8 +2212,8 @@ export function ConnectionList({
     });
   };
 
-  const toggleRoutineGroup = (groupKey: string) => {
-    setExpandedRoutineGroups((prev) => {
+  const toggleGroupNode = (groupKey: string) => {
+    setExpandedGroupNodes((prev) => {
       const next = new Set(prev);
       if (next.has(groupKey)) {
         next.delete(groupKey);
@@ -2215,16 +2224,42 @@ export function ConnectionList({
     });
   };
 
-  const toggleTableGroup = (groupKey: string) => {
-    setExpandedTableGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) {
-        next.delete(groupKey);
-      } else {
-        next.add(groupKey);
+  const getGroupItems = (
+    database: DatabaseInfo,
+    group: DatabaseGroupConfig,
+    dbKey: string,
+    schema?: SchemaInfo,
+  ): { name: string; [key: string]: any }[] => {
+    switch (group.source) {
+      case "tables": {
+        const tables = schema ? schema.tables : (database.tables || []);
+        return group.sourceFilter
+          ? tables.filter((t) => t.type === group.sourceFilter)
+          : tables.filter(
+              (t) => t.type === "table" || t.type === "BASE TABLE",
+            );
       }
-      return next;
-    });
+      case "routines": {
+        if (schema) {
+          const routines = group.sourceFilter === "procedure" 
+            ? schema.procedures 
+            : schema.functions;
+          return routines;
+        }
+        const routines = database.routines || [];
+        return group.sourceFilter
+          ? routines.filter((r) => r.type === group.sourceFilter)
+          : routines;
+      }
+      case "events":
+        return databaseEvents.get(dbKey) || [];
+      case "sequences":
+        return databaseSequences.get(dbKey) || [];
+      case "types":
+        return databaseTypes.get(dbKey) || [];
+      default:
+        return [];
+    }
   };
 
   const fetchAndSetTableColumns = async (
@@ -2333,22 +2368,6 @@ export function ConnectionList({
     table: TableInfo,
   ) => {
     getDatasourceTreeAdapter(connection).onItemActivate(database, table);
-  };
-
-  const handleRoutineClick = (
-    connection: Connection,
-    database: DatabaseInfo,
-    routine: RoutineInfo,
-  ) => {
-    onRoutineSelect?.(
-      connection.name,
-      database.name,
-      routine.schema,
-      routine.name,
-      routine.type,
-      Number(connection.id),
-      connection.type,
-    );
   };
 
   const handleCreateQueryFromContext = (
@@ -3039,7 +3058,7 @@ export function ConnectionList({
           ) => {
             const dbKey = `${connection.id}-${database.name}`;
             const supportsSchemaNode = datasourceAdapter.supportsSchemaNode;
-            const renderTableNode = (table: TableInfo, tableLevel: number) => {
+            const renderTableNode = (table: TableInfo, tableLevel: number, customIcon?: ReactNode) => {
               const tableKey = getTableNodeKey(
                 connection.id,
                 database.name,
@@ -3056,7 +3075,7 @@ export function ConnectionList({
                     >
                       <TreeNode
                         level={tableLevel}
-                        icon={datasourceAdapter.getItemIcon()}
+                        icon={customIcon || datasourceAdapter.getItemIcon()}
                         label={table.name}
                         isSelected={selectedTableKey === tableKey}
                         isExpanded={expandedTables.has(tableKey)}
@@ -3140,80 +3159,109 @@ export function ConnectionList({
               );
             };
 
-            const renderRoutineNode = (
-              routine: RoutineInfo,
-              routineLevel: number,
+            const renderEventNode = (
+              event: EventInfo,
+              nodeLevel: number,
+              group: DatabaseGroupConfig,
+              conn: Connection,
+              database: DatabaseInfo,
             ) => {
-              const routineKey = `${connection.id}-${database.name}-${routine.schema}-${routine.type}-${routine.name}`;
+              const eventKey = `${conn.id}-${database.name}::event::${event.name}`;
               return (
                 <TreeNode
-                  key={routineKey}
-                  level={routineLevel}
-                  icon={<FileCode className="w-4 h-4" />}
-                  label={routine.name}
+                  key={eventKey}
+                  level={nodeLevel}
+                  icon={group.leafIcon}
+                  label={event.name}
                   hideToggle
-                  onDoubleClick={() =>
-                    handleRoutineClick(connection, database, routine)
-                  }
-                  actions={
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() =>
-                          handleRoutineClick(connection, database, routine)
-                        }
-                      >
-                        <FileCode className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  }
                 >
                   {null}
                 </TreeNode>
               );
             };
 
-            const renderRoutineGroup = (
-              schemaNode: SchemaInfo,
-              routineType: RoutineType,
-              groupLevel: number,
+            const renderSequenceNode = (
+              sequence: SequenceInfo,
+              nodeLevel: number,
+              group: DatabaseGroupConfig,
+              conn: Connection,
+              database: DatabaseInfo,
             ) => {
-              const routines =
-                routineType === "procedure"
-                  ? schemaNode.procedures
-                  : schemaNode.functions;
-              const groupKey = getRoutineGroupNodeKey(
-                dbKey,
-                schemaNode.name,
-                routineType,
-              );
+              const seqKey = `${conn.id}-${database.name}::sequence::${sequence.name}`;
               return (
                 <TreeNode
-                  key={groupKey}
-                  level={groupLevel}
-                  icon={<FolderOpen className="w-4 h-4" />}
-                  label={
-                    routineType === "procedure"
-                      ? t("connection.tree.procedures")
-                      : t("connection.tree.functions")
-                  }
-                  isExpanded={expandedRoutineGroups.has(groupKey)}
-                  onToggle={() => toggleRoutineGroup(groupKey)}
+                  key={seqKey}
+                  level={nodeLevel}
+                  icon={group.leafIcon}
+                  label={sequence.name}
+                  hideToggle
                 >
-                  {routines.length === 0 ? (
+                  {null}
+                </TreeNode>
+              );
+            };
+
+            const renderTypeNode = (
+              typeInfo: TypeInfo,
+              nodeLevel: number,
+              group: DatabaseGroupConfig,
+              conn: Connection,
+              database: DatabaseInfo,
+            ) => {
+              const typeKey = `${conn.id}-${database.name}::type::${typeInfo.name}`;
+              return (
+                <TreeNode
+                  key={typeKey}
+                  level={nodeLevel}
+                  icon={group.leafIcon}
+                  label={typeInfo.name}
+                  hideToggle
+                >
+                  {null}
+                </TreeNode>
+              );
+            };
+
+            const renderGroupNode = (
+              group: DatabaseGroupConfig,
+              items: { name: string; schema?: string; type?: string; [key: string]: any }[],
+              groupLevel: number,
+              dbKey: string,
+              conn: Connection,
+              database: DatabaseInfo,
+            ) => {
+              const groupNodeKey = `${dbKey}::${group.id}`;
+              return (
+                <TreeNode
+                  key={groupNodeKey}
+                  level={groupLevel}
+                  icon={group.icon}
+                  label={t(group.label)}
+                  isExpanded={expandedGroupNodes.has(groupNodeKey)}
+                  onToggle={() => toggleGroupNode(groupNodeKey)}
+                >
+                  {items.length === 0 ? (
                     <div
                       className="px-2 py-1 text-xs text-muted-foreground"
                       style={{ paddingLeft: `${(groupLevel + 1) * 12 + 8}px` }}
                     >
-                      {routineType === "procedure"
-                        ? t("connection.tree.noProcedures")
-                        : t("connection.tree.noFunctions")}
+                      {t(`connection.tree.no${group.id.charAt(0).toUpperCase() + group.id.slice(1)}`)}
                     </div>
                   ) : (
-                    routines.map((routine) =>
-                      renderRoutineNode(routine, groupLevel + 1),
+                    items.map((item) =>
+                      group.source === "events" ? (
+                        renderEventNode(item as EventInfo, groupLevel + 1, group, conn, database)
+                      ) : group.source === "sequences" ? (
+                        renderSequenceNode(item as SequenceInfo, groupLevel + 1, group, conn, database)
+                      ) : group.source === "types" ? (
+                        renderTypeNode(item as TypeInfo, groupLevel + 1, group, conn, database)
+                      ) : (
+                        renderTableNode(
+                          { ...item, schema: item.schema || database.name } as TableInfo,
+                          groupLevel + 1,
+                          group.leafIcon,
+                        )
+                      )
                     )
                   )}
                 </TreeNode>
@@ -3299,122 +3347,19 @@ export function ConnectionList({
                           });
                         }}
                       >
-                        {supportsRoutines(connection.type) ? (
-                          <>
-                            {(() => {
-                              const tableGroupKey = getTableGroupNodeKey(
-                                dbKey,
-                                schemaNode.name,
-                              );
-                              return (
-                                <TreeNode
-                                  key={tableGroupKey}
-                                  level={level + 2}
-                                  icon={<FolderOpen className="w-4 h-4" />}
-                                  label={t("connection.tree.tables")}
-                                  isExpanded={expandedTableGroups.has(
-                                    tableGroupKey,
-                                  )}
-                                  onToggle={() =>
-                                    toggleTableGroup(tableGroupKey)
-                                  }
-                                >
-                                  {schemaNode.tables.length === 0 ? (
-                                    <div
-                                      className="px-2 py-1 text-xs text-muted-foreground"
-                                      style={{
-                                        paddingLeft: `${(level + 3) * 12 + 8}px`,
-                                      }}
-                                    >
-                                      {t("connection.tree.noTables")}
-                                    </div>
-                                  ) : (
-                                    schemaNode.tables.map((table) =>
-                                      renderTableNode(table, level + 3),
-                                    )
-                                  )}
-                                </TreeNode>
-                              );
-                            })()}
-                            {renderRoutineGroup(
-                              schemaNode,
-                              "procedure",
-                              level + 2,
-                            )}
-                            {renderRoutineGroup(
-                              schemaNode,
-                              "function",
-                              level + 2,
-                            )}
-                          </>
-                        ) : (
-                          schemaNode.tables.map((table) =>
-                            renderTableNode(table, level + 2),
-                          )
-                        )}
+                        {(datasourceAdapter.databaseGroups || []).map((group) => {
+                          const items = getGroupItems(database, group, dbKey, schemaNode);
+                          return renderGroupNode(group, items, level + 2, dbKey, connection, database);
+                        })}
                       </TreeNode>
                     );
                   })
                 ) : (
                   <>
-                    {(() => {
-                      const tableGroupKey = getTableGroupNodeKey(
-                        dbKey,
-                        database.name,
-                      );
-                      return (
-                        <TreeNode
-                          key={tableGroupKey}
-                          level={level + 1}
-                          icon={<FolderOpen className="w-4 h-4" />}
-                          label={t("connection.tree.tables")}
-                          isExpanded={expandedTableGroups.has(tableGroupKey)}
-                          onToggle={() => toggleTableGroup(tableGroupKey)}
-                        >
-                          {database.tables.length === 0 ? (
-                            <div
-                              className="px-2 py-1 text-xs text-muted-foreground"
-                              style={{
-                                paddingLeft: `${(level + 2) * 12 + 8}px`,
-                              }}
-                            >
-                              {t("connection.tree.noTables")}
-                            </div>
-                          ) : (
-                            database.tables.map((table) =>
-                              renderTableNode(table, level + 2),
-                            )
-                          )}
-                        </TreeNode>
-                      );
-                    })()}
-                    {supportsRoutines(connection.type) &&
-                      (() => {
-                        const virtualSchema: SchemaInfo = {
-                          name: database.name,
-                          tables: database.tables,
-                          procedures: database.routines.filter(
-                            (r) => r.type === "procedure",
-                          ),
-                          functions: database.routines.filter(
-                            (r) => r.type === "function",
-                          ),
-                        };
-                        return (
-                          <>
-                            {renderRoutineGroup(
-                              virtualSchema,
-                              "procedure",
-                              level + 1,
-                            )}
-                            {renderRoutineGroup(
-                              virtualSchema,
-                              "function",
-                              level + 1,
-                            )}
-                          </>
-                        );
-                      })()}
+                    {(datasourceAdapter.databaseGroups || []).map((group) => {
+                      const items = getGroupItems(database, group, dbKey);
+                      return renderGroupNode(group, items, level + 1, dbKey, connection, database);
+                    })}
                     {datasourceAdapter.renderDatabaseFooter(database, level)}
                   </>
                 )}
