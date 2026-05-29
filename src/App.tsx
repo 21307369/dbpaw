@@ -1890,10 +1890,13 @@ export default function App() {
     ? tabs.find((t) => t.id === currentCloseTabId)
     : undefined;
 
-  const handleOpenERDiagram = useCallback(() => {
-    if (!activeTabItem?.connectionId || !activeTabItem?.database) return;
+  const handleOpenERDiagram = useCallback((ctx?: { connectionId?: number; database?: string }) => {
+    const connectionId = ctx?.connectionId ?? activeTabItem?.connectionId;
+    const database = ctx?.database ?? activeTabItem?.database;
+    
+    if (!connectionId || !database) return;
 
-    const tabId = `er-diagram-${activeTabItem.database}`;
+    const tabId = `er-diagram-${database}`;
     const existing = tabs.find((t) => t.id === tabId);
     if (existing) {
       setActiveTab(tabId);
@@ -1903,10 +1906,10 @@ export default function App() {
     const newTab: TabItem = {
       id: tabId,
       type: "er-diagram",
-      title: `ER - ${activeTabItem.database}`,
-      connectionId: activeTabItem.connectionId,
-      database: activeTabItem.database,
-      schema: activeTabItem.schema,
+      title: `ER - ${database}`,
+      connectionId: connectionId,
+      database: database,
+      schema: activeTabItem?.schema,
     };
     setTabs((prev) => [...prev, newTab]);
     setActiveTab(tabId);
@@ -2193,8 +2196,8 @@ export default function App() {
                               handleFilterChange(tab.id, f, ob)
                             }
                             onOpenDDL={handleOpenTableDDL}
-                            onOpenERDiagram={(_ctx) => {
-                              handleOpenERDiagram();
+                            onOpenERDiagram={(ctx) => {
+                              handleOpenERDiagram({ connectionId: ctx.connectionId, database: ctx.database });
                             }}
                             onDataRefresh={(params) =>
                               handleTableRefresh(tab.id, params)

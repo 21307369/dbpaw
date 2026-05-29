@@ -1,12 +1,14 @@
 import { Table, Database, FileCode, Download, RefreshCw } from "lucide-react";
 import type {
   TreeConfig,
+  TreeCallbacks,
   TreeMenuItem,
   DatabaseContext,
   LeafContext,
 } from "./types";
 
 export function createSqlTreeConfig(
+  callbacks: TreeCallbacks = {},
   overrides?: Partial<TreeConfig>,
 ): TreeConfig {
   return {
@@ -16,6 +18,10 @@ export function createSqlTreeConfig(
     leafNodeType: "table",
     leafNodeIcon: () => <Table className="w-4 h-4" />,
     databaseNodeIcon: () => <Database className="w-4 h-4" />,
+    getDatabaseContextMenuItems: (ctx) =>
+      getSqlDatabaseContextMenuItems(ctx, callbacks),
+    getLeafContextMenuItems: (ctx) =>
+      getSqlLeafContextMenuItems(ctx, callbacks),
     ...overrides,
   };
 }
