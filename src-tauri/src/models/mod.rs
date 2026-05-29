@@ -166,6 +166,37 @@ pub struct RoutineInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct EventInfo {
+    pub schema: String,
+    pub name: String,
+    pub status: String,
+    pub event_type: String,
+    pub execute_at: Option<String>,
+    pub interval_value: Option<String>,
+    pub last_executed: Option<String>,
+    pub definition: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SequenceInfo {
+    pub schema: String,
+    pub name: String,
+    pub data_type: String,
+    pub start_value: Option<String>,
+    pub increment: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TypeInfo {
+    pub schema: String,
+    pub name: String,
+    pub category: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ColumnInfo {
     pub name: String,
     pub r#type: String,
