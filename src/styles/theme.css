@@ -548,61 +548,30 @@
     animation-delay: 0.2s;
   }
 
-  /* ReactFlow theme overrides */
-  .react-flow__controls {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  }
+  /* ReactFlow theme overrides — set --xy-* variables to use app theme tokens */
+  .react-flow {
+    --xy-controls-button-background-color: var(--card);
+    --xy-controls-button-background-color-hover: var(--accent);
+    --xy-controls-button-color: var(--foreground);
+    --xy-controls-button-color-hover: var(--foreground);
+    --xy-controls-button-border-color: var(--border);
+    --xy-controls-box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1),
+      0 1px 2px -1px rgb(0 0 0 / 0.1);
 
-  .react-flow__controls button {
-    background: var(--card);
-    color: var(--foreground);
-    border-color: var(--border);
-    fill: var(--foreground);
-  }
+    --xy-minimap-background-color: var(--card);
+    --xy-minimap-mask-background-color: color-mix(
+      in srgb,
+      var(--background) 80%,
+      transparent
+    );
+    --xy-minimap-node-background-color: var(--primary);
 
-  .react-flow__controls button:hover {
-    background: var(--accent);
-  }
+    --xy-edge-stroke: var(--primary);
+    --xy-edge-stroke-selected: var(--primary);
 
-  .react-flow__controls button svg {
-    fill: var(--foreground);
-  }
+    --xy-edge-label-background-color: var(--card);
+    --xy-edge-label-color: var(--foreground);
 
-  .react-flow__minimap {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-  }
-
-  .react-flow__edge .react-flow__edge-path {
-    stroke: var(--primary);
-  }
-
-  .react-flow__edge.selected .react-flow__edge-path {
-    stroke: var(--primary);
-    stroke-width: 3;
-  }
-
-  .react-flow__edge-textbg {
-    fill: var(--card);
-  }
-
-  .react-flow__edge-text {
-    fill: var(--foreground);
-    font-size: 11px;
-  }
-
-  .react-flow__attribution {
-    background: var(--card) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    opacity: 0.6;
-  }
-
-  .react-flow__attribution a {
-    fill: var(--muted-foreground) !important;
+    --xy-attribution-background-color: var(--card);
   }
 }

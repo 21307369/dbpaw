@@ -76,11 +76,7 @@ export default function ERDiagramCanvas({ data }: ERDiagramCanvasProps) {
       >
         <Background />
         <Controls />
-        <MiniMap
-          nodeColor="var(--primary)"
-          maskColor="color-mix(in srgb, var(--background) 80%, transparent)"
-          style={{ background: "var(--card)" }}
-        />
+        <MiniMap />
       </ReactFlow>
     </div>
   );
