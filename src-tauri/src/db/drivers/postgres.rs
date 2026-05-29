@@ -1652,7 +1652,7 @@ impl DatabaseDriver for PostgresDriver {
                 Some("desc") => "DESC",
                 _ => "ASC",
             };
-            format!(" ORDER BY \"{}\" {}", col, dir)
+            format!(" ORDER BY {} {}", pg_quote_ident(col), dir)
         } else {
             String::new()
         };
