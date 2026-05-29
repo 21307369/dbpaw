@@ -24,6 +24,7 @@ import {
   SquareTerminal,
   Trash2,
   X,
+  Table,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -145,6 +146,13 @@ interface TableViewProps {
     schema: string;
     table: string;
   }) => void;
+  onOpenERDiagram?: (ctx: {
+    connectionId: number;
+    database: string;
+    schema: string;
+    table: string;
+    driver: string;
+  }) => void;
   onDataRefresh?: (params?: {
     page?: number;
     limit?: number;
@@ -186,6 +194,7 @@ export function TableView({
   orderBy: controlledOrderBy,
   onFilterChange,
   onOpenDDL,
+  onOpenERDiagram,
   onDataRefresh,
   onCreateQuery,
   tableContext,
@@ -1909,6 +1918,23 @@ export function TableView({
                     <FileCode className="w-3.5 h-3.5" />
                     <span className="text-xs font-medium leading-none">
                       ddl
+                    </span>
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 hover:bg-muted/60"
+                    onClick={() => {
+                      if (tableContext && onOpenERDiagram) {
+                        onOpenERDiagram(tableContext);
+                      }
+                    }}
+                    title="Open ER Diagram"
+                  >
+                    <Table className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium leading-none">
+                      ER
                     </span>
                   </Button>
                 </>
