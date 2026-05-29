@@ -1,8 +1,8 @@
 use super::{strip_trailing_statement_terminator, DatabaseDriver};
 use crate::models::{
-    ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    RoutineInfo, SchemaForeignKey, SchemaOverview, SingleResultSet, SpecialTypeSummary,
-    TableDataResponse, TableInfo, TableMetadata, TableSchema, TableStructure,
+    ColumnInfo, ColumnSchema, ConnectionForm, EventInfo, ForeignKeyInfo, IndexInfo, QueryColumn,
+    QueryResult, RoutineInfo, SchemaForeignKey, SchemaOverview, SingleResultSet,
+    SpecialTypeSummary, TableDataResponse, TableInfo, TableMetadata, TableSchema, TableStructure,
 };
 use async_trait::async_trait;
 use sqlx::{
@@ -1234,6 +1234,43 @@ impl DatabaseDriver for MysqlDriver {
                 r#type: decode_mysql_text_cell(&row, 2)
                     .unwrap_or_default()
                     .to_lowercase(),
+            });
+        }
+        Ok(res)
+    }
+
+    async fn list_events(&self, schema: Option<String>) -> Result<Vec<EventInfo>, String> {
+        let target_schema = if let Some(s) = schema {
+            s
+        } else {
+            self.current_database()
+                .await
+                .map_err(|e| format!("[QUERY_ERROR] Failed to get current database: {e}"))?
+                .ok_or("[QUERY_ERROR] No database selected and no schema provided")?
+        };
+
+        let rows = self
+            .fetch_all_with_str_params(
+                "SELECT EVENT_SCHEMA, EVENT_NAME, STATUS, EVENT_TYPE, \
+                 EXECUTE_AT, INTERVAL_VALUE, LAST_EXECUTED, EVENT_DEFINITION \
+                 FROM information_schema.EVENTS \
+                 WHERE EVENT_SCHEMA = ? \
+                 ORDER BY EVENT_NAME",
+                &[&target_schema],
+            )
+            .await?;
+
+        let mut res = Vec::new();
+        for row in rows {
+            res.push(EventInfo {
+                schema: decode_mysql_text_cell(&row, 0)?,
+                name: decode_mysql_text_cell(&row, 1)?,
+                status: decode_mysql_text_cell(&row, 2)?,
+                event_type: decode_mysql_text_cell(&row, 3)?,
+                execute_at: decode_mysql_optional_text_cell(&row, 4)?,
+                interval_value: decode_mysql_optional_text_cell(&row, 5)?,
+                last_executed: decode_mysql_optional_text_cell(&row, 6)?,
+                definition: decode_mysql_optional_text_cell(&row, 7)?,
             });
         }
         Ok(res)
