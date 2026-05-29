@@ -31,10 +31,14 @@ export function buildDiagramData(
   overview: SchemaOverview,
   foreignKeys: SchemaForeignKey[],
 ): ERDiagramData {
+  const validForeignKeys = foreignKeys.filter(
+    (fk) => fk.sourceTable && fk.targetTable,
+  );
+
   const fkSourceSet = new Set<string>();
   const fkTargetSet = new Set<string>();
 
-  foreignKeys.forEach((fk) => {
+  validForeignKeys.forEach((fk) => {
     fkSourceSet.add(`${fk.sourceTable}.${fk.sourceColumn}`);
     fkTargetSet.add(`${fk.targetTable}.${fk.targetColumn}`);
   });
@@ -62,7 +66,7 @@ export function buildDiagramData(
     }))
     .filter((node) => node.columns.length > 0);
 
-  const edges: ERDiagramEdge[] = foreignKeys.map((fk) => ({
+  const edges: ERDiagramEdge[] = validForeignKeys.map((fk) => ({
     id: `${fk.name}-${fk.sourceTable}.${fk.sourceColumn}-${fk.targetTable}.${fk.targetColumn}`,
     source: `${fk.sourceSchema || schemaByTable.get(fk.sourceTable) || "public"}.${fk.sourceTable}`,
     target: `${fk.targetSchema || schemaByTable.get(fk.targetTable) || "public"}.${fk.targetTable}`,

@@ -1111,18 +1111,18 @@ impl DatabaseDriver for MysqlDriver {
 
         let mut foreign_keys = Vec::new();
         for row in rows {
-            let source_schema: String = row.try_get(1).unwrap_or_default();
-            let target_schema: String = row.try_get(4).unwrap_or_default();
+            let source_schema = decode_mysql_text_cell(&row, 1).unwrap_or_default();
+            let target_schema = decode_mysql_text_cell(&row, 4).unwrap_or_default();
             foreign_keys.push(SchemaForeignKey {
-                name: row.try_get(0).unwrap_or_default(),
+                name: decode_mysql_text_cell(&row, 0).unwrap_or_default(),
                 source_schema: Some(source_schema),
-                source_table: row.try_get(2).unwrap_or_default(),
-                source_column: row.try_get(3).unwrap_or_default(),
+                source_table: decode_mysql_text_cell(&row, 2).unwrap_or_default(),
+                source_column: decode_mysql_text_cell(&row, 3).unwrap_or_default(),
                 target_schema: Some(target_schema),
-                target_table: row.try_get(5).unwrap_or_default(),
-                target_column: row.try_get(6).unwrap_or_default(),
-                on_update: row.try_get(7).unwrap_or(None),
-                on_delete: row.try_get(8).unwrap_or(None),
+                target_table: decode_mysql_text_cell(&row, 5).unwrap_or_default(),
+                target_column: decode_mysql_text_cell(&row, 6).unwrap_or_default(),
+                on_update: decode_mysql_optional_text_cell(&row, 7).unwrap_or(None),
+                on_delete: decode_mysql_optional_text_cell(&row, 8).unwrap_or(None),
             });
         }
         Ok(foreign_keys)
