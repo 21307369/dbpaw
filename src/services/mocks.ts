@@ -1021,6 +1021,30 @@ export async function mockGetTableDDL(
   return mockDDL;
 }
 
+export async function mockListEvents(
+  _connectionId: string,
+  _database: string,
+): Promise<{ schema: string; name: string; status: string; eventType: string; executeAt: string | null; intervalValue: string | null; lastExecuted: string | null; definition: string | null }[]> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return [];
+}
+
+export async function mockListSequences(
+  _connectionId: string,
+  _database: string,
+): Promise<{ schema: string; name: string; dataType: string; startValue: string | null; increment: string | null }[]> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return [];
+}
+
+export async function mockListTypes(
+  _connectionId: string,
+  _database: string,
+): Promise<{ schema: string; name: string; category: string }[]> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return [];
+}
+
 export async function mockListRoutines(
   _id: number,
   _database?: string,
@@ -1677,6 +1701,15 @@ export async function invokeMock<T>(cmd: string, args?: any): Promise<T> {
         args.database,
         args.schema,
       ) as Promise<T>;
+
+    case "list_events":
+      return mockListEvents(args.connectionId, args.database) as Promise<T>;
+
+    case "list_sequences":
+      return mockListSequences(args.connectionId, args.database) as Promise<T>;
+
+    case "list_types":
+      return mockListTypes(args.connectionId, args.database) as Promise<T>;
 
     case "get_table_structure":
       return mockGetTableStructure(

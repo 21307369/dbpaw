@@ -628,6 +628,31 @@ export interface RoutineInfo {
   type: RoutineType;
 }
 
+export interface EventInfo {
+  schema: string;
+  name: string;
+  status: string;
+  eventType: string;
+  executeAt: string | null;
+  intervalValue: string | null;
+  lastExecuted: string | null;
+  definition: string | null;
+}
+
+export interface SequenceInfo {
+  schema: string;
+  name: string;
+  dataType: string;
+  startValue: string | null;
+  increment: string | null;
+}
+
+export interface TypeInfo {
+  schema: string;
+  name: string;
+  category: string;
+}
+
 export interface TableSchema {
   schema: string;
   name: string;
@@ -881,6 +906,12 @@ export const api = {
       invoke<SchemaOverview>("get_schema_overview", { id, database, schema }),
     getSchemaForeignKeys: (id: number, database?: string, schema?: string) =>
       invoke<SchemaForeignKey[]>("get_schema_foreign_keys", { id, database, schema }),
+    listEvents: (connectionId: string, database: string) =>
+      invoke<EventInfo[]>("list_events", { connectionId, database }),
+    listSequences: (connectionId: string, database: string) =>
+      invoke<SequenceInfo[]>("list_sequences", { connectionId, database }),
+    listTypes: (connectionId: string, database: string) =>
+      invoke<TypeInfo[]>("list_types", { connectionId, database }),
   },
   tableData: {
     get: (params: {
