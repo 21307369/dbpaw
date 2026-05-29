@@ -62,6 +62,19 @@ export interface TreeCallbacks {
   onCollectionAction?: (ctx: LeafContext, action: "drop" | "rename") => void;
 }
 
+// ============ Database Group Config ============
+
+export interface DatabaseGroupConfig {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  leafIcon: ReactNode;
+  source: "tables" | "routines" | "events" | "sequences" | "types";
+  sourceFilter?: string;
+  contextMenuItems?: (ctx: LeafContext) => TreeMenuItem[];
+  onLeafActivate?: (ctx: LeafContext) => void;
+}
+
 // ============ Tree Config ============
 
 export interface TreeConfig {
@@ -105,4 +118,7 @@ export interface TreeConfig {
 
   // 叶子节点激活行为
   onLeafActivate?: (ctx: LeafContext) => void;
+
+  // 数据库组定义
+  databaseGroups: DatabaseGroupConfig[];
 }
