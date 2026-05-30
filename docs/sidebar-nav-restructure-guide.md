@@ -71,18 +71,18 @@ interface DatabaseGroupConfig {
 | **SQLite** | Tables → Views | 无（前端过滤） | ✅ 完成 |
 | **DuckDB** | Tables → Views | 无（前端过滤） | ✅ 完成 |
 
-### 待完成（使用 defaultSqlGroups）
+### 已完成（使用 defaultSqlGroups）
 
-| 数据库 | 当前 groups | Navicat/DataGrip 风格 | 需要改动 |
-|--------|------------|----------------------|----------|
-| **MariaDB** | Tables → Views → Functions → Procedures | Tables → Views → Functions → Procedures → Events | 需要 Events（同 MySQL） |
-| **TiDB** | Tables → Views → Functions → Procedures | Tables → Views → Functions → Procedures | 当前已够用 |
-| **StarRocks** | Tables → Views → Functions → Procedures | Tables → Views → Functions → Procedures | 当前已够用 |
-| **Doris** | Tables → Views → Functions → Procedures | Tables → Views → Functions → Procedures | 当前已够用 |
-| **MSSQL** | Tables → Views → Functions → Procedures | Tables → Views → Functions → Procedures → Synonyms | 需要 Synonyms API |
-| **Oracle** | Tables → Views → Functions → Procedures | Tables → Views → Functions → Procedures → Packages → Sequences → Types | 需要 Packages, Sequences, Types API |
-| **ClickHouse** | Tables → Views → Functions → Procedures | Tables → Views → Materialized Views | 需要 Materialized Views 分组 |
-| **IBM Db2** | Tables → Views → Functions → Procedures | Tables → Views → Functions → Procedures → Sequences | 需要 Sequences API |
+| 数据库 | 侧边栏结构 | 状态 |
+|--------|------------|------|
+| **MariaDB** | Tables → Views → Functions → Procedures → Events | ✅ 完成 |
+| **TiDB** | Tables → Views → Functions → Procedures | ✅ 完成 |
+| **StarRocks** | Tables → Views → Functions → Procedures | ✅ 完成 |
+| **Doris** | Tables → Views → Functions → Procedures | ✅ 完成 |
+| **MSSQL** | Tables → Views → Functions → Procedures → Synonyms | ✅ 完成 |
+| **Oracle** | Tables → Views → Functions → Procedures → Packages → Sequences → Types | ✅ 完成 |
+| **ClickHouse** | Tables → Views → Materialized Views | ✅ 完成 |
+| **IBM Db2** | Tables → Views → Functions → Procedures → Sequences | ✅ 完成 |
 
 ### 非 SQL 数据库（不需要改动）
 
