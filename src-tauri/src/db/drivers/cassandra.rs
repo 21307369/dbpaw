@@ -973,3 +973,137 @@ impl CassandraDriver {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use scylla::cluster::metadata::{CollectionType, NativeType};
+
+    #[test]
+    fn normalize_error_authentication() {
+        let result = normalize_cassandra_error("Authentication failed for user");
+        assert!(result.starts_with("[CASSANDRA_ERROR] Authentication failed"));
+    }
+
+    #[test]
+    fn normalize_error_credentials() {
+        let result = normalize_cassandra_error("invalid credentials provided");
+        assert!(result.starts_with("[CASSANDRA_ERROR] Authentication failed"));
+    }
+
+    #[test]
+    fn normalize_error_connection_refused() {
+        let result = normalize_cassandra_error("Connection refused by remote host");
+        assert!(result.starts_with("[CASSANDRA_ERROR] Connection refused"));
+    }
+
+    #[test]
+    fn normalize_error_timeout() {
+        let result = normalize_cassandra_error("request timed out after 30s");
+        assert!(result.starts_with("[CASSANDRA_ERROR] Connection timed out"));
+    }
+
+    #[test]
+    fn normalize_error_dns() {
+        let result = normalize_cassandra_error("cannot resolve hostname");
+        assert!(result.starts_with("[CASSANDRA_ERROR] DNS resolution failed"));
+    }
+
+    #[test]
+    fn normalize_error_tls() {
+        let result = normalize_cassandra_error("certificate verify failed");
+        assert!(result.starts_with("[CASSANDRA_ERROR] TLS/SSL error"));
+    }
+
+    #[test]
+    fn normalize_error_unknown() {
+        let result = normalize_cassandra_error("something weird happened");
+        assert_eq!(result, "[CASSANDRA_ERROR] something weird happened");
+    }
+
+    #[test]
+    fn signed_bigint_empty() {
+        assert_eq!(bytes_to_signed_bigint_string(&[]), "0");
+    }
+
+    #[test]
+    fn signed_bigint_positive() {
+        assert_eq!(bytes_to_signed_bigint_string(&[0x01]), "1");
+    }
+
+    #[test]
+    fn signed_bigint_negative_one() {
+        assert_eq!(bytes_to_signed_bigint_string(&[0xFF]), "-1");
+    }
+
+    #[test]
+    fn signed_bigint_negative_128() {
+        assert_eq!(bytes_to_signed_bigint_string(&[0x80]), "-128");
+    }
+
+    #[test]
+    fn unsigned_decimal_empty() {
+        assert_eq!(unsigned_bytes_to_decimal(&[]), "0");
+    }
+
+    #[test]
+    fn unsigned_decimal_all_zeros() {
+        assert_eq!(unsigned_bytes_to_decimal(&[0, 0]), "0");
+    }
+
+    #[test]
+    fn unsigned_decimal_single_byte() {
+        assert_eq!(unsigned_bytes_to_decimal(&[255]), "255");
+    }
+
+    #[test]
+    fn unsigned_decimal_multi_byte() {
+        assert_eq!(unsigned_bytes_to_decimal(&[0x01, 0x00]), "256");
+    }
+
+    #[test]
+    fn column_type_native_int() {
+        assert_eq!(
+            column_type_to_string(&ColumnType::Native(NativeType::Int)),
+            "int"
+        );
+    }
+
+    #[test]
+    fn column_type_native_text() {
+        assert_eq!(
+            column_type_to_string(&ColumnType::Native(NativeType::Text)),
+            "text"
+        );
+    }
+
+    #[test]
+    fn column_type_list() {
+        let ct = ColumnType::Collection {
+            typ: CollectionType::List(Box::new(ColumnType::Native(NativeType::Int))),
+            frozen: false,
+        };
+        assert_eq!(column_type_to_string(&ct), "list<int>");
+    }
+
+    #[test]
+    fn column_type_frozen_map() {
+        let ct = ColumnType::Collection {
+            typ: CollectionType::Map(
+                Box::new(ColumnType::Native(NativeType::Text)),
+                Box::new(ColumnType::Native(NativeType::Int)),
+            ),
+            frozen: true,
+        };
+        assert_eq!(column_type_to_string(&ct), "frozen<map<text, int>>");
+    }
+
+    #[test]
+    fn column_type_tuple() {
+        let ct = ColumnType::Tuple(vec![
+            ColumnType::Native(NativeType::Int),
+            ColumnType::Native(NativeType::Text),
+        ]);
+        assert_eq!(column_type_to_string(&ct), "tuple<int, text>");
+    }
+}
