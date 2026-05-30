@@ -228,6 +228,8 @@ export const en = {
       noEvents: "No events",
       noSequences: "No sequences",
       noTypes: "No types",
+      synonyms: "Synonyms",
+      noSynonyms: "No synonyms",
       materializedViews: "Materialized Views",
       noMaterializedViews: "No materialized views",
     },

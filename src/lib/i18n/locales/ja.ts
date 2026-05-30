@@ -230,6 +230,8 @@ export const ja: Translations = {
       noEvents: "イベントなし",
       noSequences: "シーケンスなし",
       noTypes: "タイプなし",
+      synonyms: "シノニム",
+      noSynonyms: "シノニムなし",
       materializedViews: "マテリアライゼドビュー",
       noMaterializedViews: "マテリアライゼドビューなし",
     },

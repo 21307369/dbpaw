@@ -1,4 +1,4 @@
-import { Table, Database, FileCode, Download, RefreshCw, Eye, Cog, Clock, Hash, Type } from "lucide-react";
+import { Table, Database, FileCode, Download, RefreshCw, Eye, Cog, Clock, Hash, Type, Link } from "lucide-react";
 import type {
   TreeConfig,
   TreeCallbacks,
@@ -36,6 +36,14 @@ const clickhouseGroups: DatabaseGroupConfig[] = [
   { id: "materializedViews", label: "connection.tree.materializedViews", icon: <Eye className="w-4 h-4" />,    leafIcon: <Eye className="w-4 h-4" />,    source: "tables", sourceFilter: "MaterializedView" },
 ];
 
+const mssqlGroups: DatabaseGroupConfig[] = [
+  { id: "tables",     label: "connection.tree.tables",     icon: <Table className="w-4 h-4" />,  leafIcon: <Table className="w-4 h-4" />,  source: "tables" },
+  { id: "views",      label: "connection.tree.views",      icon: <Eye className="w-4 h-4" />,    leafIcon: <Eye className="w-4 h-4" />,    source: "tables", sourceFilter: "view" },
+  { id: "functions",  label: "connection.tree.functions",  icon: <Cog className="w-4 h-4" />,    leafIcon: <Cog className="w-4 h-4" />,    source: "routines", sourceFilter: "function" },
+  { id: "procedures", label: "connection.tree.procedures", icon: <Cog className="w-4 h-4" />,    leafIcon: <Cog className="w-4 h-4" />,    source: "routines", sourceFilter: "procedure" },
+  { id: "synonyms",   label: "connection.tree.synonyms",   icon: <Link className="w-4 h-4" />,   leafIcon: <Link className="w-4 h-4" />,   source: "synonyms" },
+];
+
 const db2Groups: DatabaseGroupConfig[] = [
   { id: "tables",     label: "connection.tree.tables",     icon: <Table className="w-4 h-4" />,  leafIcon: <Table className="w-4 h-4" />,  source: "tables" },
   { id: "views",      label: "connection.tree.views",      icon: <Eye className="w-4 h-4" />,    leafIcon: <Eye className="w-4 h-4" />,    source: "tables", sourceFilter: "view" },
@@ -64,9 +72,11 @@ export function createSqlTreeConfig(
         ? sqliteGroups
         : driverId === "clickhouse"
           ? clickhouseGroups
-          : driverId === "db2"
-            ? db2Groups
-            : defaultSqlGroups;
+          : driverId === "mssql"
+            ? mssqlGroups
+            : driverId === "db2"
+              ? db2Groups
+              : defaultSqlGroups;
   return {
     supportsSavedQueries: true,
     databaseExpandable: true,

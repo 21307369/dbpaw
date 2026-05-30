@@ -1045,6 +1045,14 @@ export async function mockListTypes(
   return [];
 }
 
+export async function mockListSynonyms(
+  _connectionId: string,
+  _database: string,
+): Promise<{ schema: string; name: string; baseObjectType: string }[]> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return [];
+}
+
 export async function mockListRoutines(
   _id: number,
   _database?: string,
@@ -1710,6 +1718,9 @@ export async function invokeMock<T>(cmd: string, args?: any): Promise<T> {
 
     case "list_types":
       return mockListTypes(args.connectionId, args.database) as Promise<T>;
+
+    case "list_synonyms":
+      return mockListSynonyms(args.connectionId, args.database) as Promise<T>;
 
     case "get_table_structure":
       return mockGetTableStructure(

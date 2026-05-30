@@ -74,6 +74,7 @@ import type {
   EventInfo,
   SequenceInfo,
   TypeInfo,
+  SynonymInfo,
 } from "@/services/api";
 import type { DatabaseGroupConfig } from "@/lib/tree-adapters/types";
 import {
@@ -632,6 +633,9 @@ export function ConnectionList({
   const [databaseTypes, setDatabaseTypes] = useState<Map<string, TypeInfo[]>>(
     new Map(),
   );
+  const [databaseSynonyms, setDatabaseSynonyms] = useState<
+    Map<string, SynonymInfo[]>
+  >(new Map());
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [selectedTableNode, setSelectedTableNode] =
     useState<SelectedTableNode | null>(null);
@@ -1419,6 +1423,18 @@ export function ConnectionList({
     }
   };
 
+  const fetchSynonyms = async (
+    connectionId: string,
+    databaseName: string,
+  ): Promise<SynonymInfo[]> => {
+    try {
+      return await api.metadata.listSynonyms(connectionId, databaseName);
+    } catch (err) {
+      console.error("Failed to fetch synonyms:", err);
+      return [];
+    }
+  };
+
   const openCreateElasticsearchIndexDialog = (
     connectionId: string,
     _databaseName = "Indices",
@@ -1873,6 +1889,13 @@ export function ConnectionList({
         const types = await fetchTypes(connectionId, databaseName);
         setDatabaseTypes((prev) => new Map(prev).set(`${connectionId}-${databaseName}`, types));
       }
+
+      // Load synonyms if the group exists
+      const synonymsGroup = groups.find((g) => g.source === "synonyms");
+      if (synonymsGroup) {
+        const synonyms = await fetchSynonyms(connectionId, databaseName);
+        setDatabaseSynonyms((prev) => new Map(prev).set(`${connectionId}-${databaseName}`, synonyms));
+      }
       setConnections((prev) =>
         prev.map((conn) => {
           if (conn.id !== connectionId) return conn;
@@ -2257,6 +2280,8 @@ export function ConnectionList({
         return databaseSequences.get(dbKey) || [];
       case "types":
         return databaseTypes.get(dbKey) || [];
+      case "synonyms":
+        return databaseSynonyms.get(dbKey) || [];
       default:
         return [];
     }
@@ -3222,6 +3247,28 @@ export function ConnectionList({
               );
             };
 
+            const renderSynonymNode = (
+              item: SynonymInfo,
+              nodeLevel: number,
+              group: DatabaseGroupConfig,
+              conn: Connection,
+              database: DatabaseInfo,
+            ) => {
+              const nodeKey = `${conn.id}-${database.name}-${item.schema}-${item.name}`;
+              return (
+                <TreeNode
+                  key={nodeKey}
+                  level={nodeLevel}
+                  icon={group.leafIcon}
+                  label={item.name}
+                  isExpanded={expandedTables.has(nodeKey)}
+                  onToggle={() => toggleTable(nodeKey, conn.id, database.name, { name: item.name, schema: item.schema, columns: [] })}
+                >
+                  {null}
+                </TreeNode>
+              );
+            };
+
             const renderGroupNode = (
               group: DatabaseGroupConfig,
               items: { name: string; schema?: string; type?: string; [key: string]: any }[],
@@ -3255,6 +3302,8 @@ export function ConnectionList({
                         renderSequenceNode(item as SequenceInfo, groupLevel + 1, group, conn, database)
                       ) : group.source === "types" ? (
                         renderTypeNode(item as TypeInfo, groupLevel + 1, group, conn, database)
+                      ) : group.source === "synonyms" ? (
+                        renderSynonymNode(item as SynonymInfo, groupLevel + 1, group, conn, database)
                       ) : (
                         renderTableNode(
                           { ...item, schema: item.schema || database.name } as TableInfo,

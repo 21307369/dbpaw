@@ -653,6 +653,12 @@ export interface TypeInfo {
   category: string;
 }
 
+export interface SynonymInfo {
+  schema: string;
+  name: string;
+  baseObjectType: string;
+}
+
 export interface TableSchema {
   schema: string;
   name: string;
@@ -912,6 +918,8 @@ export const api = {
       invoke<SequenceInfo[]>("list_sequences", { connectionId, database }),
     listTypes: (connectionId: string, database: string) =>
       invoke<TypeInfo[]>("list_types", { connectionId, database }),
+    listSynonyms: (connectionId: string, database: string) =>
+      invoke<SynonymInfo[]>("list_synonyms", { connectionId, database }),
   },
   tableData: {
     get: (params: {

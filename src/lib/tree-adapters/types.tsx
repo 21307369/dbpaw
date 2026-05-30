@@ -69,7 +69,7 @@ export interface DatabaseGroupConfig {
   label: string;
   icon: ReactNode;
   leafIcon: ReactNode;
-  source: "tables" | "routines" | "events" | "sequences" | "types";
+  source: "tables" | "routines" | "events" | "sequences" | "types" | "synonyms" | "packages";
   sourceFilter?: string;
   contextMenuItems?: (ctx: LeafContext) => TreeMenuItem[];
   onLeafActivate?: (ctx: LeafContext) => void;

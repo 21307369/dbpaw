@@ -224,6 +224,8 @@ export const zh: Translations = {
       noEvents: "暂无事件",
       noSequences: "暂无序列",
       noTypes: "暂无类型",
+      synonyms: "同义词",
+      noSynonyms: "没有同义词",
       materializedViews: "物化视图",
       noMaterializedViews: "没有物化视图",
     },
