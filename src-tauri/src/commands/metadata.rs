@@ -1,6 +1,6 @@
 use crate::models::{
-    ConnectionForm, EventInfo, RoutineInfo, SchemaForeignKey, SchemaOverview, SequenceInfo,
-    SynonymInfo, TableInfo, TableMetadata, TableStructure, TypeInfo,
+    ConnectionForm, EventInfo, PackageInfo, RoutineInfo, SchemaForeignKey, SchemaOverview,
+    SequenceInfo, SynonymInfo, TableInfo, TableMetadata, TableStructure, TypeInfo,
 };
 use crate::state::AppState;
 use tauri::State;
@@ -156,6 +156,20 @@ pub async fn list_synonyms(
     super::execute_with_retry(&state, id, database, |driver| {
         let schema_clone = schema.clone();
         async move { driver.list_synonyms(schema_clone).await }
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_packages(
+    state: State<'_, AppState>,
+    id: i64,
+    database: Option<String>,
+    schema: Option<String>,
+) -> Result<Vec<PackageInfo>, String> {
+    super::execute_with_retry(&state, id, database, |driver| {
+        let schema_clone = schema.clone();
+        async move { driver.list_packages(schema_clone).await }
     })
     .await
 }

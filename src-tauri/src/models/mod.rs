@@ -205,6 +205,14 @@ pub struct SynonymInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PackageInfo {
+    pub schema: String,
+    pub name: String,
+    pub object_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ColumnInfo {
     pub name: String,
     pub r#type: String,

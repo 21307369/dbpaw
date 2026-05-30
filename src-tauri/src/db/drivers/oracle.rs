@@ -1,8 +1,8 @@
 use super::{conn_failed_error, DatabaseDriver};
 use crate::models::{
-    ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    SchemaForeignKey, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata,
-    TableSchema, TableStructure,
+    ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, PackageInfo, QueryColumn,
+    QueryResult, SchemaForeignKey, SchemaOverview, SequenceInfo, SingleResultSet, TableDataResponse,
+    TableInfo, TableMetadata, TableSchema, TableStructure, TypeInfo,
 };
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -298,6 +298,134 @@ impl DatabaseDriver for OracleDriver {
                         schema: s,
                         name: t,
                         r#type: ty,
+                    });
+                }
+            }
+            Ok(result)
+        })
+        .await
+    }
+
+    async fn list_sequences(&self, schema: Option<String>) -> Result<Vec<SequenceInfo>, String> {
+        let schema_upper = schema
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty());
+        self.run_blocking(move |conn| {
+            let sql = if let Some(ref s) = schema_upper {
+                format!(
+                    "SELECT SEQUENCE_OWNER, SEQUENCE_NAME, DATA_TYPE, CAST(MIN_VALUE AS VARCHAR2(64)), CAST(INCREMENT_BY AS VARCHAR2(64)) \
+                     FROM ALL_SEQUENCES \
+                     WHERE SEQUENCE_OWNER = '{}' \
+                     ORDER BY SEQUENCE_OWNER, SEQUENCE_NAME",
+                    escape_literal(s)
+                )
+            } else {
+                "SELECT SEQUENCE_OWNER, SEQUENCE_NAME, DATA_TYPE, CAST(MIN_VALUE AS VARCHAR2(64)), CAST(INCREMENT_BY AS VARCHAR2(64)) \
+                 FROM ALL_SEQUENCES \
+                 ORDER BY SEQUENCE_OWNER, SEQUENCE_NAME"
+                    .to_string()
+            };
+            let rows = conn
+                .query(&sql, &[] as &[&dyn oracle::sql_type::ToSql])
+                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+            let mut result = Vec::new();
+            for row_result in rows {
+                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let schema_name: Option<String> = row.get(0).ok().flatten();
+                let seq_name: Option<String> = row.get(1).ok().flatten();
+                let data_type: Option<String> = row.get(2).ok().flatten();
+                let start_value: Option<String> = row.get(3).ok().flatten();
+                let increment: Option<String> = row.get(4).ok().flatten();
+                if let (Some(s), Some(n)) = (schema_name, seq_name) {
+                    result.push(SequenceInfo {
+                        schema: s,
+                        name: n,
+                        data_type: data_type.unwrap_or_default(),
+                        start_value,
+                        increment,
+                    });
+                }
+            }
+            Ok(result)
+        })
+        .await
+    }
+
+    async fn list_types(&self, schema: Option<String>) -> Result<Vec<TypeInfo>, String> {
+        let schema_upper = schema
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty());
+        self.run_blocking(move |conn| {
+            let sql = if let Some(ref s) = schema_upper {
+                format!(
+                    "SELECT OWNER, TYPE_NAME, TYPECODE \
+                     FROM ALL_TYPES \
+                     WHERE OWNER = '{}' \
+                     ORDER BY OWNER, TYPE_NAME",
+                    escape_literal(s)
+                )
+            } else {
+                "SELECT OWNER, TYPE_NAME, TYPECODE \
+                 FROM ALL_TYPES \
+                 ORDER BY OWNER, TYPE_NAME"
+                    .to_string()
+            };
+            let rows = conn
+                .query(&sql, &[] as &[&dyn oracle::sql_type::ToSql])
+                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+            let mut result = Vec::new();
+            for row_result in rows {
+                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let schema_name: Option<String> = row.get(0).ok().flatten();
+                let type_name: Option<String> = row.get(1).ok().flatten();
+                let type_code: Option<String> = row.get(2).ok().flatten();
+                if let (Some(s), Some(n)) = (schema_name, type_name) {
+                    result.push(TypeInfo {
+                        schema: s,
+                        name: n,
+                        category: type_code.unwrap_or_default(),
+                    });
+                }
+            }
+            Ok(result)
+        })
+        .await
+    }
+
+    async fn list_packages(&self, schema: Option<String>) -> Result<Vec<PackageInfo>, String> {
+        let schema_upper = schema
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty());
+        self.run_blocking(move |conn| {
+            let sql = if let Some(ref s) = schema_upper {
+                format!(
+                    "SELECT OWNER, OBJECT_NAME, OBJECT_TYPE \
+                     FROM ALL_OBJECTS \
+                     WHERE OBJECT_TYPE = 'PACKAGE' AND OWNER = '{}' \
+                     ORDER BY OWNER, OBJECT_NAME",
+                    escape_literal(s)
+                )
+            } else {
+                "SELECT OWNER, OBJECT_NAME, OBJECT_TYPE \
+                 FROM ALL_OBJECTS \
+                 WHERE OBJECT_TYPE = 'PACKAGE' \
+                 ORDER BY OWNER, OBJECT_NAME"
+                    .to_string()
+            };
+            let rows = conn
+                .query(&sql, &[] as &[&dyn oracle::sql_type::ToSql])
+                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+            let mut result = Vec::new();
+            for row_result in rows {
+                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let schema_name: Option<String> = row.get(0).ok().flatten();
+                let pkg_name: Option<String> = row.get(1).ok().flatten();
+                let obj_type: Option<String> = row.get(2).ok().flatten();
+                if let (Some(s), Some(n)) = (schema_name, pkg_name) {
+                    result.push(PackageInfo {
+                        schema: s,
+                        name: n,
+                        object_type: obj_type.unwrap_or_default(),
                     });
                 }
             }

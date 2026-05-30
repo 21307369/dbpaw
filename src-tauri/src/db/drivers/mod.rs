@@ -9,8 +9,9 @@ use self::oracle::OracleDriver;
 use self::postgres::PostgresDriver;
 use self::sqlite::SqliteDriver;
 use crate::models::{
-    ConnectionForm, EventInfo, QueryResult, RoutineInfo, SchemaForeignKey, SchemaOverview,
-    SequenceInfo, SynonymInfo, TableDataResponse, TableInfo, TableMetadata, TableStructure, TypeInfo,
+    ConnectionForm, EventInfo, PackageInfo, QueryResult, RoutineInfo, SchemaForeignKey,
+    SchemaOverview, SequenceInfo, SynonymInfo, TableDataResponse, TableInfo, TableMetadata,
+    TableStructure, TypeInfo,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
@@ -331,6 +332,9 @@ pub trait DatabaseDriver: Send + Sync {
         Ok(vec![])
     }
     async fn list_synonyms(&self, _schema: Option<String>) -> Result<Vec<SynonymInfo>, String> {
+        Ok(vec![])
+    }
+    async fn list_packages(&self, _schema: Option<String>) -> Result<Vec<PackageInfo>, String> {
         Ok(vec![])
     }
     async fn get_routine_ddl(
