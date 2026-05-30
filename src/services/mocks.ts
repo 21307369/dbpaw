@@ -1519,6 +1519,7 @@ export async function mockDeleteConnection(id: number): Promise<void> {
     throw new Error(`Connection with id ${id} not found`);
   }
   mockConnections.splice(index, 1);
+  return null as any;
 }
 
 export async function mockCreateDatabaseById(
@@ -1526,6 +1527,7 @@ export async function mockCreateDatabaseById(
   _payload: { name: string },
 ): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 80));
+  return null as any;
 }
 
 /**
