@@ -1691,7 +1691,7 @@ export async function mockRedisListDatabases(_id: number): Promise<any[]> {
   ];
 }
 
-export async function mockRedisScanKeys(params: any): Promise<any> {
+export async function mockRedisScanKeys(_params: any): Promise<any> {
   await new Promise((resolve) => setTimeout(resolve, 50));
   return {
     cursor: "0",
