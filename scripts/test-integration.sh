@@ -120,6 +120,7 @@ case "${it_db}" in
   starrocks)
     run_integration_test "starrocks_integration"
     run_integration_test "starrocks_command_integration"
+    run_integration_test "starrocks_stateful_command_integration"
     ;;
   doris)
     run_integration_test "doris_integration"
@@ -142,6 +143,7 @@ case "${it_db}" in
   mssql)
     run_integration_test "mssql_integration"
     run_integration_test "mssql_command_integration"
+    run_integration_test "mssql_stateful_command_integration"
     ;;
   duckdb)
     run_integration_test "duckdb_integration"
@@ -185,6 +187,9 @@ case "${it_db}" in
     run_integration_test "mariadb_stateful_command_integration"
     run_integration_test "doris_integration"
     run_integration_test "doris_command_integration"
+    run_integration_test "starrocks_integration"
+    run_integration_test "starrocks_command_integration"
+    run_integration_test "starrocks_stateful_command_integration"
     run_integration_test "postgres_integration"
     run_integration_test "postgres_command_integration"
     run_integration_test "postgres_stateful_command_integration"
@@ -192,6 +197,7 @@ case "${it_db}" in
     run_integration_test "clickhouse_command_integration"
     run_integration_test "mssql_integration"
     run_integration_test "mssql_command_integration"
+    run_integration_test "mssql_stateful_command_integration"
     run_integration_test "duckdb_integration"
     run_integration_test "duckdb_command_integration"
     run_integration_test "sqlite_integration"
