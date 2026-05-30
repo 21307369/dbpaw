@@ -2,17 +2,6 @@ use super::super::types::*;
 use crate::state::AppState;
 use serde_json::Value;
 
-fn default_schema_for_driver(driver: &str) -> String {
-    match driver.to_ascii_lowercase().as_str() {
-        "postgres" | "cockroach" => "public".to_string(),
-        "mysql" | "mariadb" | "tidb" | "starrocks" | "doris" => "main".to_string(),
-        "sqlite" | "duckdb" => "main".to_string(),
-        "clickhouse" => "default".to_string(),
-        "mssql" => "dbo".to_string(),
-        _ => "public".to_string(),
-    }
-}
-
 pub fn get_definitions() -> Vec<ToolDefinition> {
     vec![ToolDefinition {
         name: "dbpaw_get_schema_context".to_string(),
@@ -63,7 +52,7 @@ pub async fn get_schema_context(state: &AppState, args: Value) -> Result<ToolRes
         .find(|c| c.id == connection_id)
         .ok_or(format!("Connection {} not found", connection_id))?;
     let driver = conn.db_type.clone();
-    let schema = default_schema_for_driver(&driver);
+    let schema = super::default_schema_for_driver(&driver);
 
     // 获取表列表
     let all_tables = crate::commands::execute_with_retry_from_app_state(

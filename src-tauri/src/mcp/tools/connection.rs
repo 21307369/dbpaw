@@ -2,24 +2,13 @@ use super::super::types::*;
 use crate::state::AppState;
 use serde_json::Value;
 
-fn default_schema_for_driver(driver: &str) -> String {
-    match driver.to_ascii_lowercase().as_str() {
-        "postgres" | "cockroach" => "public".to_string(),
-        "mysql" | "mariadb" | "tidb" | "starrocks" | "doris" => "main".to_string(),
-        "sqlite" | "duckdb" => "main".to_string(),
-        "clickhouse" => "default".to_string(),
-        "mssql" => "dbo".to_string(),
-        _ => "public".to_string(),
-    }
-}
-
 async fn get_schema_for_connection(state: &AppState, connection_id: i64) -> Result<String, String> {
     let connections = crate::commands::connection::get_connections_direct(state).await?;
     let conn = connections
         .iter()
         .find(|c| c.id == connection_id)
         .ok_or(format!("Connection {} not found", connection_id))?;
-    Ok(default_schema_for_driver(&conn.db_type))
+    Ok(super::default_schema_for_driver(&conn.db_type))
 }
 
 pub fn get_definitions() -> Vec<ToolDefinition> {
