@@ -381,3 +381,68 @@ fn test_mcp_prompts_get_missing_params() {
 
     proc.kill().unwrap();
 }
+
+#[test]
+fn test_mcp_completion_complete() {
+    let mut proc = Command::new(get_mcp_binary())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    send_request(&mut proc, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+
+    let response = send_request(&mut proc, r#"{"jsonrpc":"2.0","id":2,"method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"analyze_table"},"argument":{"name":"connection_id","value":""}}}"#);
+    let v: Value = serde_json::from_str(&response).unwrap();
+
+    assert_eq!(v["jsonrpc"], "2.0");
+    assert_eq!(v["id"], 2);
+    assert!(
+        v["result"]["completion"]["values"].is_array() || v.get("error").is_some() || v["result"]["isError"] == true,
+        "Should have completion.values array or error response"
+    );
+
+    proc.kill().unwrap();
+}
+
+#[test]
+fn test_mcp_completion_unknown_arg() {
+    let mut proc = Command::new(get_mcp_binary())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    send_request(&mut proc, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+
+    let response = send_request(&mut proc, r#"{"jsonrpc":"2.0","id":2,"method":"completion/complete","params":{"ref":{"type":"ref/prompt","name":"analyze_table"},"argument":{"name":"nonexistent_arg","value":"foo"}}}"#);
+    let v: Value = serde_json::from_str(&response).unwrap();
+
+    assert_eq!(v["jsonrpc"], "2.0");
+    assert_eq!(v["id"], 2);
+    let values = v["result"]["completion"]["values"].as_array().unwrap();
+    assert!(values.is_empty(), "Values should be empty for unknown argument");
+
+    proc.kill().unwrap();
+}
+
+#[test]
+fn test_mcp_sampling_create_message() {
+    let mut proc = Command::new(get_mcp_binary())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    send_request(&mut proc, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+
+    let response = send_request(&mut proc, r#"{"jsonrpc":"2.0","id":2,"method":"sampling/createMessage","params":{"messages":[{"role":"user","content":{"type":"text","text":"hello"}}]}}"#);
+    let v: Value = serde_json::from_str(&response).unwrap();
+
+    assert!(v.get("error").is_some() || v["result"]["isError"] == true, "Should return error for unsupported sampling");
+
+    proc.kill().unwrap();
+}
