@@ -57,6 +57,10 @@ import {
 import packageJson from "../../../package.json";
 import { LanguageSelector } from "./LanguageSelector";
 import { useTranslation } from "react-i18next";
+import { ShortcutRecorder } from "@/lib/shortcuts/recorder";
+import { SHORTCUT_DEFAULTS, SCOPE_GROUP_ORDER } from "@/lib/shortcuts/defaults";
+import { useShortcuts } from "@/contexts/ShortcutsContext";
+import type { ShortcutId } from "@/lib/shortcuts/types";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -77,16 +81,6 @@ type AIProviderPreset = {
   label: string;
   baseUrl: string;
   model: string;
-};
-type ShortcutItem = {
-  action: string;
-  keys: string;
-  scope: string;
-  note?: string;
-};
-type ShortcutGroup = {
-  title: string;
-  items: ShortcutItem[];
 };
 
 const AI_PROVIDER_OPTIONS: AIProviderPreset[] = [
@@ -159,79 +153,6 @@ const AI_PROVIDER_OPTIONS_BY_TYPE = AI_PROVIDER_OPTIONS.reduce(
 
 const GITHUB_URL = "https://github.com/codeErrorSleep/dbpaw";
 const APP_VERSION = packageJson.version;
-const SHORTCUT_GROUPS: ShortcutGroup[] = [
-  {
-    title: "Global",
-    items: [
-      { action: "Open settings", keys: "Cmd/Ctrl + ,", scope: "App / Menu" },
-      { action: "Toggle AI sidebar", keys: "Cmd/Ctrl + \\", scope: "App" },
-      { action: "Toggle main sidebar", keys: "Cmd/Ctrl + B", scope: "Sidebar" },
-      { action: "Create new query tab", keys: "Cmd/Ctrl + N", scope: "App" },
-      { action: "Close current tab", keys: "Cmd/Ctrl + W", scope: "App" },
-      {
-        action: "Next tab",
-        keys: "Cmd/Ctrl + Shift + ]",
-        scope: "App",
-      },
-      {
-        action: "Previous tab",
-        keys: "Cmd/Ctrl + Shift + [",
-        scope: "App",
-      },
-    ],
-  },
-  {
-    title: "SQL Editor",
-    items: [
-      { action: "Execute SQL", keys: "Cmd/Ctrl + Enter", scope: "Editor" },
-      { action: "Save query", keys: "Cmd/Ctrl + S", scope: "Editor" },
-      { action: "Format SQL", keys: "Shift + Alt + F", scope: "Editor" },
-      {
-        action: "Accept completion / insert tab",
-        keys: "Tab",
-        scope: "Editor",
-      },
-    ],
-  },
-  {
-    title: "Table View",
-    items: [
-      {
-        action: "Save pending changes",
-        keys: "Cmd/Ctrl + S",
-        scope: "Table",
-      },
-      { action: "Open table search", keys: "Cmd/Ctrl + F", scope: "Table" },
-      {
-        action: "Copy selected rows",
-        keys: "Cmd/Ctrl + C",
-        scope: "Table",
-      },
-      {
-        action: "Cancel edit / discard pending changes",
-        keys: "Esc",
-        scope: "Table",
-      },
-    ],
-  },
-  {
-    title: "Input Panels",
-    items: [
-      {
-        action: "Send AI message",
-        keys: "Enter",
-        scope: "AI input",
-        note: "Shift + Enter inserts a newline",
-      },
-      {
-        action: "Save query from description input",
-        keys: "Enter",
-        scope: "Save Query dialog",
-        note: "Shift + Enter inserts a newline",
-      },
-    ],
-  },
-];
 
 export function SettingsDialog({
   open,
@@ -1056,49 +977,7 @@ export function SettingsDialog({
             )}
 
             {activeSection === "shortcuts" && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium flex items-center gap-2">
-                  <Command className="w-5 h-5" />{" "}
-                  {t("settings.shortcuts.title")}
-                </h3>
-                <div className="rounded-md border p-3 text-xs text-muted-foreground">
-                  {t("settings.shortcuts.readonlyHint")}
-                </div>
-                <div className="space-y-4">
-                  {SHORTCUT_GROUPS.map((group) => (
-                    <div key={group.title} className="rounded-md border">
-                      <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium text-foreground">
-                        {group.title}
-                      </div>
-                      <div className="divide-y">
-                        {group.items.map((item) => (
-                          <div
-                            key={`${group.title}-${item.action}`}
-                            className="grid grid-cols-1 gap-2 px-3 py-2 sm:grid-cols-[1.2fr_220px_140px]"
-                          >
-                            <div className="space-y-0.5">
-                              <div className="text-sm text-foreground">
-                                {item.action}
-                              </div>
-                              {item.note && (
-                                <div className="text-xs text-muted-foreground">
-                                  {item.note}
-                                </div>
-                              )}
-                            </div>
-                            <div className="text-sm font-mono text-foreground">
-                              {item.keys}
-                            </div>
-                            <div className="text-xs text-muted-foreground sm:text-right">
-                              {item.scope}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <ShortcutsPanel />
             )}
 
             {activeSection === "about" && (
@@ -1144,5 +1023,105 @@ export function SettingsDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ShortcutsPanel() {
+  const { t } = useTranslation();
+  const { ready, resetAll } = useShortcuts();
+  const [confirming, setConfirming] = useState(false);
+
+  if (!ready) {
+    return (
+      <div className="rounded-md border p-4 text-sm text-muted-foreground">
+        {t("settings.shortcuts.loading")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-medium flex items-center gap-2">
+          <Command className="w-5 h-5" /> {t("settings.shortcuts.title")}
+        </h3>
+        {!confirming ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setConfirming(true)}
+          >
+            {t("settings.shortcuts.resetAll")}
+          </Button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {t("settings.shortcuts.resetAllConfirm")}
+            </span>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={async () => {
+                await resetAll();
+                setConfirming(false);
+              }}
+            >
+              {t("settings.shortcuts.confirmResetAll")}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setConfirming(false)}
+            >
+              {t("settings.shortcuts.cancel")}
+            </Button>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("settings.shortcuts.hint")}
+      </p>
+      <div className="space-y-4">
+        {SCOPE_GROUP_ORDER.filter(
+          (g) => g.scope !== "input",
+        ).map((group) => {
+          const idsInScope = (Object.keys(SHORTCUT_DEFAULTS) as ShortcutId[])
+            .filter((id) => SHORTCUT_DEFAULTS[id].scope === group.scope);
+          if (idsInScope.length === 0) return null;
+          return (
+            <div key={group.scope} className="rounded-md border">
+              <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium text-foreground">
+                {t(group.titleKey)}
+              </div>
+              <div className="divide-y">
+                {idsInScope.map((id) => (
+                  <div
+                    key={id}
+                    className="grid grid-cols-1 gap-2 px-3 py-2 sm:grid-cols-[1.2fr_auto]"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="text-sm text-foreground">
+                        {t(SHORTCUT_DEFAULTS[id].labelKey)}
+                      </div>
+                      {SHORTCUT_DEFAULTS[id].noteKey && (
+                        <div className="text-xs text-muted-foreground">
+                          {t(SHORTCUT_DEFAULTS[id].noteKey!)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-end">
+                      <ShortcutRecorder
+                        id={id}
+                        def={SHORTCUT_DEFAULTS[id]}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

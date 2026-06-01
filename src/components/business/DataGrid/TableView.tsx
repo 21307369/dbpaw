@@ -72,7 +72,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { api, isTauri } from "@/services/api";
 import type { ColumnInfo, TransferFormat } from "@/services/api";
-import { isEditableTarget, isModKey } from "@/lib/keyboard";
+import { isEditableTarget } from "@/lib/keyboard";
+import { useShortcutMatcher } from "@/contexts/ShortcutsContext";
 import {
   buildDeleteStatement,
   buildFilterExpression,
@@ -1596,6 +1597,8 @@ export function TableView({
     };
   }, []);
 
+  const match = useShortcutMatcher();
+
   useEffect(() => {
     const handleTableHotkeys = (e: KeyboardEvent) => {
       const container = containerRef.current;
@@ -1610,7 +1613,7 @@ export function TableView({
       const shouldHandleSave =
         eventInsideTable || !!editingCell || hasPendingChanges;
 
-      if (isModKey(e) && e.key.toLowerCase() === "s") {
+      if (match(e, "table.save")) {
         if (!shouldHandleSave) return;
         e.preventDefault();
         if (hasPendingChanges && !isSaving) {
@@ -1619,7 +1622,7 @@ export function TableView({
         return;
       }
 
-      if (isModKey(e) && e.key.toLowerCase() === "f") {
+      if (match(e, "table.openSearch")) {
         if (isEditableTarget(e.target)) return;
         e.preventDefault();
         setIsSearchOpen(true);
@@ -1627,7 +1630,7 @@ export function TableView({
         return;
       }
 
-      if (isModKey(e) && e.key.toLowerCase() === "c") {
+      if (match(e, "table.copySelection")) {
         if (isEditableTarget(e.target)) {
           return;
         }
@@ -1658,7 +1661,7 @@ export function TableView({
       const shouldHandleEscape =
         eventInsideTable || !!editingCell || hasPendingChanges;
 
-      if (e.key === "Escape") {
+      if (match(e, "table.cancelEdit")) {
         if (!shouldHandleEscape) return;
 
         if (editingCell) {
@@ -1691,6 +1694,7 @@ export function TableView({
     getSelectedCellCopyText,
     handleCopy,
     handleCopySelection,
+    match,
   ]);
 
   if (isLoading) {

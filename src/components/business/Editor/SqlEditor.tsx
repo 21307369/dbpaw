@@ -67,6 +67,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useShortcutBinding } from "@/contexts/ShortcutsContext";
+import { comboToCodeMirror } from "@/lib/shortcuts/match";
 import { toast } from "sonner";
 import { sqlEditorThemeDark, sqlEditorThemeLight } from "./codemirrorTheme";
 import { collectSelectedSql } from "./sqlSelection";
@@ -551,6 +553,11 @@ export function SqlEditor({
   const triggerSaveRef = useRef(triggerSave);
   triggerSaveRef.current = triggerSave;
 
+  const executeBinding = useShortcutBinding("editor.execute");
+  const saveBinding = useShortcutBinding("editor.save");
+  const formatBinding = useShortcutBinding("editor.format");
+  const acceptBinding = useShortcutBinding("editor.acceptCompletion");
+
   // Determine Dialect
   const dialect = useMemo(() => {
     switch (driver) {
@@ -660,25 +667,25 @@ export function SqlEditor({
       Prec.high(
         keymap.of([
           {
-            key: "Tab",
+            key: comboToCodeMirror(acceptBinding),
             run: (view) => acceptCompletion(view) || insertTab(view),
           },
           {
-            key: "Mod-Enter",
+            key: comboToCodeMirror(executeBinding),
             run: (view) => {
               executeFromEditorRef.current(view);
               return true;
             },
           },
           {
-            key: "Shift-Alt-f",
+            key: comboToCodeMirror(formatBinding),
             run: () => {
               void handleFormatRef.current();
               return true;
             },
           },
           {
-            key: "Mod-s",
+            key: comboToCodeMirror(saveBinding),
             run: () => {
               triggerSaveRef.current();
               return true;
@@ -697,7 +704,16 @@ export function SqlEditor({
     }
 
     return exts;
-  }, [dialect, sqlSchema, customCompletion, editorFontSizePx]);
+  }, [
+    dialect,
+    sqlSchema,
+    customCompletion,
+    editorFontSizePx,
+    executeBinding,
+    saveBinding,
+    formatBinding,
+    acceptBinding,
+  ]);
 
   // Theme
   const editorTheme = useMemo(() => {

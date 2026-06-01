@@ -65,6 +65,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { UpdaterChecker } from "@/components/updater-checker";
 import { isModKey, shouldIgnoreGlobalShortcut } from "@/lib/keyboard";
+import { useShortcutMatcher } from "@/contexts/ShortcutsContext";
 import {
   DndContext,
   closestCenter,
@@ -1817,55 +1818,61 @@ export default function App() {
     revealSidebarForTab(nextTabId, tabs);
   };
 
+  const match = useShortcutMatcher();
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (!isModKey(e) || shouldIgnoreGlobalShortcut(e)) return;
 
-      if (e.shiftKey && e.code === "BracketRight") {
+      if (match(e, "global.nextTab")) {
         e.preventDefault();
         handleCycleTabs(1);
         return;
       }
 
-      if (e.shiftKey && e.code === "BracketLeft") {
+      if (match(e, "global.prevTab")) {
         e.preventDefault();
         handleCycleTabs(-1);
         return;
       }
 
-      switch (e.key.toLowerCase()) {
-        case "w":
-          e.preventDefault();
-          if (activeTab) {
-            handleCloseTab(activeTab);
-          }
-          break;
-        case "n":
-          e.preventDefault();
-          // Find current active tab to get context for new query
-          const currentTab = tabs.find((t) => t.id === activeTab);
-          if (
-            currentTab &&
-            currentTab.connectionId &&
-            currentTab.database &&
-            currentTab.driver
-          ) {
-            handleCreateQuery(
-              currentTab.connectionId,
-              currentTab.database,
-              currentTab.driver,
-            );
-          }
-          break;
-        case "\\": // Backslash for AI toggle
-          e.preventDefault();
-          setAiVisible((v) => !v);
-          break;
-        case ",": // Comma for settings
-          e.preventDefault();
-          setOpenSettings(true);
-          break;
+      if (match(e, "global.closeTab")) {
+        e.preventDefault();
+        if (activeTab) {
+          handleCloseTab(activeTab);
+        }
+        return;
+      }
+
+      if (match(e, "global.newQueryTab")) {
+        e.preventDefault();
+        const currentTab = tabs.find((t) => t.id === activeTab);
+        if (
+          currentTab &&
+          currentTab.connectionId &&
+          currentTab.database &&
+          currentTab.driver
+        ) {
+          handleCreateQuery(
+            currentTab.connectionId,
+            currentTab.database,
+            currentTab.driver,
+          );
+        }
+        return;
+      }
+
+      if (match(e, "global.toggleAiSidebar")) {
+        e.preventDefault();
+        setAiVisible((v) => !v);
+        return;
+      }
+
+      if (match(e, "global.openSettings")) {
+        e.preventDefault();
+        setOpenSettings(true);
+        return;
       }
     };
 
@@ -1873,7 +1880,7 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", handleGlobalKeyDown);
     };
-  }, [activeTab, tabs]);
+  }, [activeTab, tabs, match]);
 
   const activeTabItem = tabs.find((t) => t.id === activeTab);
   const activeTableTarget = useMemo<ActiveTableTarget | undefined>(() => {

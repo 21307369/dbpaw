@@ -37,6 +37,16 @@ it never happens again.
   method to `api.ts`, always add a corresponding mock entry.
 - i18n locale files are TypeScript, not JSON. After adding a new locale file
   in `src/lib/i18n/locales/`, register it in `src/lib/i18n/index.ts`.
+- The keyboard-shortcut registry lives in `src/lib/shortcuts/defaults.ts`.
+  The `ShortcutsProvider` in `src/contexts/ShortcutsContext.tsx` is the
+  ONLY component allowed to call `getSetting`/`saveSetting` for the
+  `shortcuts.v1` store key (mirrors the api.ts-invokes-Tauri rule above).
+  Components must read bindings via `useShortcutBinding(id)`,
+  `useShortcutBindings()`, or `useShortcutMatcher()`, never directly
+  from the store. When adding a new shortcut, add an entry to
+  `SHORTCUT_DEFAULTS`, a label under `settings.shortcuts.label.*` in
+  every locale, and wire the matcher call in the appropriate handler
+  site — do not hard-code the key.
 
 ## Database Drivers
 
