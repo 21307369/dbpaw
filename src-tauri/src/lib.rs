@@ -285,6 +285,11 @@ pub fn run() {
             let _ = app_handle.save_window_state(StateFlags::all());
             let state = app_handle.state::<AppState>();
             tauri::async_runtime::block_on(async {
+                // Kill MCP server process if running
+                let mut lock = state.mcp_process.lock().await;
+                if let Some(mut child) = lock.take() {
+                    let _ = child.kill();
+                }
                 state.pool_manager.close_all().await;
             });
         }
