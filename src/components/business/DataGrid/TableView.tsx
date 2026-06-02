@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
@@ -329,6 +330,8 @@ export function TableView({
   const containerRef = useRef<HTMLDivElement>(null);
   const selectedCellRef = useRef<{ row: number; col: string } | null>(null);
   const selectedRowsRef = useRef<Set<number>>(new Set());
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [contextMenuRow, setContextMenuRow] = useState<number | null>(null);
 
   useEffect(() => {
     selectedCellRef.current = selectedCell;
@@ -586,6 +589,14 @@ export function TableView({
   // If using external pagination, totalPages is based on total count
   // Otherwise fallback to filtered data length
   const totalPages = Math.ceil((total || sortedData.length) / pageSize);
+
+  // Virtual scrolling — only render visible rows
+  const virtualizer = useVirtualizer({
+    count: currentData.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => 36,
+    overscan: 20,
+  });
 
   // --- Cell interaction handlers ---
   const handleCellClick = useCallback(
@@ -2149,7 +2160,7 @@ export function TableView({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
+      <div ref={scrollContainerRef} className="flex-1 overflow-auto">
         {viewMode === "column" ? (
           <table className="border-collapse w-auto">
             <colgroup>
@@ -2317,6 +2328,8 @@ export function TableView({
             </tbody>
           </table>
         ) : (
+          <ContextMenu onOpenChange={(open) => { if (!open) setContextMenuRow(null); }}>
+          <ContextMenuTrigger asChild>
           <table
             className="border-collapse table-fixed"
             style={{
@@ -2412,26 +2425,37 @@ export function TableView({
               </tr>
             </thead>
             <tbody>
-              {currentData.map((row, rowIndex) => {
-                if (!row || typeof row !== "object") return null;
-                const isEditing = (col: string) =>
-                  editingCell?.row === rowIndex && editingCell?.col === col;
-                const isSelected = (col: string) =>
-                  selectedCell?.row === rowIndex && selectedCell?.col === col;
-                const isRowSelected = selectedRows.has(rowIndex);
-                const isMultiRowCopyTarget =
-                  isRowSelected && selectedRows.size > 1;
-                const copyTargetRows = isMultiRowCopyTarget
-                  ? Array.from(selectedRows)
-                  : [rowIndex];
-
+              {(() => {
+                const virtualItems = virtualizer.getVirtualItems();
+                const lastItemEnd = virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].end : 0;
+                const bottomSpacerHeight = virtualizer.getTotalSize() - lastItemEnd;
+                const draftRowsHeight = insertDraftRows.length * 36;
                 return (
-                  <ContextMenu key={rowIndex}>
-                    <ContextMenuTrigger asChild>
-                      <tr className={[
-                        "hover:bg-muted/50 border-b border-border group",
-                        showZebraStripes && rowIndex % 2 === 1 ? "bg-muted/30" : "",
-                      ].filter(Boolean).join(" ")}>
+                  <>
+                    {/* Top spacer for virtual scroll */}
+                    {virtualItems.length > 0 && (
+                      <tr>
+                        <td
+                          colSpan={columns.length + (showRowNumbers ? 1 : 0)}
+                          style={{ height: virtualItems[0]?.start ?? 0, padding: 0, border: 'none' }}
+                        />
+                      </tr>
+                    )}
+                    {virtualItems.map((virtualRow) => {
+                      const rowIndex = virtualRow.index;
+                      const row = currentData[rowIndex];
+                      if (!row || typeof row !== "object") return null;
+                      const isEditing = (col: string) =>
+                        editingCell?.row === rowIndex && editingCell?.col === col;
+                      const isSelected = (col: string) =>
+                        selectedCell?.row === rowIndex && selectedCell?.col === col;
+                      const isRowSelected = selectedRows.has(rowIndex);
+
+                      return (
+                        <tr key={rowIndex} className={[
+                          "hover:bg-muted/50 border-b border-border group",
+                          showZebraStripes && rowIndex % 2 === 1 ? "bg-muted/30" : "",
+                        ].filter(Boolean).join(" ")}>
                         {showRowNumbers && (
                           <td
                             className={[
@@ -2514,6 +2538,7 @@ export function TableView({
                                   return;
                                 }
                                 handleCellClick(rowIndex, column);
+                                setContextMenuRow(rowIndex);
                               }}
                               onDoubleClick={() =>
                                 handleCellDoubleClick(
@@ -2585,222 +2610,20 @@ export function TableView({
                           );
                         })}
                       </tr>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent>
-                      {!!tableContext && onFilterChange && selectedCell && (() => {
-                        const cellValue = currentData[selectedCell.row]?.[selectedCell.col];
-                        const colMeta = tableColumns.find((c) => c.name === selectedCell.col);
-                        const columnType = colMeta?.type || "";
-                        const isNull = cellValue === null || cellValue === undefined;
-                        const displayValue = isNull ? "NULL" : formatCellValue(cellValue);
-                        const truncatedValue = displayValue.length > 30
-                          ? displayValue.substring(0, 30) + "..."
-                          : displayValue;
-                        const isNumeric = isNumericType(columnType);
-                        const isString = isStringType(columnType);
-                        const isDate = isDateType(columnType);
-                        const showComparable = isNumeric || isDate || (!isString && !isNull && typeof cellValue === "number");
-
-                        return (
-                          <>
-                            <ContextMenuSub>
-                              <ContextMenuSubTrigger>
-                                <Filter className="w-4 h-4 mr-2" />
-                                {t("datagrid.filter.title", "Filter")}
-                              </ContextMenuSubTrigger>
-                              <ContextMenuSubContent>
-                                <ContextMenuItem onClick={() => applyFilter("=")}>
-                                  = {truncatedValue}
-                                </ContextMenuItem>
-                                <ContextMenuItem onClick={() => applyFilter("<>")}>
-                                  &lt;&gt; {truncatedValue}
-                                </ContextMenuItem>
-                                {showComparable && !isNull && (
-                                  <>
-                                    <ContextMenuSeparator />
-                                    <ContextMenuItem onClick={() => applyFilter(">")}>
-                                      &gt; {truncatedValue}
-                                    </ContextMenuItem>
-                                    <ContextMenuItem onClick={() => applyFilter(">=")}>
-                                      &gt;= {truncatedValue}
-                                    </ContextMenuItem>
-                                    <ContextMenuItem onClick={() => applyFilter("<")}>
-                                      &lt; {truncatedValue}
-                                    </ContextMenuItem>
-                                    <ContextMenuItem onClick={() => applyFilter("<=")}>
-                                      &lt;= {truncatedValue}
-                                    </ContextMenuItem>
-                                  </>
-                                )}
-                                {isString && !isNull && (
-                                  <>
-                                    <ContextMenuSeparator />
-                                    <ContextMenuItem onClick={() => applyFilter("LIKE_CONTAINS")}>
-                                      LIKE %{truncatedValue}%
-                                    </ContextMenuItem>
-                                    <ContextMenuItem onClick={() => applyFilter("LIKE_STARTS")}>
-                                      LIKE {truncatedValue}%
-                                    </ContextMenuItem>
-                                    <ContextMenuItem onClick={() => applyFilter("LIKE_ENDS")}>
-                                      LIKE %{truncatedValue}
-                                    </ContextMenuItem>
-                                  </>
-                                )}
-                                <ContextMenuSeparator />
-                                <ContextMenuItem onClick={() => applyFilter("IS NULL")}>
-                                  IS NULL
-                                </ContextMenuItem>
-                                <ContextMenuItem onClick={() => applyFilter("IS NOT NULL")}>
-                                  IS NOT NULL
-                                </ContextMenuItem>
-                              </ContextMenuSubContent>
-                            </ContextMenuSub>
-                            <ContextMenuSeparator />
-                          </>
-                        );
-                      })()}
-                      <ContextMenuItem
-                        onClick={() => {
-                          handleCopySelection();
-                        }}
-                      >
-                        <Copy className="w-4 h-4 mr-2" />
-                        {getNormalizedCellRange() ? "Copy Selection" : "Copy Cell"}
-                      </ContextMenuItem>
-                      {getNormalizedCellRange() ? (
-                        <ContextMenuSub>
-                          <ContextMenuSubTrigger>
-                            <Files className="w-4 h-4 mr-2" />
-                            Copy Selection as
-                          </ContextMenuSubTrigger>
-                          <ContextMenuSubContent>
-                            <ContextMenuItem
-                              onClick={() => {
-                                handleCopy(buildSelectionCSV(), "Selection copied as CSV");
-                              }}
-                            >
-                              CSV
-                            </ContextMenuItem>
-                            {!!tableContext && (
-                              <ContextMenuItem
-                                onClick={() => {
-                                  handleCopy(buildSelectionInsertSQL(), "Selection copied as Insert SQL");
-                                }}
-                              >
-                                Insert SQL
-                              </ContextMenuItem>
-                            )}
-                            {canUpdateDelete && (
-                              <ContextMenuItem
-                                onClick={() => {
-                                  handleCopy(buildSelectionUpdateSQL(), "Selection copied as Update SQL");
-                                }}
-                              >
-                                Update SQL
-                              </ContextMenuItem>
-                            )}
-                          </ContextMenuSubContent>
-                        </ContextMenuSub>
-                      ) : (
-                        <>
-                          <ContextMenuItem
-                            onClick={() => {
-                              if (isMultiRowCopyTarget) {
-                                handleCopy(buildRowsTSV(copyTargetRows), `Copied ${copyTargetRows.length} row(s)`);
-                                return;
-                              }
-                              const values = columns
-                                .map((col) => {
-                                  const val = getCellDisplayValue(
-                                    rowIndex,
-                                    col,
-                                    row[col],
-                                  );
-                                  return val === null || val === undefined
-                                    ? ""
-                                    : String(val);
-                                })
-                                .join("\t");
-                              handleCopy(values, "Row copied");
-                            }}
-                          >
-                            <TableIcon className="w-4 h-4 mr-2" />
-                            {isMultiRowCopyTarget
-                              ? "Copy Selected Rows"
-                              : "Copy Row"}
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                          {canUpdateDelete &&
-                            isCellModified(rowIndex, selectedCell?.col || "") && (
-                              <>
-                                <ContextMenuItem
-                                  onClick={() => {
-                                    if (
-                                      selectedCell &&
-                                      selectedCell.row === rowIndex
-                                    ) {
-                                      const key = `${rowIndex}_${selectedCell.col}`;
-                                      setPendingChanges((prev) => {
-                                        const next = new Map(prev);
-                                        next.delete(key);
-                                        return next;
-                                      });
-                                    }
-                                  }}
-                                >
-                                  <Undo2 className="w-4 h-4 mr-2" />
-                                  Undo This Cell
-                                </ContextMenuItem>
-                                <ContextMenuSeparator />
-                              </>
-                            )}
-                          <ContextMenuSub>
-                            <ContextMenuSubTrigger>
-                              <Files className="w-4 h-4 mr-2" />
-                              Copy as
-                            </ContextMenuSubTrigger>
-                            <ContextMenuSubContent>
-                              <ContextMenuItem
-                                onClick={() => {
-                                  handleCopy(buildRowsCSV(copyTargetRows), isMultiRowCopyTarget ? "Copied as CSV" : "Row copied as CSV");
-                                }}
-                              >
-                                {isMultiRowCopyTarget
-                                  ? "Copy Selected as CSV"
-                                  : "Copy as CSV"}
-                              </ContextMenuItem>
-                              {!!tableContext && (
-                                <ContextMenuItem
-                                  onClick={() => {
-                                    const sql = buildRowsInsertSQL(copyTargetRows);
-                                    handleCopy(sql, isMultiRowCopyTarget ? "Copied as Insert SQL" : "Row copied as Insert SQL");
-                                  }}
-                                >
-                                  {isMultiRowCopyTarget
-                                    ? "Copy Selected as Insert SQL"
-                                    : "Copy as Insert SQL"}
-                                </ContextMenuItem>
-                              )}
-                              {canUpdateDelete && (
-                                <ContextMenuItem
-                                  onClick={() => {
-                                    const sql = buildRowsUpdateSQL(copyTargetRows);
-                                    handleCopy(sql, isMultiRowCopyTarget ? "Copied as Update SQL" : "Row copied as Update SQL");
-                                  }}
-                                >
-                                  {isMultiRowCopyTarget
-                                    ? "Copy Selected as Update SQL"
-                                    : "Copy as Update SQL"}
-                                </ContextMenuItem>
-                              )}
-                            </ContextMenuSubContent>
-                          </ContextMenuSub>
-                        </>
-                      )}
-                    </ContextMenuContent>
-                  </ContextMenu>
+                    );
+                    })}
+                    {/* Bottom spacer for virtual scroll */}
+                    {bottomSpacerHeight - draftRowsHeight > 0 && (
+                      <tr>
+                        <td
+                          colSpan={columns.length + (showRowNumbers ? 1 : 0)}
+                          style={{ height: bottomSpacerHeight - draftRowsHeight, padding: 0, border: 'none' }}
+                        />
+                      </tr>
+                    )}
+                  </>
                 );
-              })}
+              })()}
               {insertDraftRows.map((draft, draftIndex) => (
                 <tr
                   key={draft.tempId}
@@ -2839,8 +2662,196 @@ export function TableView({
                   ))}
                 </tr>
               ))}
+              {/* Bottom spacer for virtual scroll */}
+              {virtualizer.getVirtualItems().length > 0 && (
+                <tr>
+                  <td
+                    colSpan={columns.length + (showRowNumbers ? 1 : 0)}
+                    style={{ height: virtualizer.getTotalSize() - (virtualizer.getVirtualItems().slice(-1)[0]?.end ?? 0), padding: 0, border: 'none' }}
+                  />
+                </tr>
+              )}
             </tbody>
           </table>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            {contextMenuRow !== null && (() => {
+              const rowIndex = contextMenuRow;
+              const row = currentData[rowIndex];
+              if (!row || typeof row !== "object") return null;
+              const isRowSelected = selectedRows.has(rowIndex);
+              const isMultiRowCopyTarget = isRowSelected && selectedRows.size > 1;
+              const copyTargetRows = isMultiRowCopyTarget ? Array.from(selectedRows) : [rowIndex];
+
+              return (
+                <>
+                  {!!tableContext && onFilterChange && selectedCell && (() => {
+                    const cellValue = currentData[selectedCell.row]?.[selectedCell.col];
+                    const colMeta = tableColumns.find((c) => c.name === selectedCell.col);
+                    const columnType = colMeta?.type || "";
+                    const isNull = cellValue === null || cellValue === undefined;
+                    const displayValue = isNull ? "NULL" : formatCellValue(cellValue);
+                    const truncatedValue = displayValue.length > 30
+                      ? displayValue.substring(0, 30) + "..."
+                      : displayValue;
+                    const isNumeric = isNumericType(columnType);
+                    const isString = isStringType(columnType);
+                    const isDate = isDateType(columnType);
+                    const showComparable = isNumeric || isDate || (!isString && !isNull && typeof cellValue === "number");
+
+                    return (
+                      <>
+                        <ContextMenuSub>
+                          <ContextMenuSubTrigger>
+                            <Filter className="w-4 h-4 mr-2" />
+                            {t("datagrid.filter.title", "Filter")}
+                          </ContextMenuSubTrigger>
+                          <ContextMenuSubContent>
+                            <ContextMenuItem onClick={() => applyFilter("=")}>
+                              = {truncatedValue}
+                            </ContextMenuItem>
+                            <ContextMenuItem onClick={() => applyFilter("<>")}>
+                              &lt;&gt; {truncatedValue}
+                            </ContextMenuItem>
+                            {showComparable && !isNull && (
+                              <>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem onClick={() => applyFilter(">")}>
+                                  &gt; {truncatedValue}
+                                </ContextMenuItem>
+                                <ContextMenuItem onClick={() => applyFilter(">=")}>
+                                  &gt;= {truncatedValue}
+                                </ContextMenuItem>
+                                <ContextMenuItem onClick={() => applyFilter("<")}>
+                                  &lt; {truncatedValue}
+                                </ContextMenuItem>
+                                <ContextMenuItem onClick={() => applyFilter("<=")}>
+                                  &lt;= {truncatedValue}
+                                </ContextMenuItem>
+                              </>
+                            )}
+                            {isString && !isNull && (
+                              <>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem onClick={() => applyFilter("LIKE_CONTAINS")}>
+                                  LIKE %{truncatedValue}%
+                                </ContextMenuItem>
+                                <ContextMenuItem onClick={() => applyFilter("LIKE_STARTS")}>
+                                  LIKE {truncatedValue}%
+                                </ContextMenuItem>
+                                <ContextMenuItem onClick={() => applyFilter("LIKE_ENDS")}>
+                                  LIKE %{truncatedValue}
+                                </ContextMenuItem>
+                              </>
+                            )}
+                            <ContextMenuSeparator />
+                            <ContextMenuItem onClick={() => applyFilter("IS NULL")}>
+                              IS NULL
+                            </ContextMenuItem>
+                            <ContextMenuItem onClick={() => applyFilter("IS NOT NULL")}>
+                              IS NOT NULL
+                            </ContextMenuItem>
+                          </ContextMenuSubContent>
+                        </ContextMenuSub>
+                        <ContextMenuSeparator />
+                      </>
+                    );
+                  })()}
+                  <ContextMenuItem onClick={() => handleCopySelection()}>
+                    <Copy className="w-4 h-4 mr-2" />
+                    {getNormalizedCellRange() ? "Copy Selection" : "Copy Cell"}
+                  </ContextMenuItem>
+                  {getNormalizedCellRange() ? (
+                    <ContextMenuSub>
+                      <ContextMenuSubTrigger>
+                        <Files className="w-4 h-4 mr-2" />
+                        Copy Selection as
+                      </ContextMenuSubTrigger>
+                      <ContextMenuSubContent>
+                        <ContextMenuItem onClick={() => handleCopy(buildSelectionCSV(), "Selection copied as CSV")}>
+                          CSV
+                        </ContextMenuItem>
+                        {!!tableContext && (
+                          <ContextMenuItem onClick={() => handleCopy(buildSelectionInsertSQL(), "Selection copied as Insert SQL")}>
+                            Insert SQL
+                          </ContextMenuItem>
+                        )}
+                        {canUpdateDelete && (
+                          <ContextMenuItem onClick={() => handleCopy(buildSelectionUpdateSQL(), "Selection copied as Update SQL")}>
+                            Update SQL
+                          </ContextMenuItem>
+                        )}
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                  ) : (
+                    <>
+                      <ContextMenuItem onClick={() => {
+                        if (isMultiRowCopyTarget) {
+                          handleCopy(buildRowsTSV(copyTargetRows), `Copied ${copyTargetRows.length} row(s)`);
+                          return;
+                        }
+                        const values = columns.map((col) => {
+                          const val = getCellDisplayValue(rowIndex, col, row[col]);
+                          return val === null || val === undefined ? "" : String(val);
+                        }).join("\t");
+                        handleCopy(values, "Row copied");
+                      }}>
+                        <TableIcon className="w-4 h-4 mr-2" />
+                        {isMultiRowCopyTarget ? "Copy Selected Rows" : "Copy Row"}
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      {canUpdateDelete && isCellModified(rowIndex, selectedCell?.col || "") && (
+                        <>
+                          <ContextMenuItem onClick={() => {
+                            if (selectedCell && selectedCell.row === rowIndex) {
+                              const key = `${rowIndex}_${selectedCell.col}`;
+                              setPendingChanges((prev) => {
+                                const next = new Map(prev);
+                                next.delete(key);
+                                return next;
+                              });
+                            }
+                          }}>
+                            <Undo2 className="w-4 h-4 mr-2" />
+                            Undo This Cell
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                        </>
+                      )}
+                      <ContextMenuSub>
+                        <ContextMenuSubTrigger>
+                          <Files className="w-4 h-4 mr-2" />
+                          Copy as
+                        </ContextMenuSubTrigger>
+                        <ContextMenuSubContent>
+                          <ContextMenuItem onClick={() => handleCopy(buildRowsCSV(copyTargetRows), isMultiRowCopyTarget ? "Copied as CSV" : "Row copied as CSV")}>
+                            {isMultiRowCopyTarget ? "Copy Selected as CSV" : "Copy as CSV"}
+                          </ContextMenuItem>
+                          {!!tableContext && (
+                            <ContextMenuItem onClick={() => {
+                              const sql = buildRowsInsertSQL(copyTargetRows);
+                              handleCopy(sql, isMultiRowCopyTarget ? "Copied as Insert SQL" : "Row copied as Insert SQL");
+                            }}>
+                              {isMultiRowCopyTarget ? "Copy Selected as Insert SQL" : "Copy as Insert SQL"}
+                            </ContextMenuItem>
+                          )}
+                          {canUpdateDelete && (
+                            <ContextMenuItem onClick={() => {
+                              const sql = buildRowsUpdateSQL(copyTargetRows);
+                              handleCopy(sql, isMultiRowCopyTarget ? "Copied as Update SQL" : "Row copied as Update SQL");
+                            }}>
+                              {isMultiRowCopyTarget ? "Copy Selected as Update SQL" : "Copy as Update SQL"}
+                            </ContextMenuItem>
+                          )}
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </ContextMenuContent>
+          </ContextMenu>
         )}
       </div>
 
