@@ -5,6 +5,7 @@ import {
   LayoutPanelLeft,
   Palette,
   RefreshCw,
+  Server,
   Settings2,
   Trash2,
 } from "lucide-react";
@@ -61,6 +62,7 @@ import { ShortcutRecorder } from "@/lib/shortcuts/recorder";
 import { SHORTCUT_DEFAULTS, SCOPE_GROUP_ORDER } from "@/lib/shortcuts/defaults";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import type { ShortcutId } from "@/lib/shortcuts/types";
+import { McpSettings } from "./McpSettings";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -75,7 +77,7 @@ interface SettingsDialogProps {
   onShowZebraStripesChange?: (v: boolean) => void;
 }
 
-type SettingsSection = "general" | "layout" | "ai" | "shortcuts" | "about";
+type SettingsSection = "general" | "layout" | "ai" | "shortcuts" | "mcp" | "about";
 type AIProviderPreset = {
   type: AIProviderType;
   label: string;
@@ -550,6 +552,17 @@ export function SettingsDialog({
               </button>
               <button
                 className={`w-full text-left rounded-md px-3 py-2 text-sm transition-colors flex items-center gap-2 ${
+                  activeSection === "mcp"
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60"
+                }`}
+                onClick={() => setActiveSection("mcp")}
+              >
+                <Server className="w-4 h-4" />
+                {t("settings.sections.mcp")}
+              </button>
+              <button
+                className={`w-full text-left rounded-md px-3 py-2 text-sm transition-colors flex items-center gap-2 ${
                   activeSection === "about"
                     ? "bg-background shadow-sm text-foreground"
                     : "text-muted-foreground hover:bg-muted/60"
@@ -979,6 +992,8 @@ export function SettingsDialog({
             {activeSection === "shortcuts" && (
               <ShortcutsPanel />
             )}
+
+            {activeSection === "mcp" && <McpSettings />}
 
             {activeSection === "about" && (
               <div className="space-y-4">
