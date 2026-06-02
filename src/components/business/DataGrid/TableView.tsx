@@ -1312,6 +1312,8 @@ export function TableView({
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
       if (!isEditableForUpdates) return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
       const text = e.clipboardData.getData("text/plain");
       if (!text) return;
       e.preventDefault();
