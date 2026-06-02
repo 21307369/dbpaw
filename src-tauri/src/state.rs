@@ -8,6 +8,7 @@ pub struct AppState {
     pub local_db: Mutex<Option<Arc<LocalDb>>>,
     pub pool_manager: Arc<PoolManager>,
     pub redis_cache: Mutex<RedisConnectionCache>,
+    pub mcp_process: Mutex<Option<std::process::Child>>,
 }
 
 impl AppState {
@@ -16,6 +17,7 @@ impl AppState {
             local_db: Mutex::new(None),
             pool_manager: Arc::new(PoolManager::new()),
             redis_cache: Mutex::new(RedisConnectionCache::new()),
+            mcp_process: Mutex::new(None),
         }
     }
 }
