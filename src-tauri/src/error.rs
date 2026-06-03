@@ -250,3 +250,77 @@ impl AppError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_conn_failed_display() {
+        let err = AppError::conn_failed("connection refused", "check host and port");
+        assert_eq!(err.to_string(), "[ERR-1001] connection refused (check host and port)");
+    }
+
+    #[test]
+    fn test_conn_failed_no_hint() {
+        let err = AppError::ConnectionFailed {
+            code: codes::CONN_FAILED,
+            message: "timeout".to_string(),
+            hint: None,
+            source: None,
+        };
+        assert_eq!(err.to_string(), "[ERR-1001] timeout");
+    }
+
+    #[test]
+    fn test_query_failed_display() {
+        let err = AppError::query_failed("syntax error near SELECT");
+        assert_eq!(err.to_string(), "[ERR-2001] syntax error near SELECT");
+    }
+
+    #[test]
+    fn test_validation_display() {
+        let err = AppError::validation("host cannot be empty");
+        assert_eq!(err.to_string(), "[ERR-3001] host cannot be empty");
+    }
+
+    #[test]
+    fn test_unsupported_display() {
+        let err = AppError::unsupported("Routines not supported for this driver");
+        assert_eq!(err.to_string(), "[ERR-5001] Routines not supported for this driver");
+    }
+
+    #[test]
+    fn test_from_app_error_to_string() {
+        let err = AppError::conn_auth_failed("invalid credentials");
+        let s: String = err.into();
+        assert!(s.starts_with("[ERR-1003]"));
+        assert!(s.contains("invalid credentials"));
+    }
+
+    #[test]
+    fn test_conn_timeout() {
+        let err = AppError::conn_timeout("connection timed out");
+        assert_eq!(err.to_string(), "[ERR-1002] connection timed out");
+    }
+
+    #[test]
+    fn test_conn_tls_error() {
+        let err = AppError::conn_tls_error("handshake failed");
+        let s = err.to_string();
+        assert!(s.contains("[ERR-1004]"));
+        assert!(s.contains("TLS handshake failed"));
+    }
+
+    #[test]
+    fn test_query_timeout() {
+        let err = AppError::query_timeout("query execution timed out");
+        assert_eq!(err.to_string(), "[ERR-2003] query execution timed out");
+    }
+
+    #[test]
+    fn test_internal_error() {
+        let err = AppError::internal("unexpected state");
+        assert_eq!(err.to_string(), "[ERR-5002] unexpected state");
+    }
+}
