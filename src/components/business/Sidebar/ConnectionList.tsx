@@ -67,7 +67,6 @@ import type {
   ConnectionForm,
   CreateDatabasePayload,
   Driver,
-  RedisConnectionMode,
   RoutineType,
   SavedQuery,
   SavedConnection,
@@ -106,92 +105,24 @@ import {
   normalizeConnectionFormInput,
 } from "@/lib/connection-form/rules";
 import { validateConnectionFormInput } from "@/lib/connection-form/validate";
-import { isRedisClusterDatabaseList } from "@/components/business/Redis/redis-utils";
 import { CreateElasticsearchIndexDialog } from "@/components/business/Elasticsearch/CreateElasticsearchIndexDialog";
 import {
   elasticsearchIndexActionSuccessMessage,
   executeElasticsearchIndexAction,
   type ElasticsearchIndexAction,
 } from "@/components/business/Elasticsearch/elasticsearch-index-management";
-
-interface Column {
-  name: string;
-  type: string;
-  isPrimaryKey?: boolean;
-  nullable?: boolean;
-}
-
-interface TableInfo {
-  name: string;
-  schema: string;
-  columns: Column[];
-  isSystem?: boolean;
-  indexStatus?: string | null;
-  type?: string;
-}
-
-interface RoutineInfo {
-  name: string;
-  schema: string;
-  type: RoutineType;
-}
-
-interface SchemaInfo {
-  name: string;
-  tables: TableInfo[];
-  procedures: RoutineInfo[];
-  functions: RoutineInfo[];
-}
-
-interface DatabaseInfo {
-  name: string;
-  schemas: SchemaInfo[];
-  tables: TableInfo[];
-  routines: RoutineInfo[];
-  redisCursor?: string;
-  redisIsPartial?: boolean;
-  redisRequiresPattern?: boolean;
-  redisKeyCount?: number;
-}
+import { useRedisKeys } from "./hooks/useRedisKeys";
+import type {
+  TableInfo,
+  RoutineInfo,
+  SchemaInfo,
+  DatabaseInfo,
+  Connection,
+  DatasourceTreeAdapter,
+} from "./connection-list/types";
 
 type DatabaseExportFormat = "sql_dml" | "sql_ddl" | "sql_full";
 type TableExportFormat = "csv" | "json" | "sql_dml" | "sql_ddl" | "sql_full";
-
-interface Connection {
-  id: string;
-  name: string;
-  type: Driver;
-  host: string;
-  port: string;
-  database?: string;
-  username: string;
-  ssl?: boolean;
-  sslMode?: "require" | "verify_ca";
-  sslCaCert?: string;
-  filePath?: string;
-  sshEnabled?: boolean;
-  sshHost?: string;
-  sshPort?: number;
-  sshUsername?: string;
-  sshPassword?: string;
-  sshKeyPath?: string;
-  mode?: RedisConnectionMode;
-  seedNodes?: string[];
-  sentinels?: string[];
-  connectTimeoutMs?: number;
-  serviceName?: string;
-  sentinelPassword?: string;
-  authMode?: "none" | "basic" | "api_key";
-  apiKeyId?: string;
-  apiKeySecret?: string;
-  apiKeyEncoded?: string;
-  cloudId?: string;
-  authSource?: string;
-  databases: DatabaseInfo[];
-  isConnected: boolean;
-  connectState: "idle" | "connecting" | "success" | "error";
-  connectError?: string;
-}
 
 function groupSqlObjectsBySchema(
   tables: TableInfo[],
@@ -254,25 +185,6 @@ type SelectedTableNode = {
   table: string;
   schema: string;
 };
-
-interface DatasourceTreeAdapter {
-  supportsSchemaNode: boolean;
-  isDatabaseExpandable: boolean;
-  listDatabases: () => Promise<string[]>;
-  loadDatabaseChildren: (databaseName: string) => Promise<TableInfo[]>;
-  shouldSkipTableColumns: boolean;
-  getItemIcon: () => ReactNode;
-  onItemActivate: (database: DatabaseInfo, table: TableInfo) => void;
-  getDatabaseRowActions: (database: DatabaseInfo) => ReactNode | undefined;
-  onDatabaseDoubleClick?: (database: DatabaseInfo) => void;
-  renderDatabaseFooter: (database: DatabaseInfo, level: number) => ReactNode;
-  renderTableContextMenu: (
-    database: DatabaseInfo,
-    table: TableInfo,
-  ) => ReactNode;
-  renderDatabaseContextMenu?: (databaseName: string) => ReactNode;
-  databaseGroups?: DatabaseGroupConfig[];
-}
 
 const defaultCreateDatabaseForm: CreateDatabaseForm = {
   name: "",
@@ -617,6 +529,13 @@ export function ConnectionList({
   connectionsRef.current = connections;
   const expandedDatabasesRef = useRef(expandedDatabases);
   expandedDatabasesRef.current = expandedDatabases;
+
+  const getDatasourceTreeAdapterRef = useRef<
+    (connection: Connection) => DatasourceTreeAdapter
+  >(() => {
+    throw new Error("getDatasourceTreeAdapter not yet initialized");
+  });
+
   const [expandedDatabaseGroups, setExpandedDatabaseGroups] = useState<
     Set<string>
   >(new Set());
@@ -721,6 +640,14 @@ export function ConnectionList({
     buildConnectionFormDefaults(defaultConnectionDriver),
   );
   const [searchTerm, setSearchTerm] = useState("");
+
+  const { loadRedisKeysPage } = useRedisKeys({
+    connectionsRef,
+    setConnections,
+    searchTerm,
+    getDatasourceTreeAdapter: (conn) => getDatasourceTreeAdapterRef.current(conn),
+  });
+
   const [savedQueriesByConnection, setSavedQueriesByConnection] = useState<
     Record<string, SavedQuery[]>
   >({});
@@ -1257,92 +1184,7 @@ export function ConnectionList({
     });
   };
 
-  const redisKeyToTableInfo = (key: {
-    key: string;
-    keyType: string;
-    ttl: number;
-  }): TableInfo => ({
-    name: key.key,
-    schema: key.keyType,
-    columns: [
-      {
-        name:
-          key.ttl > 0
-            ? `ttl ${key.ttl}s`
-            : key.ttl === -1
-              ? "persist"
-              : "expired",
-        type: key.keyType,
-      },
-    ],
-  });
 
-  const loadRedisKeysPage = useCallback(
-    async (
-      connectionId: string,
-      databaseName: string,
-      cursor: string,
-      append: boolean,
-    ): Promise<TableInfo[]> => {
-      const targetConnection = connectionsRef.current.find(
-        (conn) => conn.id === connectionId,
-      );
-      const isRedisCluster =
-        targetConnection &&
-        !getDatasourceTreeAdapter(targetConnection).isDatabaseExpandable &&
-        isRedisClusterDatabaseList(targetConnection.databases);
-      if (isRedisCluster && !searchTerm.trim()) {
-        setConnections((prev) =>
-          prev.map((conn) => {
-            if (conn.id !== connectionId) return conn;
-            return {
-              ...conn,
-              databases: conn.databases.map((db) => {
-                if (db.name !== databaseName) return db;
-                return {
-                  ...db,
-                  tables: [],
-                  redisCursor: "0",
-                  redisIsPartial: false,
-                  redisRequiresPattern: true,
-                };
-              }),
-            };
-          }),
-        );
-        return [];
-      }
-      const pattern = searchTerm.trim() ? `*${searchTerm.trim()}*` : "*";
-      const response = await api.redis.scanKeys({
-        id: Number(connectionId),
-        database: databaseName,
-        cursor,
-        pattern,
-        limit: 200,
-      });
-      const newKeys = response.keys.map(redisKeyToTableInfo);
-      setConnections((prev) =>
-        prev.map((conn) => {
-          if (conn.id !== connectionId) return conn;
-          return {
-            ...conn,
-            databases: conn.databases.map((db) => {
-              if (db.name !== databaseName) return db;
-              return {
-                ...db,
-                tables: append ? [...db.tables, ...newKeys] : newKeys,
-                redisCursor: response.cursor,
-                redisIsPartial: response.isPartial,
-                redisRequiresPattern: false,
-              };
-            }),
-          };
-        }),
-      );
-      return newKeys;
-    },
-    [searchTerm],
-  );
 
   useEffect(() => {
     connectionsRef.current.forEach((conn) => {
@@ -1863,6 +1705,8 @@ export function ConnectionList({
       databaseGroups: config.databaseGroups,
     };
   };
+
+  getDatasourceTreeAdapterRef.current = getDatasourceTreeAdapter;
 
   const fetchAndSetTables = async (
     connectionId: string,
