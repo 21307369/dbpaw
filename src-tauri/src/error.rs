@@ -115,3 +115,138 @@ impl std::error::Error for AppError {
         }
     }
 }
+
+impl AppError {
+    pub fn conn_failed(message: impl Into<String>, hint: impl Into<String>) -> Self {
+        AppError::ConnectionFailed {
+            code: codes::CONN_FAILED,
+            message: message.into(),
+            hint: Some(hint.into()),
+            source: None,
+        }
+    }
+
+    pub fn conn_failed_with(
+        message: impl Into<String>,
+        hint: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        AppError::ConnectionFailed {
+            code: codes::CONN_FAILED,
+            message: message.into(),
+            hint: Some(hint.into()),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    pub fn conn_timeout(message: impl Into<String>) -> Self {
+        AppError::ConnectionFailed {
+            code: codes::CONN_TIMEOUT,
+            message: message.into(),
+            hint: None,
+            source: None,
+        }
+    }
+
+    pub fn conn_auth_failed(message: impl Into<String>) -> Self {
+        AppError::ConnectionFailed {
+            code: codes::CONN_AUTH_FAILED,
+            message: message.into(),
+            hint: Some("Check username and password".to_string()),
+            source: None,
+        }
+    }
+
+    pub fn conn_tls_error(message: impl Into<String>) -> Self {
+        AppError::ConnectionFailed {
+            code: codes::CONN_TLS_ERROR,
+            message: message.into(),
+            hint: Some("TLS handshake failed - try disabling SSL".to_string()),
+            source: None,
+        }
+    }
+
+    pub fn query_failed(message: impl Into<String>) -> Self {
+        AppError::Query {
+            code: codes::QUERY_FAILED,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    pub fn query_failed_with(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        AppError::Query {
+            code: codes::QUERY_FAILED,
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    pub fn query_syntax(message: impl Into<String>) -> Self {
+        AppError::Query {
+            code: codes::QUERY_SYNTAX,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    pub fn query_timeout(message: impl Into<String>) -> Self {
+        AppError::Query {
+            code: codes::QUERY_TIMEOUT,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    pub fn validation(message: impl Into<String>) -> Self {
+        AppError::Validation {
+            code: codes::VALIDATION,
+            message: message.into(),
+        }
+    }
+
+    pub fn ai_provider(message: impl Into<String>) -> Self {
+        AppError::Ai {
+            code: codes::AI_PROVIDER,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    pub fn ai_key(message: impl Into<String>) -> Self {
+        AppError::Ai {
+            code: codes::AI_KEY,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    pub fn unsupported(message: impl Into<String>) -> Self {
+        AppError::Unsupported {
+            code: codes::UNSUPPORTED,
+            message: message.into(),
+        }
+    }
+
+    pub fn internal(message: impl Into<String>) -> Self {
+        AppError::Internal {
+            code: codes::INTERNAL,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    pub fn internal_with(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        AppError::Internal {
+            code: codes::INTERNAL,
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+}
