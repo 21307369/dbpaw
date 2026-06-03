@@ -106,7 +106,8 @@ pub(crate) fn conn_failed_error(e: &dyn std::fmt::Display) -> String {
         "hint: check host, port, credentials, and SSL settings"
     };
 
-    format!("[CONN_FAILED] {raw} ({hint})")
+    // Use AppError internally, return String for compatibility
+    crate::error::AppError::conn_failed(raw, hint).to_string()
 }
 
 pub(crate) fn strip_trailing_statement_terminator(sql: &str) -> &str {
@@ -472,7 +473,7 @@ mod tests {
         let msg = conn_failed_error(
             &"DPI-1047: Cannot locate a 64-bit Oracle Client library: \"dlopen(libclntsh.dylib, 0x0001): tried: '/usr/local/lib/libclntsh.dylib' (no such file)\"",
         );
-        assert!(msg.starts_with("[CONN_FAILED]"));
+        assert!(msg.starts_with("[ERR-1001]"));
         assert!(msg.contains("Oracle Instant Client is not installed"));
         assert!(msg.contains("DYLD_LIBRARY_PATH"));
         assert!(!msg.contains("TLS/SSL handshake failed"));
@@ -483,7 +484,7 @@ mod tests {
         let msg = conn_failed_error(
             &"error communicating with database: received fatal alert: HandshakeFailure",
         );
-        assert!(msg.starts_with("[CONN_FAILED]"));
+        assert!(msg.starts_with("[ERR-1001]"));
         assert!(msg.contains("TLS/SSL handshake failed"));
         assert!(!msg.contains("username/password"));
     }
@@ -516,7 +517,7 @@ mod tests {
     #[test]
     fn conn_failed_error_generic_hint() {
         let msg = conn_failed_error(&"some unknown database error");
-        assert!(msg.starts_with("[CONN_FAILED]"));
+        assert!(msg.starts_with("[ERR-1001]"));
         assert!(msg.contains("hint:"));
         assert!(!msg.contains("username/password"));
     }
