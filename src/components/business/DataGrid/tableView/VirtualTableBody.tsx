@@ -13,7 +13,7 @@ import {
   formatCellValue,
   isComplexValue,
 } from "./utils";
-import { DraftRows } from "./DraftRows";
+import { DraftRow } from "./DraftRows";
 import { TableContextMenuContent } from "./TableContextMenuContent";
 import type { InsertDraftRow } from "./hooks/useCellEditing";
 import type { ColumnInfo } from "@/services/api";
@@ -444,6 +444,15 @@ export const VirtualTableBody = memo(function VirtualTableBody({
   headerClickStateRef,
   t,
 }: VirtualTableBodyProps) {
+  const dataRowCount = currentData.length;
+  const colSpan = columns.length + (showRowNumbers ? 1 : 0);
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const topSpacerHeight = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const bottomSpacerHeight = virtualItems.length > 0
+    ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
+    : virtualizer.getTotalSize();
+
   return (
     <ContextMenu onOpenChange={(open) => { if (!open) setContextMenuRow(null); }}>
     <ContextMenuTrigger asChild>
@@ -542,89 +551,88 @@ export const VirtualTableBody = memo(function VirtualTableBody({
         </tr>
       </thead>
       <tbody>
-        {(() => {
-          const virtualItems = virtualizer.getVirtualItems();
-          const lastItemEnd = virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].end : 0;
-          const bottomSpacerHeight = virtualizer.getTotalSize() - lastItemEnd;
-          const draftRowsHeight = insertDraftRows.length * 36;
-          return (
-            <>
-              {/* Top spacer for virtual scroll */}
-              {virtualItems.length > 0 && (
-                <tr>
-                  <td
-                    colSpan={columns.length + (showRowNumbers ? 1 : 0)}
-                    style={{ height: virtualItems[0]?.start ?? 0, padding: 0, border: 'none' }}
-                  />
-                </tr>
-              )}
-              {virtualItems.map((virtualRow) => {
-                const rowIndex = virtualRow.index;
-                const row = currentData[rowIndex];
-                if (!row || typeof row !== "object") return null;
-                const isRowSelected = selectedRows.has(rowIndex);
-
-                return (
-                  <DataRow
-                    key={rowIndex}
-                    rowIndex={rowIndex}
-                    row={row}
-                    columns={columns}
-                    showRowNumbers={showRowNumbers}
-                    showZebraStripes={showZebraStripes}
-                    startIndex={startIndex}
-                    isRowSelected={isRowSelected}
-                    isMultiRowSelection={isRowSelected && selectedRows.size > 1}
-                    editingCell={editingCell}
-                    selectedCell={selectedCell}
-                    cellSelectionRange={cellSelectionRange}
-                    normalizedSearchKeyword={normalizedSearchKeyword}
-                    matchedCellKeys={matchedCellKeys}
-                    currentSearchMatch={currentSearchMatch}
-                    isEditableForUpdates={isEditableForUpdates}
-                    editValue={editValue}
-                    editInputRef={editInputRef}
-                    getColWidth={getColWidth}
-                    getCellDisplayValue={getCellDisplayValue}
-                    isCellModified={isCellModified}
-                    handleCellClick={handleCellClick}
-                    handleCellDoubleClick={handleCellDoubleClick}
-                    handleCellMouseDownForRange={handleCellMouseDownForRange}
-                    handleCellMouseMoveForRange={handleCellMouseMoveForRange}
-                    handleIndexMouseDown={handleIndexMouseDown}
-                    handleIndexMouseEnter={handleIndexMouseEnter}
-                    handleEditKeyDown={handleEditKeyDown}
-                    setEditValue={setEditValue}
-                    commitEdit={commitEdit}
-                    setComplexViewer={setComplexViewer}
-                    setContextMenuRow={setContextMenuRow}
-                  />
-                );
-              })}
-              {/* Bottom spacer for virtual scroll */}
-              {bottomSpacerHeight - draftRowsHeight > 0 && (
-                <tr>
-                  <td
-                    colSpan={columns.length + (showRowNumbers ? 1 : 0)}
-                    style={{ height: bottomSpacerHeight - draftRowsHeight, padding: 0, border: 'none' }}
-                  />
-                </tr>
-              )}
-            </>
-          );
-        })()}
-        <DraftRows
-          insertDraftRows={insertDraftRows}
-          columns={columns}
-          getColWidth={getColWidth}
-          handleDraftValueChange={handleDraftValueChange}
-        />
-        {/* Bottom spacer for virtual scroll */}
-        {virtualizer.getVirtualItems().length > 0 && (
-          <tr>
+        {/* Top spacer */}
+        {topSpacerHeight > 0 && (
+          <tr key="top-spacer">
             <td
-              colSpan={columns.length + (showRowNumbers ? 1 : 0)}
-              style={{ height: virtualizer.getTotalSize() - (virtualizer.getVirtualItems().slice(-1)[0]?.end ?? 0), padding: 0, border: 'none' }}
+              colSpan={colSpan}
+              style={{ height: topSpacerHeight, padding: 0, border: 'none' }}
+            />
+          </tr>
+        )}
+
+        {/* Virtual items (data rows + draft rows) */}
+        {virtualItems.map((virtualRow) => {
+          const virtualIndex = virtualRow.index;
+
+          // Draft rows: indices >= dataRowCount
+          if (virtualIndex >= dataRowCount) {
+            const draftIndex = virtualIndex - dataRowCount;
+            const draft = insertDraftRows[draftIndex];
+            if (!draft) return null;
+
+            return (
+              <DraftRow
+                key={`draft-${draft.tempId}`}
+                draft={draft}
+                columns={columns}
+                showRowNumbers={showRowNumbers}
+                getColWidth={getColWidth}
+                handleDraftValueChange={handleDraftValueChange}
+              />
+            );
+          }
+
+          // Data rows
+          const rowIndex = virtualIndex;
+          const row = currentData[rowIndex];
+          if (!row || typeof row !== "object") return null;
+          const isRowSelected = selectedRows.has(rowIndex);
+
+          return (
+            <DataRow
+              key={rowIndex}
+              rowIndex={rowIndex}
+              row={row}
+              columns={columns}
+              showRowNumbers={showRowNumbers}
+              showZebraStripes={showZebraStripes}
+              startIndex={startIndex}
+              isRowSelected={isRowSelected}
+              isMultiRowSelection={isRowSelected && selectedRows.size > 1}
+              editingCell={editingCell}
+              selectedCell={selectedCell}
+              cellSelectionRange={cellSelectionRange}
+              normalizedSearchKeyword={normalizedSearchKeyword}
+              matchedCellKeys={matchedCellKeys}
+              currentSearchMatch={currentSearchMatch}
+              isEditableForUpdates={isEditableForUpdates}
+              editValue={editValue}
+              editInputRef={editInputRef}
+              getColWidth={getColWidth}
+              getCellDisplayValue={getCellDisplayValue}
+              isCellModified={isCellModified}
+              handleCellClick={handleCellClick}
+              handleCellDoubleClick={handleCellDoubleClick}
+              handleCellMouseDownForRange={handleCellMouseDownForRange}
+              handleCellMouseMoveForRange={handleCellMouseMoveForRange}
+              handleIndexMouseDown={handleIndexMouseDown}
+              handleIndexMouseEnter={handleIndexMouseEnter}
+              handleEditKeyDown={handleEditKeyDown}
+              setEditValue={setEditValue}
+              commitEdit={commitEdit}
+              setComplexViewer={setComplexViewer}
+              setContextMenuRow={setContextMenuRow}
+            />
+          );
+        })}
+
+        {/* Bottom spacer */}
+        {bottomSpacerHeight > 0 && (
+          <tr key="bottom-spacer">
+            <td
+              colSpan={colSpan}
+              style={{ height: bottomSpacerHeight, padding: 0, border: 'none' }}
             />
           </tr>
         )}

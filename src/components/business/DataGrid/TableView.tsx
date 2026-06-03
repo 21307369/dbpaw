@@ -317,10 +317,10 @@ export function TableView({
 
   // Virtual scrolling — only render visible rows
   const virtualizer = useVirtualizer({
-    count: currentData.length,
+    count: currentData.length + insertDraftRows.length,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => 36,
-    overscan: 20,
+    overscan: 10,
   });
 
   const handleShowDDL = () => {
