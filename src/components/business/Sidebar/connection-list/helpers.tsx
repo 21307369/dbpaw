@@ -1,7 +1,7 @@
 import { CircleDot, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import type { ConnectionForm } from "@/services/api";
 import { buildConnectionFormDefaults } from "@/lib/connection-form/rules";
-import type { Connection } from "./types";
+import type { Connection, TableInfo, RoutineInfo, SchemaInfo } from "./types";
 
 export { getConnectionIcon } from "@/lib/driver-registry";
 
@@ -161,3 +161,47 @@ export const buildFormFromConnection = (
     authSource: connection.authSource || "",
     ...overrides,
   });
+
+export function groupSqlObjectsBySchema(
+  tables: TableInfo[],
+  routines: RoutineInfo[],
+): SchemaInfo[] {
+  const groupedTables = tables.reduce<Record<string, TableInfo[]>>(
+    (acc, table) => {
+      const schemaName = (table.schema || "").trim() || "public";
+      const current = acc[schemaName] || [];
+      current.push(table);
+      acc[schemaName] = current;
+      return acc;
+    },
+    {},
+  );
+  const groupedRoutines = routines.reduce<Record<string, RoutineInfo[]>>(
+    (acc, routine) => {
+      const schemaName = (routine.schema || "").trim() || "dbo";
+      const current = acc[schemaName] || [];
+      current.push(routine);
+      acc[schemaName] = current;
+      return acc;
+    },
+    {},
+  );
+  const schemaNames = Array.from(
+    new Set([...Object.keys(groupedTables), ...Object.keys(groupedRoutines)]),
+  ).sort((a, b) => a.localeCompare(b));
+
+  return schemaNames.map((name) => {
+    const schemaTables = groupedTables[name] || [];
+    const schemaRoutines = groupedRoutines[name] || [];
+    return {
+      name,
+      tables: [...schemaTables].sort((a, b) => a.name.localeCompare(b.name)),
+      procedures: schemaRoutines
+        .filter((routine) => routine.type === "procedure")
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      functions: schemaRoutines
+        .filter((routine) => routine.type === "function")
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    };
+  });
+}
