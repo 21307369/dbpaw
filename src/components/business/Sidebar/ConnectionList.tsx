@@ -69,7 +69,6 @@ import type {
   Driver,
   RoutineType,
   SavedQuery,
-  SavedConnection,
   EventInfo,
   SequenceInfo,
   TypeInfo,
@@ -93,12 +92,12 @@ import { ConnectionDialog } from "./connection-list/ConnectionDialog";
 import { ImportDialog } from "./ImportDialog";
 import { ConnectionContextMenu } from "./ConnectionContextMenu";
 import {
+  buildFormFromConnection,
   getExportDefaultName,
   getExportFilter,
-  mergeConnections,
   renderConnectionStatusIndicator,
-  sanitizeConnectionErrorMessage,
 } from "./connection-list/helpers";
+import { useConnectionCrud, mapSavedConnection } from "./hooks/useConnectionCrud";
 import { useTranslation } from "react-i18next";
 import {
   buildConnectionFormDefaults,
@@ -292,111 +291,6 @@ const mssqlCollationOptions = [
 
 const defaultConnectionDriver: Driver = "postgres";
 
-const buildFormFromConnection = (
-  connection: Pick<
-    Connection,
-    | "type"
-    | "name"
-    | "host"
-    | "port"
-    | "database"
-    | "username"
-    | "ssl"
-    | "sslMode"
-    | "sslCaCert"
-    | "filePath"
-    | "sshEnabled"
-    | "sshHost"
-    | "sshPort"
-    | "sshUsername"
-    | "sshKeyPath"
-    | "mode"
-    | "seedNodes"
-    | "sentinels"
-    | "connectTimeoutMs"
-    | "serviceName"
-    | "sentinelPassword"
-    | "authMode"
-    | "apiKeyId"
-    | "apiKeySecret"
-    | "apiKeyEncoded"
-    | "cloudId"
-    | "authSource"
-  >,
-  overrides: Partial<ConnectionForm> = {},
-): ConnectionForm =>
-  buildConnectionFormDefaults(connection.type, {
-    name: connection.name,
-    host: connection.host || "",
-    port: Number(connection.port) || undefined,
-    database: connection.database || "",
-    schema: connection.type === "postgres" ? "public" : "",
-    username: connection.username || "",
-    password: "",
-    ssl: connection.ssl || false,
-    sslMode: connection.sslMode || "require",
-    sslCaCert: connection.sslCaCert || "",
-    filePath: connection.filePath || "",
-    sshEnabled: connection.sshEnabled || false,
-    sshHost: connection.sshHost || "",
-    sshPort: connection.sshPort || undefined,
-    sshUsername: connection.sshUsername || "",
-    sshPassword: "",
-    sshKeyPath: connection.sshKeyPath || "",
-    mode: connection.mode,
-    seedNodes: connection.seedNodes || [],
-    sentinels: connection.sentinels || [],
-    connectTimeoutMs: connection.connectTimeoutMs,
-    serviceName: connection.serviceName || "",
-    sentinelPassword: "",
-    authMode: connection.authMode || "none",
-    apiKeyId: connection.apiKeyId || "",
-    apiKeySecret: "",
-    apiKeyEncoded: "",
-    cloudId: connection.cloudId || "",
-    authSource: connection.authSource || "",
-    ...overrides,
-  });
-
-const mapSavedConnection = (
-  c: SavedConnection,
-  fallbackName: string,
-): Connection => ({
-  id: String(c.id),
-  name: c.name || fallbackName,
-  type: (c.dbType as Driver) || "postgres",
-  host: c.host || "",
-  port: String(c.port || ""),
-  database: c.database || "",
-  username: c.username || "",
-  ssl: c.ssl || false,
-  sslMode: c.sslMode || "require",
-  sslCaCert: c.sslCaCert || "",
-  filePath: c.filePath || "",
-  sshEnabled: c.sshEnabled || false,
-  sshHost: c.sshHost || "",
-  sshPort: c.sshPort || 22,
-  sshUsername: c.sshUsername || "root",
-  sshPassword: c.sshPassword || "",
-  sshKeyPath: c.sshKeyPath || "",
-  mode: c.mode || undefined,
-  seedNodes: c.seedNodes || [],
-  sentinels: c.sentinels || [],
-  connectTimeoutMs: c.connectTimeoutMs || undefined,
-  serviceName: c.serviceName || undefined,
-  sentinelPassword: c.sentinelPassword || "",
-  authMode: c.authMode || "none",
-  apiKeyId: c.apiKeyId || "",
-  apiKeySecret: c.apiKeySecret || "",
-  apiKeyEncoded: c.apiKeyEncoded || "",
-  cloudId: c.cloudId || "",
-  authSource: c.authSource || "",
-  isConnected: false,
-  connectState: "idle",
-  connectError: undefined,
-  databases: [],
-});
-
 interface ConnectionListProps {
   onTableSelect?: (
     connection: string,
@@ -500,7 +394,6 @@ export function ConnectionList({
   const tableNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const handledRevealRequestIdRef = useRef<number | null>(null);
   const handledRedisRefreshIdRef = useRef<number | null>(null);
-  const [connections, setConnections] = useState<Connection[]>([]);
   const {
     expandedConnections,
     setExpandedConnections,
@@ -525,6 +418,30 @@ export function ConnectionList({
     toggleGroupNode,
     toggleTable,
   } = useTreeExpansion();
+
+  const {
+    connections,
+    setConnections,
+    isLoadingConnections,
+    isDeleting,
+    deleteTargetConnectionId,
+    setDeleteTargetConnectionId,
+    fetchConnections,
+    connectConnection,
+    fetchAndSetDatabases,
+    clearConnectionTreeCache,
+    handleReconnect,
+    handleDuplicateConnection,
+    handleDeleteConnection,
+  } = useConnectionCrud({
+    setExpandedConnections,
+    setExpandedDatabases,
+    setExpandedSchemas,
+    setExpandedTables,
+    listDatabases: (connection) =>
+      getDatasourceTreeAdapter(connection).listDatabases(),
+  });
+
   // Update refs every render so effects can read latest values without
   // listing them as deps (avoids re-firing on every connection state update).
   connectionsRef.current = connections;
@@ -579,12 +496,8 @@ export function ConnectionList({
   const [isTesting, setIsTesting] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [isCreatingDatabase, setIsCreatingDatabase] = useState(false);
   const [isImportingSql, setIsImportingSql] = useState(false);
-  const [deleteTargetConnectionId, setDeleteTargetConnectionId] = useState<
-    string | null
-  >(null);
   const [createDbConnectionId, setCreateDbConnectionId] = useState<
     string | null
   >(null);
@@ -608,7 +521,6 @@ export function ConnectionList({
   const [mysqlCharsets, setMysqlCharsets] = useState<string[]>([]);
   const [mysqlCollations, setMysqlCollations] = useState<string[]>([]);
   const [loadingMysqlOptions, setLoadingMysqlOptions] = useState(false);
-  const [isLoadingConnections, setIsLoadingConnections] = useState(false);
   const [isLoadingQueries, setIsLoadingQueries] = useState(false);
   const [testMsg, setTestMsg] = useState<{
     ok: boolean;
@@ -948,25 +860,6 @@ export function ConnectionList({
     void fetchSavedQueriesByConnection();
   }, [showSavedQueriesInTree, lastUpdated]);
 
-  const fetchConnections = async () => {
-    setIsLoadingConnections(true);
-    try {
-      const conns = await api.connections.list();
-      const mapped = conns.map((c) =>
-        mapSavedConnection(c, t("common.unknown")),
-      );
-      setConnections((prev) => mergeConnections(mapped, prev));
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      console.error("listConnections failed", message);
-      toast.error(t("connection.toast.loadConnectionsFailed"), {
-        description: message,
-      });
-    } finally {
-      setIsLoadingConnections(false);
-    }
-  };
-
   const handlePickDatabaseFile = async (driver: Driver) => {
     const selected = await pickSingleFile({
       title:
@@ -1018,133 +911,6 @@ export function ConnectionList({
     } finally {
       setIsLoadingQueries(false);
     }
-  };
-
-  const fetchAndSetDatabases = async (
-    connectionId: string,
-  ): Promise<boolean> => {
-    try {
-      const current = connections.find((conn) => conn.id === connectionId);
-      if (!current) return false;
-
-      // For Redis, fetch full database info including key counts
-      let databases: DatabaseInfo[];
-      if (current.type === "redis") {
-        const redisDbs = await api.redis.listDatabases(Number(current.id));
-        databases = redisDbs.map((db) => ({
-          name: db.name,
-          schemas: [],
-          tables: [],
-          routines: [],
-          redisKeyCount: db.keyCount,
-        }));
-      } else {
-        const dbNames = await getDatasourceTreeAdapter(current).listDatabases();
-        databases = dbNames.map((name) => ({
-          name,
-          schemas: [],
-          tables: [],
-          routines: [],
-        }));
-      }
-
-      setConnections((prev) =>
-        prev.map((conn) => {
-          if (conn.id !== connectionId) return conn;
-          return {
-            ...conn,
-            isConnected: true,
-            connectState: "success",
-            connectError: undefined,
-            databases,
-          };
-        }),
-      );
-      return true;
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      const sanitizedMessage = sanitizeConnectionErrorMessage(message);
-      console.error("listDatabasesById failed", message);
-      setConnections((prev) =>
-        prev.map((conn) => {
-          if (conn.id !== connectionId) return conn;
-          return {
-            ...conn,
-            isConnected: false,
-            connectState: "error",
-            connectError: sanitizedMessage || message,
-            databases: [],
-          };
-        }),
-      );
-      toast.error(t("connection.toast.loadDatabasesFailed"), {
-        description: sanitizedMessage || message,
-      });
-      return false;
-    }
-  };
-
-  const connectConnection = async (
-    connectionId: string,
-    options?: { resetTree?: boolean },
-  ) => {
-    const target = connections.find((conn) => conn.id === connectionId);
-    if (!target || target.connectState === "connecting") return;
-
-    if (options?.resetTree) {
-      setExpandedConnections((prev) => {
-        const next = new Set(prev);
-        next.delete(connectionId);
-        return next;
-      });
-      setExpandedDatabases((prev) => {
-        const next = new Set(
-          [...prev].filter((key) => !key.startsWith(`${connectionId}-`)),
-        );
-        return next;
-      });
-      setExpandedSchemas((prev) => {
-        const next = new Set(
-          [...prev].filter((key) => !key.startsWith(`${connectionId}-`)),
-        );
-        return next;
-      });
-      setExpandedTables((prev) => {
-        const next = new Set(
-          [...prev].filter((key) => !key.startsWith(`${connectionId}-`)),
-        );
-        return next;
-      });
-    }
-
-    setConnections((prev) =>
-      prev.map((conn) => {
-        if (conn.id !== connectionId) return conn;
-        return {
-          ...conn,
-          isConnected: false,
-          connectState: "connecting",
-          connectError: undefined,
-          databases: options?.resetTree ? [] : conn.databases,
-        };
-      }),
-    );
-
-    const ok = await fetchAndSetDatabases(connectionId);
-    if (ok) {
-      setExpandedConnections((prev) => {
-        const next = new Set(prev);
-        next.add(connectionId);
-        return next;
-      });
-      return;
-    }
-
-    setExpandedConnections((prev) => {
-      const next = new Set(prev);
-      next.delete(connectionId);
-      return next;
-    });
   };
 
   useEffect(() => {
@@ -2148,26 +1914,6 @@ export function ConnectionList({
     setIsCreateDbDialogOpen(true);
   };
 
-  const clearConnectionTreeCache = (connectionId: string) => {
-    setConnections((prev) =>
-      prev.map((conn) =>
-        conn.id === connectionId ? { ...conn, databases: [] } : conn,
-      ),
-    );
-    setExpandedDatabases(
-      (prev) =>
-        new Set([...prev].filter((key) => !key.startsWith(`${connectionId}-`))),
-    );
-    setExpandedSchemas(
-      (prev) =>
-        new Set([...prev].filter((key) => !key.startsWith(`${connectionId}-`))),
-    );
-    setExpandedTables(
-      (prev) =>
-        new Set([...prev].filter((key) => !key.startsWith(`${connectionId}-`))),
-    );
-  };
-
   const handleCreateDatabase = async () => {
     const connection = createDbTargetConnection;
     if (!connection || !supportsCreateDatabaseForDriver(connection.type))
@@ -2369,85 +2115,6 @@ export function ConnectionList({
     );
     resetConnectionDialogFeedback();
     setCreateStep("details");
-  };
-
-  const handleReconnect = async (connectionId: string) => {
-    await connectConnection(connectionId, { resetTree: true });
-  };
-
-  const buildDuplicateConnectionName = (sourceName: string) => {
-    const baseName = `${sourceName}-${t("connection.menu.copy")}`;
-    let candidate = baseName;
-    let counter = 2;
-    while (connections.some((conn) => conn.name === candidate)) {
-      candidate = `${baseName}-${counter}`;
-      counter += 1;
-    }
-    return candidate;
-  };
-
-  const handleDuplicateConnection = async (connectionId: string) => {
-    const source = connections.find((conn) => conn.id === connectionId);
-    if (!source) return;
-
-    const duplicateName = buildDuplicateConnectionName(
-      source.name || t("common.unknown"),
-    );
-    const duplicateForm = buildFormFromConnection(source, {
-      name: duplicateName,
-    });
-
-    try {
-      const res = await api.connections.create(duplicateForm);
-      setConnections((prev) => [
-        mapSavedConnection(res, t("common.unknown")),
-        ...prev,
-      ]);
-      toast.success(t("connection.toast.duplicateSuccess"));
-    } catch (e) {
-      toast.error(t("connection.toast.duplicateFailed"), {
-        description: e instanceof Error ? e.message : String(e),
-      });
-    }
-  };
-
-  const handleDeleteConnection = async (connectionId: string) => {
-    setIsDeleting(true);
-    try {
-      await api.connections.delete(Number(connectionId));
-      setConnections((prev) => prev.filter((conn) => conn.id !== connectionId));
-      setExpandedConnections((prev) => {
-        const next = new Set(prev);
-        next.delete(connectionId);
-        return next;
-      });
-      setExpandedDatabases((prev) => {
-        const next = new Set(
-          [...prev].filter((key) => !key.startsWith(`${connectionId}-`)),
-        );
-        return next;
-      });
-      setExpandedSchemas((prev) => {
-        const next = new Set(
-          [...prev].filter((key) => !key.startsWith(`${connectionId}-`)),
-        );
-        return next;
-      });
-      setExpandedTables((prev) => {
-        const next = new Set(
-          [...prev].filter((key) => !key.startsWith(`${connectionId}-`)),
-        );
-        return next;
-      });
-      setDeleteTargetConnectionId(null);
-    } catch (e) {
-      console.error(
-        "deleteConnection failed",
-        e instanceof Error ? e.message : String(e),
-      );
-    } finally {
-      setIsDeleting(false);
-    }
   };
 
   const handleTableExportDialog = (
