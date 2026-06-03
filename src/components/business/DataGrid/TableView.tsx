@@ -1,65 +1,9 @@
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
-import {
-  Download,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  ChevronDown,
-  ArrowUpDown,
-  Copy,
-  Table as TableIcon,
-  Columns,
-  Rows,
-  Files,
-  FileCode,
-  Save,
-  Undo2,
-  Loader2,
-  RotateCw,
-  Search,
-  Plus,
-  SquareTerminal,
-  Trash2,
-  X,
-  Table,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-} from "@/components/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { VirtualTableBody } from "./tableView/VirtualTableBody";
+import { ColumnViewBody } from "./tableView/ColumnViewBody";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -74,14 +18,8 @@ import { isEditableTarget } from "@/lib/keyboard";
 import { useShortcutMatcher } from "@/contexts/ShortcutsContext";
 import {
   buildFilterExpression,
-  createSingleAndDoubleClickHandler,
   cellValueToString,
-  formatCellValue,
   getQualifiedTableName,
-  isComplexValue,
-  isDateType,
-  isNumericType,
-  isStringType,
   formatSQLValue,
   quoteIdent,
   escapeSQL,
@@ -99,7 +37,7 @@ import {
   buildRowsUpdateSQL as buildRowsUpdateSQLFn,
 } from "./tableView/selectionCopy";
 import { ComplexValueViewer } from "./ComplexValueViewer";
-import { ColumnAutocompleteInput } from "./tableView/ColumnAutocompleteInput";
+import { TableToolbar } from "./tableView/TableToolbar";
 import { useTableSort } from "./tableView/hooks/useTableSort";
 import { useTablePagination } from "./tableView/hooks/useTablePagination";
 import { useColumnState } from "./tableView/hooks/useColumnState";
@@ -108,269 +46,9 @@ import { useCellEditing } from "./tableView/hooks/useCellEditing";
 import type { PendingChange } from "./tableView/hooks/useCellEditing";
 import { useTableMutation } from "./tableView/hooks/useTableMutation";
 import { useTableSearch } from "./tableView/hooks/useTableSearch";
+import { TableStatusBar } from "./tableView/TableStatusBar";
 import { toast } from "sonner";
 
-function isCellInRange(
-  rowIndex: number,
-  colIndex: number,
-  range: {
-    anchor: { row: number; colIndex: number };
-    tip: { row: number; colIndex: number };
-  } | null,
-): boolean {
-  if (!range) return false;
-  const minRow = Math.min(range.anchor.row, range.tip.row);
-  const maxRow = Math.max(range.anchor.row, range.tip.row);
-  const minCol = Math.min(range.anchor.colIndex, range.tip.colIndex);
-  const maxCol = Math.max(range.anchor.colIndex, range.tip.colIndex);
-  return (
-    rowIndex >= minRow &&
-    rowIndex <= maxRow &&
-    colIndex >= minCol &&
-    colIndex <= maxCol
-  );
-}
-
-interface DataRowProps {
-  rowIndex: number;
-  row: Record<string, any>;
-  columns: string[];
-  showRowNumbers: boolean;
-  showZebraStripes: boolean;
-  startIndex: number;
-  isRowSelected: boolean;
-  isMultiRowSelection: boolean;
-  editingCell: { row: number; col: string } | null;
-  selectedCell: { row: number; col: string } | null;
-  cellSelectionRange: {
-    anchor: { row: number; colIndex: number };
-    tip: { row: number; colIndex: number };
-  } | null;
-  normalizedSearchKeyword: string;
-  matchedCellKeys: Set<string>;
-  currentSearchMatch: { row: number; col: string } | null;
-  isEditableForUpdates: boolean;
-  editValue: string;
-  editInputRef: React.RefObject<HTMLInputElement | null>;
-  getColWidth: (column: string) => number;
-  getCellDisplayValue: (
-    rowIndex: number,
-    column: string,
-    originalValue: any,
-  ) => any;
-  isCellModified: (rowIndex: number, column: string) => boolean;
-  handleCellClick: (rowIndex: number, col: string) => void;
-  handleCellDoubleClick: (
-    rowIndex: number,
-    col: string,
-    currentValue: any,
-  ) => void;
-  handleCellMouseDownForRange: (
-    e: React.MouseEvent,
-    rowIndex: number,
-    colIndex: number,
-  ) => void;
-  handleCellMouseMoveForRange: (rowIndex: number, colIndex: number) => void;
-  handleIndexMouseDown: (e: React.MouseEvent, rowIndex: number) => void;
-  handleIndexMouseEnter: (rowIndex: number) => void;
-  handleEditKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-  setEditValue: (value: string) => void;
-  commitEdit: () => void;
-  setComplexViewer: (
-    viewer: { value: any; columnName: string } | null,
-  ) => void;
-  setContextMenuRow: (row: number | null) => void;
-}
-
-const DataRow = memo(function DataRow({
-  rowIndex,
-  row,
-  columns,
-  showRowNumbers,
-  showZebraStripes,
-  startIndex,
-  isRowSelected,
-  isMultiRowSelection,
-  editingCell,
-  selectedCell,
-  cellSelectionRange,
-  normalizedSearchKeyword,
-  matchedCellKeys,
-  currentSearchMatch,
-  isEditableForUpdates,
-  editValue,
-  editInputRef,
-  getColWidth,
-  getCellDisplayValue,
-  isCellModified,
-  handleCellClick,
-  handleCellDoubleClick,
-  handleCellMouseDownForRange,
-  handleCellMouseMoveForRange,
-  handleIndexMouseDown,
-  handleIndexMouseEnter,
-  handleEditKeyDown,
-  setEditValue,
-  commitEdit,
-  setComplexViewer,
-  setContextMenuRow,
-}: DataRowProps) {
-  const isEditing = useCallback(
-    (col: string) =>
-      editingCell?.row === rowIndex && editingCell?.col === col,
-    [editingCell, rowIndex],
-  );
-  const isSelected = useCallback(
-    (col: string) =>
-      selectedCell?.row === rowIndex && selectedCell?.col === col,
-    [selectedCell, rowIndex],
-  );
-
-  return (
-    <tr
-      className={[
-        "hover:bg-muted/50 border-b border-border group",
-        showZebraStripes && rowIndex % 2 === 1 ? "bg-muted/30" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {showRowNumbers && (
-        <td
-          className={[
-            "px-4 py-2 text-xs text-muted-foreground border-r border-border cursor-pointer select-none",
-            isRowSelected ? "bg-accent text-accent-foreground" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          onMouseDown={(e) => handleIndexMouseDown(e, rowIndex)}
-          onMouseEnter={() => handleIndexMouseEnter(rowIndex)}
-        >
-          {startIndex + rowIndex + 1}
-        </td>
-      )}
-      {columns.map((column, colIndex) => {
-        const modified = isCellModified(rowIndex, column);
-        const displayValue = getCellDisplayValue(
-          rowIndex,
-          column,
-          row[column],
-        );
-        const editing = isEditing(column);
-        const selected = isSelected(column);
-        const inRange = isCellInRange(rowIndex, colIndex, cellSelectionRange);
-        const matched =
-          normalizedSearchKeyword.length > 0 &&
-          matchedCellKeys.has(`${rowIndex}::${column}`);
-        const activeSearchMatch =
-          !!currentSearchMatch &&
-          currentSearchMatch.row === rowIndex &&
-          currentSearchMatch.col === column;
-
-        return (
-          <td
-            key={column}
-            data-row-index={rowIndex}
-            data-col-index={colIndex}
-            className={[
-              "px-0 py-0 text-sm text-foreground font-mono border-r border-border relative group transition-all duration-150 ease-out",
-              selected && !editing ? "bg-accent text-accent-foreground" : "",
-              inRange && !selected && !editing ? "bg-accent" : "",
-              isRowSelected && !selected && !editing && !inRange
-                ? "bg-accent/60"
-                : "",
-              matched && !editing
-                ? "bg-amber-100/60 dark:bg-amber-900/20"
-                : "",
-              activeSearchMatch && !editing
-                ? "border-b-2 border-b-amber-500/70"
-                : "",
-              modified && !editing ? "border-l-2 border-l-orange-400" : "",
-              isEditableForUpdates ? "cursor-pointer" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            style={{
-              width: getColWidth(column),
-              minWidth: 50,
-            }}
-            onMouseDown={(e) =>
-              handleCellMouseDownForRange(e, rowIndex, colIndex)
-            }
-            onMouseEnter={() =>
-              handleCellMouseMoveForRange(rowIndex, colIndex)
-            }
-            onClick={() => handleCellClick(rowIndex, column)}
-            onContextMenu={() => {
-              if (isMultiRowSelection) {
-                return;
-              }
-              handleCellClick(rowIndex, column);
-              setContextMenuRow(rowIndex);
-            }}
-            onDoubleClick={() =>
-              handleCellDoubleClick(rowIndex, column, row[column])
-            }
-          >
-            {editing ? (
-              <input
-                ref={editInputRef}
-                type="text"
-                autoCapitalize="none"
-                className="w-full h-full px-4 py-2 bg-background border-2 border-primary outline-none font-mono text-sm shadow-[0_0_0_3px_rgba(var(--primary)_0.15)] animate-in fade-in zoom-in-95 duration-150"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onKeyDown={handleEditKeyDown}
-                onBlur={commitEdit}
-              />
-            ) : (
-              <div className="px-4 py-2 truncate">
-                {displayValue !== null && displayValue !== undefined ? (
-                  <span
-                    className={
-                      modified ? "text-orange-600 dark:text-orange-400" : ""
-                    }
-                  >
-                    {formatCellValue(displayValue)}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground italic">NULL</span>
-                )}
-                {isComplexValue(displayValue) && (
-                  <button
-                    className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground bg-background/80 rounded px-0.5 transition-opacity"
-                    title="View structured data"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setComplexViewer({
-                        value: displayValue,
-                        columnName: column,
-                      });
-                    }}
-                  >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            )}
-          </td>
-        );
-      })}
-    </tr>
-  );
-});
 
 interface TableViewProps {
   data?: any[];
@@ -1058,1001 +736,154 @@ export function TableView({
       onMouseUp={handleCellMouseUpForRange}
       onPaste={isEditableForUpdates ? handlePaste : undefined}
     >
-      {!hideHeader && (
-        <div className="flex flex-col gap-1.5 px-4 py-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-20">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              {/* Modern pagination control */}
-              <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-0.5 border border-border/50">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 hover:bg-background"
-                  onClick={handlePrevPage}
-                  disabled={page <= 1}
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </Button>
-                <div className="flex items-center gap-1 px-1">
-                  <span className="text-xs text-muted-foreground">Page</span>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    className="h-5 w-10 px-1.5 text-xs text-center bg-background border-border/50"
-                    value={pageInput}
-                    onChange={(e) =>
-                      setPageInput(e.target.value.replace(/\D/g, ""))
-                    }
-                    onBlur={handlePageInputCommit}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handlePageInputCommit();
-                      }
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    / {totalPages}
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 hover:bg-background"
-                  onClick={handleNextPage}
-                  disabled={page >= totalPages}
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-
-              {/* Page size selector */}
-              <div className="flex items-center gap-2 ml-1">
-                <span className="text-xs text-muted-foreground">Limit</span>
-                <Select
-                  value={pageSizeInput}
-                  onValueChange={handlePageSizeChange}
-                >
-                  <SelectTrigger
-                    size="sm"
-                    className="w-[70px] text-xs border-border/50 bg-muted/40 [&_svg]:size-3 px-2 gap-1 data-[size=sm]:h-6 data-[size=sm]:py-0"
-                  >
-                    <SelectValue placeholder="100" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAGE_SIZE_OPTIONS.map((size) => (
-                      <SelectItem key={size} value={size} className="text-xs">
-                        {size}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {tableContext && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 hover:bg-muted/60"
-                  onClick={handleRefreshClick}
-                  disabled={isRefreshing}
-                  title={isRefreshing ? "Refreshing..." : "Refresh"}
-                >
-                  <RotateCw
-                    className={[
-                      "w-3.5 h-3.5",
-                      isRefreshing ? "animate-spin" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  />
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 hover:bg-muted/60"
-                onClick={() =>
-                  setViewMode(viewMode === "table" ? "column" : "table")
-                }
-                title={
-                  viewMode === "table"
-                    ? "Switch to column view"
-                    : "Switch to table view"
-                }
-              >
-                {viewMode === "table" ? (
-                  <Columns className="w-3.5 h-3.5" />
-                ) : (
-                  <Rows className="w-3.5 h-3.5" />
-                )}
-              </Button>
-              <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={isSearchOpen ? "secondary" : "ghost"}
-                    size="sm"
-                    className="h-6 w-6 p-0 hover:bg-muted/60"
-                    title="Search in current table (Ctrl/Cmd+F)"
-                  >
-                    <Search className="w-3.5 h-3.5" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  side="bottom"
-                  sideOffset={6}
-                  className="w-[320px] p-3 space-y-2 shadow-lg"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input
-                        ref={searchInputRef}
-                        type="text"
-                        placeholder="Search keyword..."
-                        className="h-8 pl-8 pr-8 text-xs"
-                        value={searchKeyword}
-                        onChange={(e) => setSearchKeyword(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleSearchEnter();
-                          } else if (e.key === "Escape") {
-                            e.preventDefault();
-                            setIsSearchOpen(false);
-                          }
-                        }}
-                      />
-                      {searchKeyword && (
-                        <button
-                          onClick={() => setSearchKeyword("")}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {normalizedSearchKeyword ? (
-                    <div className="text-[11px] text-muted-foreground">
-                      {matchedRows.size} row(s), {searchMatches.length}{" "}
-                      match(es)
-                      {currentSearchMatch
-                        ? ` • ${searchCursorIndex + 1}/${searchMatches.length}`
-                        : ""}
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-muted-foreground">
-                      Enter keyword, press Enter to jump next match
-                    </div>
-                  )}
-                  {normalizedSearchKeyword && searchMatches.length === 0 && (
-                    <div className="text-[11px] text-muted-foreground">
-                      No matches in current table view
-                    </div>
-                  )}
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {tableContext && onCreateQuery && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 gap-1 px-2 text-xs hover:bg-muted/60"
-                    onClick={() =>
-                      onCreateQuery(
-                        tableContext.connectionId,
-                        tableContext.database,
-                        tableContext.driver,
-                      )
-                    }
-                    title={t("connection.menu.newQuery")}
-                  >
-                    <SquareTerminal className="w-3.5 h-3.5" />
-                    {t("connection.menu.newQuery")}
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 gap-1 px-2 hover:bg-muted/60"
-                    onClick={handleShowDDL}
-                    title="View Table Structure (DDL)"
-                  >
-                    <FileCode className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium leading-none">
-                      ddl
-                    </span>
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 gap-1 px-2 hover:bg-muted/60"
-                    onClick={() => {
-                      if (tableContext && onOpenERDiagram) {
-                        onOpenERDiagram(tableContext);
-                      }
-                    }}
-                    title="Open ER Diagram"
-                  >
-                    <Table className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium leading-none">
-                      ER
-                    </span>
-                  </Button>
-                </>
-              )}
-              {(canInsert || canUpdateDelete) && (
-                <>
-                  {canInsert && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 hover:bg-muted/60"
-                      onClick={handleAddDraftRow}
-                      disabled={isSaving || isDeleting}
-                      title="Add a new row draft"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                  {canUpdateDelete && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 hover:bg-destructive/10 text-destructive disabled:text-muted-foreground"
-                      onClick={() => setDeleteDialogOpen(true)}
-                      disabled={!selectedRows.size || isSaving || isDeleting}
-                      title={
-                        selectedRows.size
-                          ? `Delete ${selectedRows.size} selected row(s)`
-                          : "Select rows to delete"
-                      }
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </>
-              )}
-
-              {hasPendingChanges && (
-                <div className="flex items-center gap-1 bg-amber-500/10 rounded-lg p-0.5 border border-amber-500/20">
-                  <Button
-                    ref={saveButtonRef}
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 gap-1.5 text-xs hover:bg-amber-500/20 text-amber-700 dark:text-amber-400"
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    title="Save changes (Cmd/Ctrl+S)"
-                  >
-                    {isSaving ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Save className="w-3.5 h-3.5" />
-                    )}
-                    Save
-                    <span className="bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px] px-1.5 py-0 rounded-full font-medium">
-                      {pendingMutationCount}
-                    </span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400"
-                    onClick={handleDiscardChanges}
-                    disabled={isSaving}
-                    title="Discard changes (Esc)"
-                  >
-                    <Undo2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              )}
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 hover:bg-muted/60"
-                    disabled={!tableContext || isExporting}
-                    title="Export data"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      Export Current Page
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      <DropdownMenuItem
-                        onClick={() => void handleExport("current_page", "csv")}
-                      >
-                        CSV
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          void handleExport("current_page", "json")
-                        }
-                      >
-                        JSON
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          void handleExport("current_page", "sql_dml")
-                        }
-                      >
-                        SQL
-                      </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      Export Filtered Result
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      <DropdownMenuItem
-                        onClick={() => void handleExport("filtered", "csv")}
-                      >
-                        CSV
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => void handleExport("filtered", "json")}
-                      >
-                        JSON
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => void handleExport("filtered", "sql_dml")}
-                      >
-                        SQL
-                      </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      Export Full Table
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      <DropdownMenuItem
-                        onClick={() => void handleExport("full_table", "csv")}
-                      >
-                        CSV
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => void handleExport("full_table", "json")}
-                      >
-                        JSON
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          void handleExport("full_table", "sql_dml")
-                        }
-                      >
-                        SQL
-                      </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-
-          {tableContext && onFilterChange ? (
-            <div className="pt-1 border-t border-border/40 flex items-center gap-2">
-              <div className="relative flex-1 min-w-0">
-                <Filter className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <ColumnAutocompleteInput
-                  placeholder="WHERE ..."
-                  className="pl-8 h-7 w-full font-mono text-xs"
-                  value={whereInput}
-                  onValueChange={setWhereInput}
-                  onSubmit={() => onFilterChange(whereInput, orderByInput)}
-                  options={columnAutocompleteOptions}
-                />
-              </div>
-              <div className="relative flex-1 min-w-0">
-                <ArrowUpDown className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <ColumnAutocompleteInput
-                  placeholder="ORDER BY ..."
-                  className="pl-8 h-7 w-full font-mono text-xs"
-                  value={orderByInput}
-                  onValueChange={setOrderByInput}
-                  onSubmit={() => onFilterChange(whereInput, orderByInput)}
-                  options={columnAutocompleteOptions}
-                />
-              </div>
-              {tableContext && mutabilityHint && (
-                <span
-                  className="text-xs text-muted-foreground italic"
-                  title={mutabilityHint}
-                >
-                  {canInsert ? "Partial write" : "Read-only"}
-                </span>
-              )}
-            </div>
-          ) : (
-            tableContext &&
-            mutabilityHint && (
-              <span
-                className="text-xs text-muted-foreground italic"
-                title={mutabilityHint}
-              >
-                {canInsert ? "Partial write" : "Read-only"}
-              </span>
-            )
-          )}
-        </div>
-      )}
+      <TableToolbar
+        hideHeader={hideHeader}
+        page={page}
+        totalPages={totalPages}
+        pageInput={pageInput}
+        pageSizeInput={pageSizeInput}
+        PAGE_SIZE_OPTIONS={PAGE_SIZE_OPTIONS}
+        handlePrevPage={handlePrevPage}
+        handleNextPage={handleNextPage}
+        handlePageInputCommit={handlePageInputCommit}
+        setPageInput={setPageInput}
+        handlePageSizeChange={handlePageSizeChange}
+        tableContext={tableContext}
+        isRefreshing={isRefreshing}
+        handleRefreshClick={handleRefreshClick}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        isSearchOpen={isSearchOpen}
+        setIsSearchOpen={setIsSearchOpen}
+        searchKeyword={searchKeyword}
+        setSearchKeyword={setSearchKeyword}
+        normalizedSearchKeyword={normalizedSearchKeyword}
+        matchedRowsSize={matchedRows.size}
+        searchMatchesLength={searchMatches.length}
+        currentSearchMatch={currentSearchMatch}
+        searchCursorIndex={searchCursorIndex}
+        handleSearchEnter={handleSearchEnter}
+        searchInputRef={searchInputRef}
+        onCreateQuery={onCreateQuery}
+        onShowDDL={handleShowDDL}
+        onOpenERDiagram={onOpenERDiagram}
+        canInsert={canInsert}
+        canUpdateDelete={canUpdateDelete}
+        hasPendingChanges={hasPendingChanges}
+        pendingMutationCount={pendingMutationCount}
+        isSaving={isSaving}
+        isDeleting={isDeleting}
+        selectedRowsSize={selectedRows.size}
+        saveButtonRef={saveButtonRef}
+        handleAddDraftRow={handleAddDraftRow}
+        setDeleteDialogOpen={setDeleteDialogOpen}
+        handleSave={handleSave}
+        handleDiscardChanges={handleDiscardChanges}
+        isExporting={isExporting}
+        handleExport={handleExport}
+        whereInput={whereInput}
+        setWhereInput={setWhereInput}
+        orderByInput={orderByInput}
+        setOrderByInput={setOrderByInput}
+        onFilterChange={onFilterChange}
+        columnAutocompleteOptions={columnAutocompleteOptions}
+        mutabilityHint={mutabilityHint}
+      />
 
       <div ref={scrollContainerRef} className="flex-1 overflow-auto">
         {viewMode === "column" ? (
-          <table className="border-collapse w-auto">
-            <colgroup>
-              {showRowNumbers && <col style={{ width: 50 }} />}
-              <col />
-              {currentData.map((_, idx) => (
-                <col key={idx} />
-              ))}
-            </colgroup>
-            <thead className="bg-muted/90 sticky top-0 z-10">
-              <tr>
-                {showRowNumbers && (
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-r border-border">
-                    #
-                  </th>
-                )}
-                <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-r border-border">
-                  Column
-                </th>
-                {currentData.map((_, rowIndex) => (
-                  <th
-                    key={rowIndex}
-                    className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-r border-border"
-                  >
-                    Record {startIndex + rowIndex + 1}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {columns.map((column, colIndex) => (
-                <tr
-                  key={column}
-                  className={[
-                    "hover:bg-muted/50 border-b border-border",
-                    showZebraStripes && colIndex % 2 === 1 ? "bg-muted/30" : "",
-                  ].filter(Boolean).join(" ")}
-                >
-                  {showRowNumbers && (
-                    <td className="px-4 py-2 text-xs text-muted-foreground border-r border-border">
-                      {colIndex + 1}
-                    </td>
-                  )}
-                  <td className="px-4 py-2 text-xs font-semibold text-foreground border-r border-border bg-muted/30">
-                    <div>{column}</div>
-                    {showColumnComments && columnComments[column] && (
-                      <span className="block truncate text-[10px] text-muted-foreground/60 leading-tight font-normal">
-                        {columnComments[column]}
-                      </span>
-                    )}
-                  </td>
-                  {currentData.map((row, rowIndex) => {
-                    const modified = isCellModified(rowIndex, column);
-                    const displayValue = getCellDisplayValue(
-                      rowIndex,
-                      column,
-                      row[column],
-                    );
-                    const editing =
-                      editingCell?.row === rowIndex &&
-                      editingCell?.col === column;
-                    const selected =
-                      selectedCell?.row === rowIndex &&
-                      selectedCell?.col === column;
-                    const inRange = isCellInRange(rowIndex, colIndex, cellSelectionRange);
-                    const matched =
-                      normalizedSearchKeyword.length > 0 &&
-                      matchedCellKeys.has(`${rowIndex}::${column}`);
-
-                    return (
-                      <td
-                        key={rowIndex}
-                        className={[
-                          "px-0 py-0 text-sm text-foreground font-mono border-r border-border relative group transition-all duration-150 ease-out",
-                          selected && !editing
-                            ? "bg-accent text-accent-foreground"
-                            : "",
-                          inRange && !selected && !editing
-                            ? "bg-accent"
-                            : "",
-                          matched && !editing
-                            ? "bg-amber-100/60 dark:bg-amber-900/20"
-                            : "",
-                          modified && !editing
-                            ? "border-l-2 border-l-orange-400"
-                            : "",
-                          isEditableForUpdates ? "cursor-pointer" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        onMouseDown={(e) =>
-                          handleCellMouseDownForRange(e, rowIndex, colIndex)
-                        }
-                        onMouseEnter={() =>
-                          handleCellMouseMoveForRange(rowIndex, colIndex)
-                        }
-                        onClick={() => handleCellClick(rowIndex, column)}
-                        onDoubleClick={() =>
-                          handleCellDoubleClick(rowIndex, column, row[column])
-                        }
-                      >
-                        {editing ? (
-                          <input
-                            ref={editInputRef}
-                            type="text"
-                            autoCapitalize="none"
-                            className="w-full h-full px-4 py-2 bg-background border-2 border-primary outline-none font-mono text-sm shadow-[0_0_0_3px_rgba(var(--primary)_0.15)] animate-in fade-in zoom-in-95 duration-150"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onKeyDown={handleEditKeyDown}
-                            onBlur={commitEdit}
-                          />
-                        ) : (
-                          <div className="px-4 py-2 truncate">
-                            {displayValue !== null &&
-                            displayValue !== undefined ? (
-                              <span
-                                className={
-                                  modified
-                                    ? "text-orange-600 dark:text-orange-400"
-                                    : ""
-                                }
-                              >
-                                {formatCellValue(displayValue)}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground italic">
-                                NULL
-                              </span>
-                            )}
-                            {isComplexValue(displayValue) && (
-                              <button
-                                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground bg-background/80 rounded px-0.5 transition-opacity"
-                                title="View structured data"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setComplexViewer({
-                                    value: displayValue,
-                                    columnName: column,
-                                  });
-                                }}
-                              >
-                                <svg
-                                  width="12"
-                                  height="12"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                >
-                                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                                </svg>
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ColumnViewBody
+            columns={columns}
+            currentData={currentData}
+            startIndex={startIndex}
+            showRowNumbers={showRowNumbers}
+            showZebraStripes={showZebraStripes}
+            showColumnComments={showColumnComments}
+            columnComments={columnComments}
+            normalizedSearchKeyword={normalizedSearchKeyword}
+            matchedCellKeys={matchedCellKeys}
+            isEditableForUpdates={isEditableForUpdates}
+            editingCell={editingCell}
+            selectedCell={selectedCell}
+            editValue={editValue}
+            editInputRef={editInputRef}
+            cellSelectionRange={cellSelectionRange}
+            getCellDisplayValue={getCellDisplayValue}
+            isCellModified={isCellModified}
+            handleCellClick={handleCellClick}
+            handleCellDoubleClick={handleCellDoubleClick}
+            handleCellMouseDownForRange={handleCellMouseDownForRange}
+            handleCellMouseMoveForRange={handleCellMouseMoveForRange}
+            handleEditKeyDown={handleEditKeyDown}
+            setEditValue={setEditValue}
+            commitEdit={commitEdit}
+            setComplexViewer={setComplexViewer}
+          />
         ) : (
-          <ContextMenu onOpenChange={(open) => { if (!open) setContextMenuRow(null); }}>
-          <ContextMenuTrigger asChild>
-          <table
-            className="border-collapse table-fixed"
-            style={{
-              width: tableWidthPx,
-            }}
-          >
-            <colgroup>
-              {showRowNumbers && <col className="w-12" style={{ width: INDEX_COL_WIDTH }} />}
-              {columns.map((column) => (
-                <col
-                  key={column}
-                  style={{
-                    width: getColWidth(column),
-                    minWidth: 50,
-                  }}
-                />
-              ))}
-            </colgroup>
-            <thead className="bg-muted/90 sticky top-0 z-10">
-              <tr>
-                {showRowNumbers && (
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-r border-border w-12">
-                    #
-                  </th>
-                )}
-                {columns.map((column) => {
-                  const isSorted = activeSortColumn === column;
-                  const direction = isSorted ? activeSortDirection : undefined;
-                  const comment = columnComments[column]?.trim();
-                  const headerTooltip = comment || column;
-                  const headerActionLabel = t("tableView.header.actionHint", {
-                    column,
-                  });
-                  const headerClickState =
-                    headerClickStateRef.current[column] ??
-                    (headerClickStateRef.current[column] = { timerId: null });
-                  const headerInteraction = createSingleAndDoubleClickHandler(
-                    headerClickState,
-                    () => handleHeaderCopy(column),
-                    () => handleSortClick(column),
-                  );
-                  return (
-                    <th
-                      key={column}
-                      ref={(el) => {
-                        thRefs.current[column] = el;
-                      }}
-                      className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-r border-border relative group select-none"
-                      style={{
-                        width: getColWidth(column),
-                        minWidth: 50,
-                      }}
-                    >
-                      <div className="flex items-center justify-between pr-2">
-                        <button
-                          type="button"
-                          className="flex flex-col items-start cursor-pointer hover:text-foreground transition-colors min-w-0 flex-1 overflow-hidden"
-                          title={`${headerTooltip}\n${headerActionLabel}`}
-                          aria-label={headerActionLabel}
-                          onClick={headerInteraction.handleClick}
-                          onDoubleClick={headerInteraction.handleDoubleClick}
-                        >
-                          <div className="flex items-center gap-1 w-full">
-                            <span className="truncate" title={headerTooltip}>
-                              {column}
-                            </span>
-                            <span className="flex-shrink-0 w-3.5 h-3.5 flex items-center justify-center">
-                              {isSorted ? (
-                                direction === "asc" ? (
-                                  <ChevronUp className="w-3.5 h-3.5 text-primary" />
-                                ) : (
-                                  <ChevronDown className="w-3.5 h-3.5 text-primary" />
-                                )
-                              ) : (
-                                <ArrowUpDown className="w-3 h-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              )}
-                            </span>
-                          </div>
-                          {showColumnComments && comment && (
-                            <span className="block truncate text-[10px] text-muted-foreground/60 leading-tight font-normal">
-                              {comment}
-                            </span>
-                          )}
-                        </button>
-                        <div
-                          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/50 group-hover:bg-muted-foreground/20 select-none touch-none"
-                          onMouseDown={(e) => handleMouseDown(e, column)}
-                        />
-                      </div>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const virtualItems = virtualizer.getVirtualItems();
-                const lastItemEnd = virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].end : 0;
-                const bottomSpacerHeight = virtualizer.getTotalSize() - lastItemEnd;
-                const draftRowsHeight = insertDraftRows.length * 36;
-                return (
-                  <>
-                    {/* Top spacer for virtual scroll */}
-                    {virtualItems.length > 0 && (
-                      <tr>
-                        <td
-                          colSpan={columns.length + (showRowNumbers ? 1 : 0)}
-                          style={{ height: virtualItems[0]?.start ?? 0, padding: 0, border: 'none' }}
-                        />
-                      </tr>
-                    )}
-                    {virtualItems.map((virtualRow) => {
-                      const rowIndex = virtualRow.index;
-                      const row = currentData[rowIndex];
-                      if (!row || typeof row !== "object") return null;
-                      const isRowSelected = selectedRows.has(rowIndex);
-
-                      return (
-                        <DataRow
-                          key={rowIndex}
-                          rowIndex={rowIndex}
-                          row={row}
-                          columns={columns}
-                          showRowNumbers={showRowNumbers}
-                          showZebraStripes={showZebraStripes}
-                          startIndex={startIndex}
-                          isRowSelected={isRowSelected}
-                          isMultiRowSelection={isRowSelected && selectedRows.size > 1}
-                          editingCell={editingCell}
-                          selectedCell={selectedCell}
-                          cellSelectionRange={cellSelectionRange}
-                          normalizedSearchKeyword={normalizedSearchKeyword}
-                          matchedCellKeys={matchedCellKeys}
-                          currentSearchMatch={currentSearchMatch}
-                          isEditableForUpdates={isEditableForUpdates}
-                          editValue={editValue}
-                          editInputRef={editInputRef}
-                          getColWidth={getColWidth}
-                          getCellDisplayValue={getCellDisplayValue}
-                          isCellModified={isCellModified}
-                          handleCellClick={handleCellClick}
-                          handleCellDoubleClick={handleCellDoubleClick}
-                          handleCellMouseDownForRange={handleCellMouseDownForRange}
-                          handleCellMouseMoveForRange={handleCellMouseMoveForRange}
-                          handleIndexMouseDown={handleIndexMouseDown}
-                          handleIndexMouseEnter={handleIndexMouseEnter}
-                          handleEditKeyDown={handleEditKeyDown}
-                          setEditValue={setEditValue}
-                          commitEdit={commitEdit}
-                          setComplexViewer={setComplexViewer}
-                          setContextMenuRow={setContextMenuRow}
-                        />
-                      );
-                    })}
-                    {/* Bottom spacer for virtual scroll */}
-                    {bottomSpacerHeight - draftRowsHeight > 0 && (
-                      <tr>
-                        <td
-                          colSpan={columns.length + (showRowNumbers ? 1 : 0)}
-                          style={{ height: bottomSpacerHeight - draftRowsHeight, padding: 0, border: 'none' }}
-                        />
-                      </tr>
-                    )}
-                  </>
-                );
-              })()}
-              {insertDraftRows.map((draft, draftIndex) => (
-                <tr
-                  key={draft.tempId}
-                  className="border-b border-border bg-emerald-500/5"
-                >
-                  <td className="px-4 py-2 text-xs text-emerald-700 dark:text-emerald-300 border-r border-border font-medium">
-                    new
-                    {insertDraftRows.length > 1 ? ` ${draftIndex + 1}` : ""}
-                  </td>
-                  {columns.map((column, colIndex) => (
-                    <td
-                      key={`${draft.tempId}_${column}`}
-                      className="px-0 py-0 text-sm text-foreground font-mono border-r border-border"
-                      style={{
-                        width: getColWidth(column),
-                        minWidth: 50,
-                      }}
-                    >
-                      <input
-                        type="text"
-                        autoCapitalize="none"
-                        data-draft-id={draft.tempId}
-                        data-draft-col-index={colIndex}
-                        className="w-full h-full px-4 py-2 bg-transparent outline-none"
-                        placeholder={column}
-                        value={draft.values[column] ?? ""}
-                        onChange={(e) =>
-                          handleDraftValueChange(
-                            draft.tempId,
-                            column,
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              {/* Bottom spacer for virtual scroll */}
-              {virtualizer.getVirtualItems().length > 0 && (
-                <tr>
-                  <td
-                    colSpan={columns.length + (showRowNumbers ? 1 : 0)}
-                    style={{ height: virtualizer.getTotalSize() - (virtualizer.getVirtualItems().slice(-1)[0]?.end ?? 0), padding: 0, border: 'none' }}
-                  />
-                </tr>
-              )}
-            </tbody>
-          </table>
-          </ContextMenuTrigger>
-          <ContextMenuContent>
-            {contextMenuRow !== null && (() => {
-              const rowIndex = contextMenuRow;
-              const row = currentData[rowIndex];
-              if (!row || typeof row !== "object") return null;
-              const isRowSelected = selectedRows.has(rowIndex);
-              const isMultiRowCopyTarget = isRowSelected && selectedRows.size > 1;
-              const copyTargetRows = isMultiRowCopyTarget ? Array.from(selectedRows) : [rowIndex];
-
-              return (
-                <>
-                  {!!tableContext && onFilterChange && selectedCell && (() => {
-                    const cellValue = currentData[selectedCell.row]?.[selectedCell.col];
-                    const colMeta = tableColumns.find((c) => c.name === selectedCell.col);
-                    const columnType = colMeta?.type || "";
-                    const isNull = cellValue === null || cellValue === undefined;
-                    const displayValue = isNull ? "NULL" : formatCellValue(cellValue);
-                    const truncatedValue = displayValue.length > 30
-                      ? displayValue.substring(0, 30) + "..."
-                      : displayValue;
-                    const isNumeric = isNumericType(columnType);
-                    const isString = isStringType(columnType);
-                    const isDate = isDateType(columnType);
-                    const showComparable = isNumeric || isDate || (!isString && !isNull && typeof cellValue === "number");
-
-                    return (
-                      <>
-                        <ContextMenuSub>
-                          <ContextMenuSubTrigger>
-                            <Filter className="w-4 h-4 mr-2" />
-                            {t("datagrid.filter.title", "Filter")}
-                          </ContextMenuSubTrigger>
-                          <ContextMenuSubContent>
-                            <ContextMenuItem onClick={() => applyFilter("=")}>
-                              = {truncatedValue}
-                            </ContextMenuItem>
-                            <ContextMenuItem onClick={() => applyFilter("<>")}>
-                              &lt;&gt; {truncatedValue}
-                            </ContextMenuItem>
-                            {showComparable && !isNull && (
-                              <>
-                                <ContextMenuSeparator />
-                                <ContextMenuItem onClick={() => applyFilter(">")}>
-                                  &gt; {truncatedValue}
-                                </ContextMenuItem>
-                                <ContextMenuItem onClick={() => applyFilter(">=")}>
-                                  &gt;= {truncatedValue}
-                                </ContextMenuItem>
-                                <ContextMenuItem onClick={() => applyFilter("<")}>
-                                  &lt; {truncatedValue}
-                                </ContextMenuItem>
-                                <ContextMenuItem onClick={() => applyFilter("<=")}>
-                                  &lt;= {truncatedValue}
-                                </ContextMenuItem>
-                              </>
-                            )}
-                            {isString && !isNull && (
-                              <>
-                                <ContextMenuSeparator />
-                                <ContextMenuItem onClick={() => applyFilter("LIKE_CONTAINS")}>
-                                  LIKE %{truncatedValue}%
-                                </ContextMenuItem>
-                                <ContextMenuItem onClick={() => applyFilter("LIKE_STARTS")}>
-                                  LIKE {truncatedValue}%
-                                </ContextMenuItem>
-                                <ContextMenuItem onClick={() => applyFilter("LIKE_ENDS")}>
-                                  LIKE %{truncatedValue}
-                                </ContextMenuItem>
-                              </>
-                            )}
-                            <ContextMenuSeparator />
-                            <ContextMenuItem onClick={() => applyFilter("IS NULL")}>
-                              IS NULL
-                            </ContextMenuItem>
-                            <ContextMenuItem onClick={() => applyFilter("IS NOT NULL")}>
-                              IS NOT NULL
-                            </ContextMenuItem>
-                          </ContextMenuSubContent>
-                        </ContextMenuSub>
-                        <ContextMenuSeparator />
-                      </>
-                    );
-                  })()}
-                  <ContextMenuItem onClick={() => handleCopySelection()}>
-                    <Copy className="w-4 h-4 mr-2" />
-                    {getNormalizedCellRange() ? "Copy Selection" : "Copy Cell"}
-                  </ContextMenuItem>
-                  {getNormalizedCellRange() ? (
-                    <ContextMenuSub>
-                      <ContextMenuSubTrigger>
-                        <Files className="w-4 h-4 mr-2" />
-                        Copy Selection as
-                      </ContextMenuSubTrigger>
-                      <ContextMenuSubContent>
-                        <ContextMenuItem onClick={() => handleCopy(buildSelectionCSV(), "Selection copied as CSV")}>
-                          CSV
-                        </ContextMenuItem>
-                        {!!tableContext && (
-                          <ContextMenuItem onClick={() => handleCopy(buildSelectionInsertSQL(), "Selection copied as Insert SQL")}>
-                            Insert SQL
-                          </ContextMenuItem>
-                        )}
-                        {canUpdateDelete && (
-                          <ContextMenuItem onClick={() => handleCopy(buildSelectionUpdateSQL(), "Selection copied as Update SQL")}>
-                            Update SQL
-                          </ContextMenuItem>
-                        )}
-                      </ContextMenuSubContent>
-                    </ContextMenuSub>
-                  ) : (
-                    <>
-                      <ContextMenuItem onClick={() => {
-                        if (isMultiRowCopyTarget) {
-                          handleCopy(buildRowsTSV(copyTargetRows), `Copied ${copyTargetRows.length} row(s)`);
-                          return;
-                        }
-                        const values = columns.map((col) => {
-                          const val = getCellDisplayValue(rowIndex, col, row[col]);
-                          return val === null || val === undefined ? "" : String(val);
-                        }).join("\t");
-                        handleCopy(values, "Row copied");
-                      }}>
-                        <TableIcon className="w-4 h-4 mr-2" />
-                        {isMultiRowCopyTarget ? "Copy Selected Rows" : "Copy Row"}
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                      {canUpdateDelete && isCellModified(rowIndex, selectedCell?.col || "") && (
-                        <>
-                          <ContextMenuItem onClick={() => {
-                            if (selectedCell && selectedCell.row === rowIndex) {
-                              const key = `${rowIndex}_${selectedCell.col}`;
-                              setPendingChanges((prev) => {
-                                const next = new Map(prev);
-                                next.delete(key);
-                                return next;
-                              });
-                            }
-                          }}>
-                            <Undo2 className="w-4 h-4 mr-2" />
-                            Undo This Cell
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                        </>
-                      )}
-                      <ContextMenuSub>
-                        <ContextMenuSubTrigger>
-                          <Files className="w-4 h-4 mr-2" />
-                          Copy as
-                        </ContextMenuSubTrigger>
-                        <ContextMenuSubContent>
-                          <ContextMenuItem onClick={() => handleCopy(buildRowsCSV(copyTargetRows), isMultiRowCopyTarget ? "Copied as CSV" : "Row copied as CSV")}>
-                            {isMultiRowCopyTarget ? "Copy Selected as CSV" : "Copy as CSV"}
-                          </ContextMenuItem>
-                          {!!tableContext && (
-                            <ContextMenuItem onClick={() => {
-                              const sql = buildRowsInsertSQL(copyTargetRows);
-                              handleCopy(sql, isMultiRowCopyTarget ? "Copied as Insert SQL" : "Row copied as Insert SQL");
-                            }}>
-                              {isMultiRowCopyTarget ? "Copy Selected as Insert SQL" : "Copy as Insert SQL"}
-                            </ContextMenuItem>
-                          )}
-                          {canUpdateDelete && (
-                            <ContextMenuItem onClick={() => {
-                              const sql = buildRowsUpdateSQL(copyTargetRows);
-                              handleCopy(sql, isMultiRowCopyTarget ? "Copied as Update SQL" : "Row copied as Update SQL");
-                            }}>
-                              {isMultiRowCopyTarget ? "Copy Selected as Update SQL" : "Copy as Update SQL"}
-                            </ContextMenuItem>
-                          )}
-                        </ContextMenuSubContent>
-                      </ContextMenuSub>
-                    </>
-                  )}
-                </>
-              );
-            })()}
-          </ContextMenuContent>
-          </ContextMenu>
+          <VirtualTableBody
+            columns={columns}
+            currentData={currentData}
+            virtualizer={virtualizer}
+            startIndex={startIndex}
+            showRowNumbers={showRowNumbers}
+            showZebraStripes={showZebraStripes}
+            showColumnComments={showColumnComments}
+            columnComments={columnComments}
+            getColWidth={getColWidth}
+            tableWidthPx={tableWidthPx}
+            INDEX_COL_WIDTH={INDEX_COL_WIDTH}
+            thRefs={thRefs}
+            activeSortColumn={activeSortColumn}
+            activeSortDirection={activeSortDirection}
+            selectedCell={selectedCell}
+            selectedRows={selectedRows}
+            editingCell={editingCell}
+            editValue={editValue}
+            cellSelectionRange={cellSelectionRange}
+            normalizedSearchKeyword={normalizedSearchKeyword}
+            matchedCellKeys={matchedCellKeys}
+            currentSearchMatch={currentSearchMatch}
+            isEditableForUpdates={isEditableForUpdates}
+            editInputRef={editInputRef}
+            getCellDisplayValue={getCellDisplayValue}
+            isCellModified={isCellModified}
+            handleCellClick={handleCellClick}
+            handleCellDoubleClick={handleCellDoubleClick}
+            handleCellMouseDownForRange={handleCellMouseDownForRange}
+            handleCellMouseMoveForRange={handleCellMouseMoveForRange}
+            handleIndexMouseDown={handleIndexMouseDown}
+            handleIndexMouseEnter={handleIndexMouseEnter}
+            handleEditKeyDown={handleEditKeyDown}
+            setEditValue={setEditValue}
+            commitEdit={commitEdit}
+            setComplexViewer={setComplexViewer}
+            setContextMenuRow={setContextMenuRow}
+            handleSortClick={handleSortClick}
+            handleHeaderCopy={handleHeaderCopy}
+            handleMouseDown={handleMouseDown}
+            insertDraftRows={insertDraftRows}
+            handleDraftValueChange={handleDraftValueChange}
+            contextMenuRow={contextMenuRow}
+            tableColumns={tableColumns}
+            tableContext={tableContext}
+            canUpdateDelete={canUpdateDelete}
+            onFilterChange={onFilterChange}
+            orderByInput={orderByInput}
+            getNormalizedCellRange={getNormalizedCellRange}
+            handleCopy={handleCopy}
+            handleCopySelection={handleCopySelection}
+            buildSelectionCSV={buildSelectionCSV}
+            buildSelectionInsertSQL={buildSelectionInsertSQL}
+            buildSelectionUpdateSQL={buildSelectionUpdateSQL}
+            buildRowsTSV={buildRowsTSV}
+            buildRowsCSV={buildRowsCSV}
+            buildRowsInsertSQL={buildRowsInsertSQL}
+            buildRowsUpdateSQL={buildRowsUpdateSQL}
+            applyFilter={applyFilter}
+            setPendingChanges={setPendingChanges}
+            headerClickStateRef={headerClickStateRef}
+            t={t}
+          />
         )}
       </div>
 
@@ -2103,29 +934,17 @@ export function TableView({
         />
       )}
 
-      <div className="flex items-center px-4 py-1 border-t border-border bg-muted/40">
-        <div className="text-sm text-muted-foreground">
-          Query executed in{" "}
-          {executionTimeMs ? (executionTimeMs / 1000).toFixed(3) : "0.000"}s •{" "}
-          {sortedData.length} rows returned
-          {normalizedSearchKeyword && (
-            <span className="ml-2">
-              • {matchedRows.size} row(s) matched "{searchKeyword.trim()}"
-            </span>
-          )}
-          {isRefreshing && <span className="ml-2">• Refreshing…</span>}
-          {lastRefreshedAt && !isRefreshing && (
-            <span className="ml-2">
-              • Updated {lastRefreshedAt.toLocaleTimeString()}
-            </span>
-          )}
-          {hasPendingChanges && (
-            <span className="text-orange-600 dark:text-orange-400 ml-2">
-              • {pendingMutationCount} unsaved change(s)
-            </span>
-          )}
-        </div>
-      </div>
+      <TableStatusBar
+        executionTimeMs={executionTimeMs}
+        sortedDataLength={sortedData.length}
+        normalizedSearchKeyword={normalizedSearchKeyword}
+        matchedRowsSize={matchedRows.size}
+        searchKeyword={searchKeyword}
+        isRefreshing={isRefreshing}
+        lastRefreshedAt={lastRefreshedAt}
+        hasPendingChanges={hasPendingChanges}
+        pendingMutationCount={pendingMutationCount}
+      />
     </div>
   );
 }
