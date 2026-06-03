@@ -124,6 +124,7 @@ import type {
   SelectedTableNode,
   DatasourceTreeAdapter,
 } from "./connection-list/types";
+import { useTreeExpansion } from "./hooks/useTreeExpansion";
 
 function groupSqlObjectsBySchema(
   tables: TableInfo[],
@@ -500,30 +501,34 @@ export function ConnectionList({
   const handledRevealRequestIdRef = useRef<number | null>(null);
   const handledRedisRefreshIdRef = useRef<number | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [expandedConnections, setExpandedConnections] = useState<Set<string>>(
-    new Set(),
-  );
-  const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(
-    new Set(),
-  );
-  // These refs are updated every render so effects can read latest values without
+  const {
+    expandedConnections,
+    setExpandedConnections,
+    expandedDatabases,
+    setExpandedDatabases,
+    expandedDatabaseGroups,
+    setExpandedDatabaseGroups,
+    expandedQueryGroups,
+    setExpandedQueryGroups,
+    expandedSchemas,
+    setExpandedSchemas,
+    expandedGroupNodes,
+    expandedTables,
+    setExpandedTables,
+    connectionsRef,
+    expandedDatabasesRef,
+    toggleConnection,
+    toggleDatabase,
+    toggleQueryGroup,
+    toggleDatabaseGroup,
+    toggleSchema,
+    toggleGroupNode,
+    toggleTable,
+  } = useTreeExpansion();
+  // Update refs every render so effects can read latest values without
   // listing them as deps (avoids re-firing on every connection state update).
-  const connectionsRef = useRef(connections);
   connectionsRef.current = connections;
-  const expandedDatabasesRef = useRef(expandedDatabases);
   expandedDatabasesRef.current = expandedDatabases;
-  const [expandedDatabaseGroups, setExpandedDatabaseGroups] = useState<
-    Set<string>
-  >(new Set());
-  const [expandedQueryGroups, setExpandedQueryGroups] = useState<Set<string>>(
-    new Set(),
-  );
-  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(
-    new Set(),
-  );
-  const [expandedGroupNodes, setExpandedGroupNodes] = useState<Set<string>>(
-    new Set(),
-  );
   const [databaseEvents, setDatabaseEvents] = useState<
     Map<string, EventInfo[]>
   >(new Map());
@@ -539,7 +544,6 @@ export function ConnectionList({
   const [databasePackages, setDatabasePackages] = useState<
     Map<string, PackageInfo[]>
   >(new Map());
-  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [selectedTableNode, setSelectedTableNode] =
     useState<SelectedTableNode | null>(null);
   const selectedTableKey = selectedTableNode?.key ?? null;
@@ -1009,20 +1013,6 @@ export function ConnectionList({
     } finally {
       setIsLoadingQueries(false);
     }
-  };
-
-  const toggleConnection = (id: string) => {
-    const connection = connections.find((conn) => conn.id === id);
-    if (!connection) return;
-    if (connection.connectState !== "success") return;
-
-    const newExpanded = new Set(expandedConnections);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedConnections(newExpanded);
   };
 
   const fetchAndSetDatabases = async (
@@ -2089,88 +2079,6 @@ export function ConnectionList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showMongoSystemCollections]);
 
-  const toggleDatabase = (key: string) => {
-    const newExpanded = new Set(expandedDatabases);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-      // When expanding, try to load tables (if not loaded)
-      // Key format is "connectionId-dbName"
-      const [connId, ...dbNameParts] = key.split("-");
-      const dbName = dbNameParts.join("-");
-      // Find the corresponding connection and database
-      const conn = connections.find((c) => c.id === connId);
-      if (conn) {
-        const db = conn.databases.find((d) => d.name === dbName);
-        if (
-          db &&
-          (supportsSchemaNodeForDriver(conn.type)
-            ? db.schemas.length === 0
-            : db.tables.length === 0)
-        ) {
-          setLoadingDatabaseKeys((prev) => new Set(prev).add(key));
-          fetchAndSetTables(connId, dbName).finally(() => {
-            setLoadingDatabaseKeys((prev) => {
-              const next = new Set(prev);
-              next.delete(key);
-              return next;
-            });
-          });
-        }
-      }
-    }
-    setExpandedDatabases(newExpanded);
-  };
-
-  const toggleQueryGroup = (key: string) => {
-    setExpandedQueryGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
-
-  const toggleDatabaseGroup = (key: string) => {
-    setExpandedDatabaseGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
-
-  const toggleSchema = (schemaKey: string) => {
-    setExpandedSchemas((prev) => {
-      const next = new Set(prev);
-      if (next.has(schemaKey)) {
-        next.delete(schemaKey);
-      } else {
-        next.add(schemaKey);
-      }
-      return next;
-    });
-  };
-
-  const toggleGroupNode = (groupKey: string) => {
-    setExpandedGroupNodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) {
-        next.delete(groupKey);
-      } else {
-        next.add(groupKey);
-      }
-      return next;
-    });
-  };
-
   const getGroupItems = (
     database: DatabaseInfo,
     group: DatabaseGroupConfig,
@@ -2275,42 +2183,6 @@ export function ConnectionList({
         e instanceof Error ? e.message : String(e),
       );
     }
-  };
-
-  const toggleTable = (
-    tableKey: string,
-    connectionId: string,
-    databaseName: string,
-    table: TableInfo,
-  ) => {
-    const newExpanded = new Set(expandedTables);
-    if (newExpanded.has(tableKey)) {
-      newExpanded.delete(tableKey);
-    } else {
-      newExpanded.add(tableKey);
-      const conn = connections.find((c) => c.id === connectionId);
-      if (conn && getDatasourceTreeAdapter(conn).shouldSkipTableColumns) {
-        setExpandedTables(newExpanded);
-        return;
-      }
-      // Load column info on first expand
-      if (table.columns.length === 0) {
-        setLoadingTableKeys((prev) => new Set(prev).add(tableKey));
-        fetchAndSetTableColumns(
-          connectionId,
-          databaseName,
-          table.schema,
-          table.name,
-        ).finally(() => {
-          setLoadingTableKeys((prev) => {
-            const next = new Set(prev);
-            next.delete(tableKey);
-            return next;
-          });
-        });
-      }
-    }
-    setExpandedTables(newExpanded);
   };
 
   const handleTableClick = (
@@ -2995,12 +2867,27 @@ export function ConnectionList({
                         isExpanded={expandedTables.has(tableKey)}
                         toggleOnRowClick={false}
                         onToggle={() => {
-                          toggleTable(
-                            tableKey,
-                            connection.id,
-                            database.name,
-                            table,
-                          );
+                          toggleTable(tableKey, () => {
+                            const conn = connections.find((c) => c.id === connection.id);
+                            if (conn && getDatasourceTreeAdapter(conn).shouldSkipTableColumns) {
+                              return;
+                            }
+                            if (table.columns.length === 0) {
+                              setLoadingTableKeys((prev) => new Set(prev).add(tableKey));
+                              fetchAndSetTableColumns(
+                                connection.id,
+                                database.name,
+                                table.schema,
+                                table.name,
+                              ).finally(() => {
+                                setLoadingTableKeys((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(tableKey);
+                                  return next;
+                                });
+                              });
+                            }
+                          });
                         }}
                         onDoubleClick={() => {
                           handleTableClick(connection, database, table);
@@ -3151,7 +3038,25 @@ export function ConnectionList({
                   icon={group.leafIcon}
                   label={item.name}
                   isExpanded={expandedTables.has(nodeKey)}
-                  onToggle={() => toggleTable(nodeKey, conn.id, database.name, { name: item.name, schema: item.schema, columns: [] })}
+                  onToggle={() => toggleTable(nodeKey, () => {
+                    const c = connections.find((x) => x.id === conn.id);
+                    if (c && getDatasourceTreeAdapter(c).shouldSkipTableColumns) {
+                      return;
+                    }
+                    setLoadingTableKeys((prev) => new Set(prev).add(nodeKey));
+                    fetchAndSetTableColumns(
+                      conn.id,
+                      database.name,
+                      item.schema,
+                      item.name,
+                    ).finally(() => {
+                      setLoadingTableKeys((prev) => {
+                        const next = new Set(prev);
+                        next.delete(nodeKey);
+                        return next;
+                      });
+                    });
+                  })}
                 >
                   {null}
                 </TreeNode>
@@ -3173,7 +3078,25 @@ export function ConnectionList({
                   icon={group.leafIcon}
                   label={item.name}
                   isExpanded={expandedTables.has(nodeKey)}
-                  onToggle={() => toggleTable(nodeKey, conn.id, database.name, { name: item.name, schema: item.schema, columns: [] })}
+                  onToggle={() => toggleTable(nodeKey, () => {
+                    const c = connections.find((x) => x.id === conn.id);
+                    if (c && getDatasourceTreeAdapter(c).shouldSkipTableColumns) {
+                      return;
+                    }
+                    setLoadingTableKeys((prev) => new Set(prev).add(nodeKey));
+                    fetchAndSetTableColumns(
+                      conn.id,
+                      database.name,
+                      item.schema,
+                      item.name,
+                    ).finally(() => {
+                      setLoadingTableKeys((prev) => {
+                        const next = new Set(prev);
+                        next.delete(nodeKey);
+                        return next;
+                      });
+                    });
+                  })}
                 >
                   {null}
                 </TreeNode>
@@ -3259,7 +3182,27 @@ export function ConnectionList({
                     ? expandedDatabases.has(dbKey)
                     : false
                 }
-                onToggle={() => toggleDatabase(dbKey)}
+                onToggle={() => toggleDatabase(dbKey, (connId, dbName, key) => {
+                  const conn = connections.find((c) => c.id === connId);
+                  if (conn) {
+                    const db = conn.databases.find((d) => d.name === dbName);
+                    if (
+                      db &&
+                      (supportsSchemaNodeForDriver(conn.type)
+                        ? db.schemas.length === 0
+                        : db.tables.length === 0)
+                    ) {
+                      setLoadingDatabaseKeys((prev) => new Set(prev).add(key));
+                      fetchAndSetTables(connId, dbName).finally(() => {
+                        setLoadingDatabaseKeys((prev) => {
+                          const next = new Set(prev);
+                          next.delete(key);
+                          return next;
+                        });
+                      });
+                    }
+                  }
+                })}
                 toggleOnRowClick={datasourceAdapter.isDatabaseExpandable}
                 hideToggle={!datasourceAdapter.isDatabaseExpandable}
                 statusIndicator={
@@ -3343,7 +3286,7 @@ export function ConnectionList({
               label={connection.name}
               isExpanded={expandedConnections.has(connection.id)}
               toggleOnRowClick={connection.connectState === "success"}
-              onToggle={() => toggleConnection(connection.id)}
+              onToggle={() => toggleConnection(connection.id, connections)}
               onDoubleClick={() => {
                 void connectConnection(connection.id);
               }}
