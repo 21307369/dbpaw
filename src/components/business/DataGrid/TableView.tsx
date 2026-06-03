@@ -72,29 +72,24 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { api, isTauri } from "@/services/api";
-import type { ColumnInfo, TransferFormat } from "@/services/api";
+import type { TransferFormat } from "@/services/api";
 import { isEditableTarget } from "@/lib/keyboard";
 import { useShortcutMatcher } from "@/contexts/ShortcutsContext";
 import {
-  buildDeleteStatement,
   buildFilterExpression,
-  buildUpdateStatement,
-  canMutateClickHouseTable,
   collectSearchMatches,
   createSingleAndDoubleClickHandler,
-  escapeSQL,
   cellValueToString,
   formatCellValue,
-  formatInsertSQLValue,
-  formatSQLValue,
   getQualifiedTableName,
-  isClickHouseMergeTreeEngine,
   isComplexValue,
   isDateType,
-  isInsertColumnRequired,
   isNumericType,
   isStringType,
+  formatSQLValue,
   quoteIdent,
+  escapeSQL,
+  buildUpdateStatement,
   sortRows,
 } from "./tableView/utils";
 import {
@@ -109,25 +104,13 @@ import {
 } from "./tableView/selectionCopy";
 import { ComplexValueViewer } from "./ComplexValueViewer";
 import { ColumnAutocompleteInput } from "./tableView/ColumnAutocompleteInput";
-import type { ColumnAutocompleteOption } from "./tableView/columnAutocomplete";
 import { useTableSort } from "./tableView/hooks/useTableSort";
 import { useTablePagination } from "./tableView/hooks/useTablePagination";
 import { useColumnState } from "./tableView/hooks/useColumnState";
 import { useCellSelection } from "./tableView/hooks/useCellSelection";
+import { useCellEditing } from "./tableView/hooks/useCellEditing";
+import type { PendingChange } from "./tableView/hooks/useCellEditing";
 import { toast } from "sonner";
-
-interface PendingChange {
-  rowIndex: number;
-  sourceRowIndex: number;
-  column: string;
-  originalValue: any;
-  newValue: string;
-}
-
-interface InsertDraftRow {
-  tempId: string;
-  values: Record<string, string>;
-}
 
 function isCellInRange(
   rowIndex: number,
@@ -501,70 +484,18 @@ export function TableView({
     handleIndexMouseEnter,
     clearSelection,
   } = useCellSelection();
-  const [editingCell, setEditingCell] = useState<{
-    row: number;
-    col: string;
-  } | null>(null);
-  const [editValue, setEditValue] = useState<string>("");
-  const [pendingChanges, setPendingChanges] = useState<
-    Map<string, PendingChange>
-  >(new Map());
-  const [insertDraftRows, setInsertDraftRows] = useState<InsertDraftRow[]>([]);
-  const [primaryKeys, setPrimaryKeys] = useState<string[]>([]);
-  const [clickhouseEngine, setClickhouseEngine] = useState<string | null>(null);
-  const [tableColumns, setTableColumns] = useState<ColumnInfo[]>([]);
-  const [columnComments, setColumnComments] = useState<Record<string, string>>(
-    {},
-  );
-  const columnAutocompleteOptions = useMemo<ColumnAutocompleteOption[]>(() => {
-    if (tableColumns.length > 0) {
-      return tableColumns.map((column) => ({
-        name: column.name,
-        type: column.type,
-      }));
-    }
-
-    return columns.map((column) => ({ name: column }));
-  }, [columns, tableColumns]);
-  const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [searchCursorIndex, setSearchCursorIndex] = useState(-1);
-  const [pendingFocusDraftId, setPendingFocusDraftId] = useState<string | null>(
-    null,
-  );
   const [complexViewer, setComplexViewer] = useState<{
     value: unknown;
     columnName: string;
   } | null>(null);
-  const editInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const saveButtonRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const editingCellRef = useRef<{ row: number; col: string } | null>(null);
-  const commitEditRef = useRef<(() => void) | null>(null);
-  const pendingChangesRef = useRef<Map<string, PendingChange>>(new Map());
-  const editValueRef = useRef("");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [contextMenuRow, setContextMenuRow] = useState<number | null>(null);
-
-  useEffect(() => {
-    editingCellRef.current = editingCell;
-  }, [editingCell]);
-
-  useEffect(() => {
-    pendingChangesRef.current = pendingChanges;
-  }, [pendingChanges]);
-
-  useEffect(() => {
-    editValueRef.current = editValue;
-  }, [editValue]);
 
   const {
     activeSortColumn,
@@ -623,7 +554,72 @@ export function TableView({
     onPageSizeChange,
   });
 
+  // --- Cell editing hook ---
+  const {
+    editingCell,
+    editValue,
+    setEditValue,
+    insertDraftRows,
+    primaryKeys,
+    tableColumns,
+    columnComments,
+    columnAutocompleteOptions,
+    isSaving,
+    isRefreshing,
+    isDeleting,
+    deleteDialogOpen,
+    setDeleteDialogOpen,
+    lastRefreshedAt,
+    saveError,
+    setSaveError,
+    pendingFocusDraftId,
+    setPendingFocusDraftId,
+    canInsert,
+    canUpdateDelete,
+    hasPendingChanges,
+    pendingMutationCount,
+    mutabilityHint,
+    isEditableForUpdates,
+    editInputRef,
+    saveButtonRef,
+    commitEdit,
+    cancelEdit,
+    handleEditKeyDown,
+    handleCellDoubleClick,
+    handleSave,
+    handleConfirmDelete,
+    handleDiscardChanges,
+    handleAddDraftRow,
+    handleDraftValueChange,
+    handleRefreshClick,
+    getCellDisplayValue,
+    isCellModified,
+    setPendingChanges,
+    editingCellRef,
+    commitEditRef,
+  } = useCellEditing({
+    data,
+    currentData,
+    columns,
+    tableContext,
+    onDataRefresh,
+    selectedCell,
+    selectedCellRef,
+    selectedRows,
+    selectedRowsRef,
+    setSelectedCell,
+    setSelectedRows,
+    clearSelection,
+    hasLocalClientSort,
+  });
 
+  // Virtual scrolling — only render visible rows
+  const virtualizer = useVirtualizer({
+    count: currentData.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => 36,
+    overscan: 20,
+  });
 
   const handleShowDDL = () => {
     if (!tableContext) return;
@@ -707,111 +703,6 @@ export function TableView({
     ],
   );
 
-  // --- Fetch primary keys when tableContext is available ---
-  useEffect(() => {
-    if (!tableContext) {
-      setPrimaryKeys([]);
-      setClickhouseEngine(null);
-      setTableColumns([]);
-      setColumnComments({});
-      return;
-    }
-    api.metadata
-      .getTableMetadata(
-        tableContext.connectionId,
-        tableContext.database,
-        tableContext.schema,
-        tableContext.table,
-      )
-      .then((meta) => {
-        const pks = meta.columns.filter((c) => c.primaryKey).map((c) => c.name);
-        setPrimaryKeys(pks);
-        setClickhouseEngine(meta.clickhouseExtra?.engine || null);
-        setTableColumns(meta.columns);
-
-        const comments: Record<string, string> = {};
-        meta.columns.forEach((c) => {
-          const comment = c.comment?.trim();
-          if (comment) {
-            comments[c.name] = comment;
-          }
-        });
-        setColumnComments(comments);
-      })
-      .catch((e) => {
-        console.error("Failed to fetch primary keys:", e);
-        setPrimaryKeys([]);
-        setClickhouseEngine(null);
-        setTableColumns([]);
-        setColumnComments({});
-      });
-  }, [
-    tableContext?.connectionId,
-    tableContext?.database,
-    tableContext?.schema,
-    tableContext?.table,
-  ]);
-
-  // Clear pending changes when data/page changes
-  useEffect(() => {
-    setPendingChanges(new Map());
-    setInsertDraftRows([]);
-    setEditingCell(null);
-    clearSelection();
-    setDeleteDialogOpen(false);
-    setIsDeleting(false);
-    setSaveError(null);
-  }, [data, page, clearSelection]);
-
-  const isClickHouseDriver = tableContext?.driver === "clickhouse";
-  const hasPrimaryKeys = primaryKeys.length > 0;
-  const canInsert =
-    !!tableContext &&
-    (isClickHouseDriver
-      ? isClickHouseMergeTreeEngine(clickhouseEngine)
-      : hasPrimaryKeys);
-  const canUpdateDelete =
-    !!tableContext &&
-    (isClickHouseDriver
-      ? canMutateClickHouseTable(clickhouseEngine, primaryKeys)
-      : hasPrimaryKeys);
-  const isEditableForUpdates = canUpdateDelete && !hasLocalClientSort;
-  const mutabilityHint = useMemo(() => {
-    if (!tableContext) return null;
-    if (hasLocalClientSort) {
-      return "Inline cell editing is disabled while client-side sorting is active.";
-    }
-    if (isClickHouseDriver) {
-      if (!isClickHouseMergeTreeEngine(clickhouseEngine)) {
-        return "ClickHouse inline write is only enabled for MergeTree-family tables.";
-      }
-      if (!hasPrimaryKeys) {
-        return "ClickHouse table update/delete requires primary key columns.";
-      }
-      return null;
-    }
-    if (!hasPrimaryKeys) {
-      return "This table has no primary key and does not support inline editing";
-    }
-    return null;
-  }, [
-    tableContext,
-    hasLocalClientSort,
-    isClickHouseDriver,
-    clickhouseEngine,
-    hasPrimaryKeys,
-  ]);
-  const pendingMutationCount = pendingChanges.size + insertDraftRows.length;
-  const hasPendingChanges = pendingMutationCount > 0;
-
-  // Virtual scrolling — only render visible rows
-  const virtualizer = useVirtualizer({
-    count: currentData.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => 36,
-    overscan: 20,
-  });
-
   // --- Cell interaction handlers ---
   const handleCellClick = useCallback(
     (rowIndex: number, col: string) => {
@@ -832,87 +723,6 @@ export function TableView({
     },
     [handleCellMouseDownForRangeBase, columns],
   );
-
-  const handleCellDoubleClick = useCallback(
-    (rowIndex: number, col: string, currentValue: any) => {
-      if (!isEditableForUpdates) return;
-      // Check if there's a pending change for this cell
-      const key = `${rowIndex}_${col}`;
-      const pending = pendingChangesRef.current.get(key);
-      const value = pending
-        ? pending.newValue
-        : cellValueToString(currentValue);
-      setEditingCell({ row: rowIndex, col });
-      setEditValue(value);
-      setSelectedCell({ row: rowIndex, col });
-      // Focus input on next tick
-      setTimeout(() => editInputRef.current?.focus(), 0);
-    },
-    [isEditableForUpdates],
-  );
-
-  const commitEdit = useCallback(() => {
-    const ec = editingCellRef.current;
-    if (!ec) return;
-    const { row, col } = ec;
-    const originalRow = currentData[row];
-    if (!originalRow) {
-      setEditingCell(null);
-      return;
-    }
-    const sourceRowIndex = data.indexOf(originalRow);
-    const originalValue = originalRow[col];
-    const originalStr = cellValueToString(originalValue);
-    const key = `${row}_${col}`;
-    const currentEditValue = editValueRef.current;
-
-    if (currentEditValue !== originalStr) {
-      setPendingChanges((prev) => {
-        const next = new Map(prev);
-        next.set(key, {
-          rowIndex: row,
-          sourceRowIndex: sourceRowIndex >= 0 ? sourceRowIndex : row,
-          column: col,
-          originalValue,
-          newValue: currentEditValue,
-        });
-        return next;
-      });
-    } else {
-      // Value reverted to original, remove from pending
-      setPendingChanges((prev) => {
-        const next = new Map(prev);
-        next.delete(key);
-        return next;
-      });
-    }
-    setEditingCell(null);
-  }, [data, currentData]);
-  commitEditRef.current = commitEdit;
-
-  const cancelEdit = useCallback(() => {
-    setEditingCell(null);
-  }, []);
-
-  const handleEditKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        commitEditRef.current?.();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        cancelEdit();
-      }
-    },
-    [cancelEdit],
-  );
-
-  const handleDiscardChanges = useCallback(() => {
-    setPendingChanges(new Map());
-    setInsertDraftRows([]);
-    setEditingCell(null);
-    setSaveError(null);
-  }, []);
 
   const handleCopy = useCallback((text: string, label?: string) => {
     void navigator.clipboard.writeText(text).then(() => {
@@ -945,380 +755,6 @@ export function TableView({
     },
     [t],
   );
-
-  // --- SQL generation & save ---
-
-  const generateUpdateSQL = useCallback(() => {
-    if (!tableContext || !canUpdateDelete || primaryKeys.length === 0)
-      return [];
-
-    // Group changes by source row index
-    const changesByRow = new Map<number, PendingChange[]>();
-    pendingChanges.forEach((change) => {
-      const existing = changesByRow.get(change.sourceRowIndex) || [];
-      existing.push(change);
-      changesByRow.set(change.sourceRowIndex, existing);
-    });
-
-    const sqls: string[] = [];
-    const { schema, table, driver } = tableContext;
-
-    changesByRow.forEach((changes, rowIndex) => {
-      const row = data[rowIndex] ?? currentData[changes[0]?.rowIndex ?? -1];
-      if (!row) return;
-
-      // Build SET clause - only modified columns
-      const setClauses = changes.map((c) => {
-        const formattedValue = formatSQLValue(
-          c.newValue,
-          c.originalValue,
-          "execution",
-          tableContext.driver,
-        );
-        return `${quoteIdent(tableContext.driver, c.column)} = ${formattedValue}`;
-      });
-
-      // Build WHERE clause using primary keys
-      const whereClauses = primaryKeys.map((pk) => {
-        const pkValue = row[pk];
-        if (pkValue === null || pkValue === undefined) {
-          return `${quoteIdent(tableContext.driver, pk)} IS NULL`;
-        }
-        if (typeof pkValue === "number") {
-          return `${quoteIdent(tableContext.driver, pk)} = ${pkValue}`;
-        }
-        return `${quoteIdent(tableContext.driver, pk)} = '${escapeSQL(String(pkValue))}'`;
-      });
-
-      const tableName = getQualifiedTableName(driver, schema, table);
-
-      const sql = buildUpdateStatement(
-        driver,
-        tableName,
-        setClauses.join(", "),
-        whereClauses.join(" AND "),
-      );
-      sqls.push(sql);
-    });
-
-    return sqls;
-  }, [
-    tableContext,
-    canUpdateDelete,
-    primaryKeys,
-    pendingChanges,
-    data,
-    currentData,
-  ]);
-
-  const generateInsertSQL = useCallback(() => {
-    if (!tableContext || !canInsert || !insertDraftRows.length) return [];
-    const tableName = getQualifiedTableName(
-      tableContext.driver,
-      tableContext.schema,
-      tableContext.table,
-    );
-    const metadataByName = new Map(tableColumns.map((col) => [col.name, col]));
-    const sqls: string[] = [];
-
-    insertDraftRows.forEach((draft, index) => {
-      const insertColumns: string[] = [];
-      const insertValues: string[] = [];
-
-      columns.forEach((columnName) => {
-        const raw = draft.values[columnName] ?? "";
-        const trimmed = raw.trim();
-        const meta = metadataByName.get(columnName);
-
-        if (trimmed === "") {
-          if (meta && isInsertColumnRequired(meta)) {
-            throw new Error(
-              `Row ${index + 1}: column "${columnName}" is required`,
-            );
-          }
-          return;
-        }
-
-        const formatted = formatInsertSQLValue(
-          raw,
-          { name: columnName, type: meta?.type || "text" },
-          tableContext.driver,
-        );
-        insertColumns.push(quoteIdent(tableContext.driver, columnName));
-        insertValues.push(formatted);
-      });
-
-      if (!insertColumns.length) {
-        throw new Error(
-          `Row ${index + 1}: at least one column value is required`,
-        );
-      }
-
-      sqls.push(
-        `INSERT INTO ${tableName} (${insertColumns.join(", ")}) VALUES (${insertValues.join(", ")})`,
-      );
-    });
-
-    return sqls;
-  }, [tableContext, canInsert, insertDraftRows, tableColumns, columns]);
-
-  const buildDeleteSQL = useCallback(() => {
-    if (
-      !tableContext ||
-      !canUpdateDelete ||
-      !selectedRows.size ||
-      primaryKeys.length === 0
-    ) {
-      return "";
-    }
-
-    const selectedIndexes = Array.from(selectedRows).sort((a, b) => a - b);
-    const rowClauses = selectedIndexes
-      .map((rowIndex) => {
-        const row = currentData[rowIndex];
-        if (!row) return "";
-        const pkClauses = primaryKeys.map((pk) => {
-          const pkValue = row[pk];
-          if (pkValue === null || pkValue === undefined) {
-            return `${quoteIdent(tableContext.driver, pk)} IS NULL`;
-          }
-          if (typeof pkValue === "number") {
-            return `${quoteIdent(tableContext.driver, pk)} = ${pkValue}`;
-          }
-          return `${quoteIdent(tableContext.driver, pk)} = '${escapeSQL(String(pkValue))}'`;
-        });
-        return `(${pkClauses.join(" AND ")})`;
-      })
-      .filter((clause) => clause.length > 0);
-
-    if (!rowClauses.length) return "";
-
-    const tableName = getQualifiedTableName(
-      tableContext.driver,
-      tableContext.schema,
-      tableContext.table,
-    );
-    return buildDeleteStatement(
-      tableContext.driver,
-      tableName,
-      rowClauses.join(" OR "),
-    );
-  }, [tableContext, canUpdateDelete, selectedRows, primaryKeys, currentData]);
-
-  const handleAddDraftRow = useCallback(() => {
-    if (!canInsert) return;
-    const tempId = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const values = columns.reduce<Record<string, string>>((acc, column) => {
-      acc[column] = "";
-      return acc;
-    }, {});
-    setInsertDraftRows((prev) => [...prev, { tempId, values }]);
-    setPendingFocusDraftId(tempId);
-  }, [canInsert, columns]);
-
-  const handleDraftValueChange = useCallback(
-    (tempId: string, column: string, value: string) => {
-      setInsertDraftRows((prev) =>
-        prev.map((draft) =>
-          draft.tempId === tempId
-            ? { ...draft, values: { ...draft.values, [column]: value } }
-            : draft,
-        ),
-      );
-    },
-    [],
-  );
-
-  const refreshAfterMutation = useCallback(async () => {
-    if (!onDataRefresh) return;
-    const runRefresh = async () => {
-      const ret = onDataRefresh();
-      if (ret && typeof (ret as Promise<unknown>).then === "function") {
-        await ret;
-      }
-    };
-
-    await runRefresh();
-    if (tableContext?.driver === "clickhouse") {
-      await new Promise((resolve) => setTimeout(resolve, 350));
-      await runRefresh();
-    }
-  }, [onDataRefresh, tableContext?.driver]);
-
-  const handleConfirmDelete = useCallback(async () => {
-    if (!tableContext || !canUpdateDelete || !selectedRows.size || isDeleting) {
-      return;
-    }
-
-    const sql = buildDeleteSQL();
-    if (!sql) {
-      setDeleteDialogOpen(false);
-      return;
-    }
-
-    setIsDeleting(true);
-    setSaveError(null);
-    try {
-      await api.query.execute(
-        tableContext.connectionId,
-        sql,
-        tableContext.database,
-        "table_view_save",
-      );
-      setDeleteDialogOpen(false);
-      const nextSelectedRows = new Set<number>();
-      selectedRowsRef.current = nextSelectedRows;
-      setSelectedRows(nextSelectedRows);
-      selectedCellRef.current = null;
-      setSelectedCell(null);
-      setEditingCell(null);
-      await refreshAfterMutation();
-    } catch (e) {
-      setSaveError(
-        `Delete failed:\n${sql}\n  -> ${e instanceof Error ? e.message : String(e)}`,
-      );
-    } finally {
-      setIsDeleting(false);
-    }
-  }, [
-    tableContext,
-    canUpdateDelete,
-    selectedRows,
-    isDeleting,
-    buildDeleteSQL,
-    refreshAfterMutation,
-  ]);
-
-  const handleSave = useCallback(async () => {
-    if (!tableContext || !hasPendingChanges) return;
-
-    setIsSaving(true);
-    setSaveError(null);
-
-    let sqls: string[] = [];
-    try {
-      const updateSqls = generateUpdateSQL();
-      const insertSqls = generateInsertSQL();
-      sqls = [...updateSqls, ...insertSqls];
-    } catch (err) {
-      setIsSaving(false);
-      setSaveError(err instanceof Error ? err.message : String(err));
-      return;
-    }
-
-    if (sqls.length === 0) {
-      setIsSaving(false);
-      return;
-    }
-
-    const errors: string[] = [];
-    for (const sql of sqls) {
-      try {
-        await api.query.execute(
-          tableContext.connectionId,
-          sql,
-          tableContext.database,
-          "table_view_save",
-        );
-      } catch (e) {
-        errors.push(
-          `${sql}\n  -> ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    }
-
-    setIsSaving(false);
-
-    if (errors.length > 0) {
-      setSaveError(
-        `${errors.length} statement(s) failed:\n${errors.join("\n")}`,
-      );
-    } else {
-      setPendingChanges(new Map());
-      setInsertDraftRows([]);
-      setSaveError(null);
-      await refreshAfterMutation();
-    }
-  }, [
-    tableContext,
-    hasPendingChanges,
-    generateUpdateSQL,
-    generateInsertSQL,
-    refreshAfterMutation,
-  ]);
-
-  const handleRefreshClick = useCallback(async () => {
-    if (isRefreshing) return;
-    if (hasPendingChanges) {
-      const confirmed = window.confirm(
-        "You have unsaved changes. Refreshing may discard your editing context. Continue?",
-      );
-      if (!confirmed) return;
-    }
-
-    const parsedPage = Number.parseInt(pageInput, 10);
-    const nextPage =
-      Number.isNaN(parsedPage) || parsedPage < 1 ? page : parsedPage;
-    const parsedLimit = Number.parseInt(pageSizeInput, 10);
-    const nextLimit =
-      Number.isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 10000
-        ? pageSize
-        : parsedLimit;
-    const nextFilter = whereInput.trim() || undefined;
-    const nextOrderBy = orderByInput.trim() || undefined;
-
-    if (!onDataRefresh) return;
-
-    setIsRefreshing(true);
-    try {
-      const ret = onDataRefresh({
-        page: nextPage,
-        limit: nextLimit,
-        filter: nextFilter,
-        orderBy: nextOrderBy,
-      });
-      if (ret && typeof (ret as Promise<unknown>).then === "function") {
-        await ret;
-      } else {
-        await new Promise((r) => setTimeout(r, 300));
-      }
-      setLastRefreshedAt(new Date());
-    } catch (e) {
-      void e;
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [
-    hasPendingChanges,
-    pageInput,
-    page,
-    pageSizeInput,
-    pageSize,
-    whereInput,
-    orderByInput,
-    onDataRefresh,
-    isRefreshing,
-  ]);
-
-  // Helper: get display value for a cell (considering pending changes)
-  const getCellDisplayValue = useCallback(
-    (rowIndex: number, column: string, originalValue: any) => {
-      const key = `${rowIndex}_${column}`;
-      const pending = pendingChanges.get(key);
-      if (pending) return pending.newValue;
-      return originalValue;
-    },
-    [pendingChanges],
-  );
-
-  const isCellModified = useCallback(
-    (rowIndex: number, column: string) => {
-      return pendingChanges.has(`${rowIndex}_${column}`);
-    },
-    [pendingChanges],
-  );
-
-
 
   const buildRowsTSV = useCallback(
     (rowIndexes: number[]) => buildRowsTSVFn(rowIndexes, columns, currentData, getCellDisplayValue, cellValueToString),
