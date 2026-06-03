@@ -79,7 +79,6 @@ import {
   buildDeleteStatement,
   buildFilterExpression,
   buildUpdateStatement,
-  calculateAutoColumnWidths,
   canMutateClickHouseTable,
   collectSearchMatches,
   createSingleAndDoubleClickHandler,
@@ -113,6 +112,7 @@ import { ColumnAutocompleteInput } from "./tableView/ColumnAutocompleteInput";
 import type { ColumnAutocompleteOption } from "./tableView/columnAutocomplete";
 import { useTableSort } from "./tableView/hooks/useTableSort";
 import { useTablePagination } from "./tableView/hooks/useTablePagination";
+import { useColumnState } from "./tableView/hooks/useColumnState";
 import { toast } from "sonner";
 
 interface PendingChange {
@@ -470,38 +470,18 @@ export function TableView({
   showZebraStripes = false,
 }: TableViewProps) {
   const { t } = useTranslation();
-  const [viewMode, setViewMode] = useState<"table" | "column">("table");
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-  const columnWidthsRef = useRef<Record<string, number>>({});
-  columnWidthsRef.current = columnWidths;
+  const {
+    viewMode,
+    setViewMode,
+    getColWidth,
+    tableWidthPx,
+    thRefs,
+    handleMouseDown,
+    INDEX_COL_WIDTH,
+  } = useColumnState({ data, columns });
   const headerClickStateRef = useRef<
     Record<string, { timerId: ReturnType<typeof setTimeout> | null }>
   >({});
-
-  // Reset column widths when columns definition changes (e.g. switching tables)
-  const prevColumnsRef = useRef<string>("");
-  useEffect(() => {
-    const colsKey = columns.join(",");
-    if (prevColumnsRef.current !== colsKey) {
-      setColumnWidths({});
-      prevColumnsRef.current = colsKey;
-    }
-  }, [columns]);
-
-  // Auto-calculate column widths based on content.
-  // Read columnWidths via ref to avoid re-triggering the effect on every width update.
-  useEffect(() => {
-    const newWidths = calculateAutoColumnWidths({
-      data,
-      columns,
-      columnWidths: columnWidthsRef.current,
-    });
-    const hasChanges = Object.keys(newWidths).length > 0;
-
-    if (hasChanges) {
-      setColumnWidths((prev) => ({ ...prev, ...newWidths }));
-    }
-  }, [data, columns]);
 
   // --- Cell selection & editing state ---
   const [selectedCell, setSelectedCell] = useState<{
@@ -653,8 +633,7 @@ export function TableView({
     onPageSizeChange,
   });
 
-  // Refs for table header cells to measure actual width
-  const thRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
+
 
   const handleShowDDL = () => {
     if (!tableContext) return;
@@ -1451,20 +1430,7 @@ export function TableView({
     [pendingChanges],
   );
 
-  const resizingRef = useRef<{
-    column: string;
-    startX: number;
-    startWidth: number;
-  } | null>(null);
 
-  const DEFAULT_COL_WIDTH = 150;
-  const INDEX_COL_WIDTH = 48; // w-12 = 3rem
-  const getColWidth = useCallback(
-    (column: string) => columnWidths[column] ?? DEFAULT_COL_WIDTH,
-    [columnWidths],
-  );
-  const tableWidthPx =
-    INDEX_COL_WIDTH + columns.reduce((sum, c) => sum + getColWidth(c), 0);
 
   const buildRowsTSV = useCallback(
     (rowIndexes: number[]) => buildRowsTSVFn(rowIndexes, columns, currentData, getCellDisplayValue, cellValueToString),
@@ -1736,37 +1702,6 @@ export function TableView({
     jumpToSearchMatch(nextIndex);
   }, [searchMatches, searchCursorIndex, jumpToSearchMatch]);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!resizingRef.current) return;
-    const { column, startX, startWidth } = resizingRef.current;
-    const diff = e.clientX - startX;
-    const newWidth = Math.max(50, startWidth + diff); // Min width 50px
-    setColumnWidths((prev) => ({ ...prev, [column]: newWidth }));
-  }, []);
-
-  const handleMouseUp = useCallback(() => {
-    resizingRef.current = null;
-    document.removeEventListener("mousemove", handleMouseMove);
-    document.removeEventListener("mouseup", handleMouseUp);
-    document.body.style.cursor = "default";
-  }, [handleMouseMove]);
-
-  const handleMouseDown = (e: React.MouseEvent, column: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Get the current actual width from the DOM element
-    const currentTh = thRefs.current[column];
-    const startWidth = currentTh
-      ? currentTh.getBoundingClientRect().width
-      : getColWidth(column);
-
-    resizingRef.current = { column, startX: e.clientX, startWidth };
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    document.body.style.cursor = "col-resize";
-  };
-
   useEffect(() => {
     const clickStates = headerClickStateRef.current;
     return () => {
@@ -1778,13 +1713,6 @@ export function TableView({
       });
     };
   }, []);
-
-  useEffect(() => {
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
     setSearchCursorIndex(-1);
