@@ -111,6 +111,7 @@ import {
 import { ComplexValueViewer } from "./ComplexValueViewer";
 import { ColumnAutocompleteInput } from "./tableView/ColumnAutocompleteInput";
 import type { ColumnAutocompleteOption } from "./tableView/columnAutocomplete";
+import { useTableSort } from "./tableView/hooks/useTableSort";
 import { toast } from "sonner";
 
 interface PendingChange {
@@ -620,44 +621,17 @@ export function TableView({
     editValueRef.current = editValue;
   }, [editValue]);
 
-  // Sort state: controlled (via props) or uncontrolled (internal state for client-side sorting)
-  const [internalSortColumn, setInternalSortColumn] = useState<
-    string | undefined
-  >();
-  const [internalSortDirection, setInternalSortDirection] = useState<
-    "asc" | "desc" | undefined
-  >();
-
-  const isControlledSort = !!onSortChange;
-  const activeSortColumn = isControlledSort
-    ? controlledSortColumn
-    : internalSortColumn;
-  const activeSortDirection = isControlledSort
-    ? controlledSortDirection
-    : internalSortDirection;
-  const hasLocalClientSort =
-    !isControlledSort && !!activeSortColumn && !!activeSortDirection;
-
-  const handleSortClick = (column: string) => {
-    if (isControlledSort) {
-      // Controlled mode: delegate to parent
-      if (activeSortColumn === column) {
-        // Toggle direction
-        onSortChange(column, activeSortDirection === "asc" ? "desc" : "asc");
-      } else {
-        // New column, start with asc
-        onSortChange(column, "asc");
-      }
-    } else {
-      // Uncontrolled mode: manage internally for client-side sorting
-      if (internalSortColumn === column) {
-        setInternalSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-      } else {
-        setInternalSortColumn(column);
-        setInternalSortDirection("asc");
-      }
-    }
-  };
+  const {
+    activeSortColumn,
+    activeSortDirection,
+    handleSortClick,
+    hasLocalClientSort,
+    isControlledSort,
+  } = useTableSort({
+    controlledSortColumn,
+    controlledSortDirection,
+    onSortChange,
+  });
 
   // Refs for table header cells to measure actual width
   const thRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
