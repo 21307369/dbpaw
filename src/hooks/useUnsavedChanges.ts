@@ -20,7 +20,6 @@ export function useUnsavedChanges({
   const [isCloseSaveDialogOpen, setIsCloseSaveDialogOpen] = useState(false);
 
   const closeSaveCompletedRef = useRef(false);
-  const unsavedConfirmActionRef = useRef<"save" | "discard" | null>(null);
 
   const resetCloseFlow = useCallback(() => {
     setPendingCloseTabIds([]);
@@ -28,7 +27,6 @@ export function useUnsavedChanges({
     setIsUnsavedConfirmOpen(false);
     setIsCloseSaveDialogOpen(false);
     closeSaveCompletedRef.current = false;
-    unsavedConfirmActionRef.current = null;
   }, []);
 
   const continueCloseFlow = useCallback(
@@ -89,7 +87,6 @@ export function useUnsavedChanges({
   }, [resetCloseFlow]);
 
   const handleUnsavedCloseWithoutSave = useCallback(() => {
-    unsavedConfirmActionRef.current = "discard";
     if (!currentCloseTabId) {
       resetCloseFlow();
       return;
@@ -111,7 +108,6 @@ export function useUnsavedChanges({
   ]);
 
   const handleUnsavedCloseSave = useCallback(() => {
-    unsavedConfirmActionRef.current = "save";
     setIsUnsavedConfirmOpen(false);
     setIsCloseSaveDialogOpen(true);
   }, []);
@@ -148,7 +144,11 @@ export function useUnsavedChanges({
         return;
       }
 
-      await saveEditorTab(currentTab, name, description);
+      try {
+        await saveEditorTab(currentTab, name, description);
+      } catch {
+        return;
+      }
 
       closeSaveCompletedRef.current = true;
       closeTabNow(currentCloseTabId);
