@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+
 export interface ParsedError {
   code: number;
   message: string;
@@ -79,4 +81,14 @@ export function getFriendlyErrorMessage(error: string): string {
     default:
       return parsed.message;
   }
+}
+
+/**
+ * Show a toast error with the translated title and extracted error description.
+ *
+ * @example
+ * handleApiError(t("redis.key.loadFailed"), e);
+ */
+export function handleApiError(title: string, e: unknown): void {
+  toast.error(title, { description: errorMessage(e) });
 }
