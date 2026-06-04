@@ -40,7 +40,8 @@ import { cn } from "@/components/ui/utils";
 import { RedisKeyView } from "./RedisKeyView";
 import { isRedisClusterDatabaseList, parseMsetInput } from "./redis-utils";
 import { TYPE_COLORS, TYPE_DISPLAY_LABEL } from "./redis-type-colors";
-import { errorMessage } from "@/lib/errors";
+import { handleApiError } from "@/lib/errors";
+import { useTranslation } from "react-i18next";
 
 const SCAN_LIMIT = 200;
 
@@ -68,6 +69,7 @@ export function RedisBrowserView({
   database,
   onOpenConsole,
 }: Props) {
+  const { t } = useTranslation();
   const [pattern, setPattern] = useState("");
   const [keys, setKeys] = useState<RedisKeyInfo[]>([]);
   const [cursor, setCursor] = useState("0");
@@ -119,9 +121,7 @@ export function RedisBrowserView({
         setIsPartial(res.isPartial);
         setRequiresPattern(false);
       } catch (e) {
-        toast.error("Failed to scan keys", {
-          description: errorMessage(e),
-        });
+        handleApiError(t("redis.browser.scanFailed"), e);
       } finally {
         setIsLoading(false);
       }
@@ -146,9 +146,7 @@ export function RedisBrowserView({
           setIsPartial(false);
         }
       } catch (e) {
-        toast.error("Failed to load Redis databases", {
-          description: errorMessage(e),
-        });
+        handleApiError(t("redis.browser.loadDatabasesFailed"), e);
       }
     };
     void init();
@@ -239,7 +237,7 @@ export function RedisBrowserView({
         toast.success(`Batch ${op.toUpperCase()}: ${succeeded} key(s)`);
       }
       if (failed.length > 0) {
-        toast.error(`${failed.length} key(s) failed`);
+        toast.error(t("redis.browser.batchKeysFailed", { count: failed.length }));
       }
       if (op === "del" || op === "unlink") {
         setKeys((prev) => prev.filter((k) => !selectedKeys.has(k.key)));
@@ -250,9 +248,7 @@ export function RedisBrowserView({
       setSelectedKeys(new Set());
       void scan(pattern, "0", false);
     } catch (e) {
-      toast.error("Batch operation failed", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.browser.batchOperationFailed"), e);
     } finally {
       setBatchLoading(false);
     }
@@ -268,9 +264,7 @@ export function RedisBrowserView({
       setMsetData(result);
       setMgetDialogOpen(true);
     } catch (e) {
-      toast.error("MGET failed", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.browser.mgetFailed"), e);
     } finally {
       setBatchLoading(false);
     }
@@ -279,7 +273,7 @@ export function RedisBrowserView({
   const handleMsetImport = async () => {
     const entries = parseMsetInput(msetImportText);
     if (!entries || Object.keys(entries).length === 0) {
-      toast.error("Invalid format", {
+      toast.error(t("redis.browser.invalidFormat"), {
         description: "Expected JSON object or lines of key:value",
       });
       return;
@@ -293,9 +287,7 @@ export function RedisBrowserView({
       setMsetImportText("");
       void scan(pattern, "0", false);
     } catch (e) {
-      toast.error("MSET failed", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.browser.msetFailed"), e);
     } finally {
       setMsetLoading(false);
     }
@@ -317,9 +309,7 @@ export function RedisBrowserView({
       const content = await readTextFile(selected as string);
       setMsetImportText(content);
     } catch (e) {
-      toast.error("Failed to read file", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.browser.readFileFailed"), e);
     }
   };
 
@@ -669,7 +659,7 @@ export function RedisBrowserView({
                     await navigator.clipboard.writeText(msetData);
                     toast.success("Copied to clipboard");
                   } catch {
-                    toast.error("Copy failed");
+                    toast.error(t("redis.browser.copyFailed"));
                   }
                 }}
               >
@@ -693,9 +683,7 @@ export function RedisBrowserView({
                       toast.success("Exported successfully");
                     }
                   } catch (e) {
-                    toast.error("Export failed", {
-                      description: errorMessage(e),
-                    });
+                    handleApiError(t("redis.browser.exportFailed"), e);
                   }
                 }}
               >
