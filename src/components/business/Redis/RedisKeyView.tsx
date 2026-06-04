@@ -39,7 +39,8 @@ import type {
   RedisBitmapBit,
 } from "@/services/api";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
+import { useTranslation } from "react-i18next";
+import { errorMessage, handleApiError } from "@/lib/errors";
 import { RedisStringViewer } from "./value-viewer/RedisStringViewer";
 import { RedisHashViewer } from "./value-viewer/RedisHashViewer";
 import { RedisListViewer } from "./value-viewer/RedisListViewer";
@@ -294,6 +295,7 @@ export function RedisKeyView({
   onDeleted,
   onSavedKeyChange,
 }: RedisKeyViewProps) {
+  const { t } = useTranslation();
   const [record, setRecord] = useState<RedisKeyValue | null>(null);
   const [value, setValue] = useState<RedisValue>({ kind: "string", value: "" });
   const [originalValue, setOriginalValue] = useState<RedisValue>({
@@ -356,9 +358,7 @@ export function RedisKeyView({
       );
       setOriginalLoadedCount(count);
     } catch (e) {
-      toast.error("Failed to load Redis key", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.key.loadFailed"), e);
     } finally {
       setIsLoading(false);
     }
@@ -393,9 +393,7 @@ export function RedisKeyView({
         ),
       );
     } catch (e) {
-      toast.error("Failed to load more items", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.key.loadMoreFailed"), e);
     } finally {
       setIsLoadingMore(false);
     }
@@ -503,9 +501,7 @@ export function RedisKeyView({
     try {
       parsedTtl = parseRedisTtlSeconds(ttl);
     } catch (e) {
-      toast.error("Invalid TTL", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.key.invalidTtl"), e);
       return;
     }
     setIsSaving(true);
@@ -514,9 +510,7 @@ export function RedisKeyView({
       toast.success("TTL updated");
       await load();
     } catch (e) {
-      toast.error("Failed to update TTL", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.key.updateTtlFailed"), e);
     } finally {
       setIsSaving(false);
     }
@@ -524,13 +518,13 @@ export function RedisKeyView({
 
   const handleSave = async () => {
     if (value.kind === "json" && jsonValidationError) {
-      toast.error("Failed to save Redis key", {
+      toast.error(t("redis.key.saveFailed"), {
         description: `Invalid JSON: ${jsonValidationError}`,
       });
       return;
     }
     if (jsonModuleMissing) {
-      toast.error("Failed to save Redis key", {
+      toast.error(t("redis.key.saveFailed"), {
         description:
           "RedisJSON module is unavailable for this key. Saving is disabled.",
       });
@@ -541,9 +535,7 @@ export function RedisKeyView({
       try {
         await doSave();
       } catch (e) {
-        toast.error("Failed to save Redis key", {
-          description: errorMessage(e),
-        });
+        handleApiError(t("redis.key.saveFailed"), e);
       } finally {
         setIsSaving(false);
       }
@@ -552,9 +544,7 @@ export function RedisKeyView({
     try {
       parseRedisTtlSeconds(ttl);
     } catch (e) {
-      toast.error("Failed to save Redis key", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.key.saveFailed"), e);
       return;
     }
     // Skip overwrite dialog when no destructive change: patch mode or TTL-only
@@ -565,9 +555,7 @@ export function RedisKeyView({
       try {
         await doSave();
       } catch (e) {
-        toast.error("Failed to save Redis key", {
-          description: errorMessage(e),
-        });
+        handleApiError(t("redis.key.saveFailed"), e);
       } finally {
         setIsSaving(false);
       }
@@ -597,9 +585,7 @@ export function RedisKeyView({
         await doSave();
       }
     } catch (e) {
-      toast.error("Operation failed", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.key.operationFailed"), e);
     } finally {
       setIsSaving(false);
       setPendingAction(null);
@@ -871,9 +857,7 @@ export function RedisKeyView({
                   toast.success("Bitmap updated");
                   await load();
                 } catch (e) {
-                  toast.error("Failed to update bitmap", {
-                    description: errorMessage(e),
-                  });
+                  handleApiError(t("redis.key.bitmapUpdateFailed"), e);
                 }
               }}
               extra={record?.extra}
@@ -909,9 +893,7 @@ export function RedisKeyView({
                     toast.success("Value incremented");
                     await load();
                   } catch (e) {
-                    toast.error("Failed to increment", {
-                      description: errorMessage(e),
-                    });
+                    handleApiError(t("redis.key.incrementFailed"), e);
                   }
                 }}
                 onIncrByInt={async (amount) => {
@@ -924,9 +906,7 @@ export function RedisKeyView({
                     toast.success("Value incremented");
                     await load();
                   } catch (e) {
-                    toast.error("Failed to increment", {
-                      description: errorMessage(e),
-                    });
+                    handleApiError(t("redis.key.incrementFailed"), e);
                   }
                 }}
               />
@@ -945,9 +925,7 @@ export function RedisKeyView({
                   toast.success("Field incremented");
                   await load();
                 } catch (e) {
-                  toast.error("Failed to increment", {
-                    description: errorMessage(e),
-                  });
+                  handleApiError(t("redis.key.incrementFailed"), e);
                 }
               }}
             />
@@ -1087,9 +1065,7 @@ export function RedisKeyView({
                   toast.success("Score updated");
                   await load();
                 } catch (e) {
-                  toast.error("Failed to update score", {
-                    description: errorMessage(e),
-                  });
+                  handleApiError(t("redis.key.scoreUpdateFailed"), e);
                 }
               }}
               onZRangeByScore={async (min, max) => {
@@ -1151,9 +1127,7 @@ export function RedisKeyView({
                   toast.success("Popped member with lowest score");
                   await load();
                 } catch (e) {
-                  toast.error("Failed to pop min", {
-                    description: errorMessage(e),
-                  });
+                  handleApiError(t("redis.key.popMinFailed"), e);
                 }
               }}
               onZPopMax={async (count) => {
@@ -1167,9 +1141,7 @@ export function RedisKeyView({
                   toast.success("Popped member with highest score");
                   await load();
                 } catch (e) {
-                  toast.error("Failed to pop max", {
-                    description: errorMessage(e),
-                  });
+                  handleApiError(t("redis.key.popMaxFailed"), e);
                 }
               }}
             />
