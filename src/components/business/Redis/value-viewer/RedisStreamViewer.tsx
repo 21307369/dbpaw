@@ -62,7 +62,8 @@ import {
   type RedisXPendingEntry,
   type RedisXPendingSummary,
 } from "@/services/api";
-import { errorMessage } from "@/lib/errors";
+import { handleApiError } from "@/lib/errors";
+import { useTranslation } from "react-i18next";
 import {
   CreateGroupDialog,
   ResetGroupDialog,
@@ -187,6 +188,7 @@ export function RedisStreamViewer({
   extra,
   isCreateMode,
 }: Props) {
+  const { t } = useTranslation();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [showNewRow, setShowNewRow] = useState(false);
   const [newId, setNewId] = useState("*");
@@ -283,9 +285,7 @@ export function RedisStreamViewer({
     try {
       count = overrides?.count ?? resolvePageSize(browser.countInput);
     } catch (e) {
-      toast.error("Invalid stream range", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.stream.invalidRange"), e);
       return;
     }
 
@@ -313,11 +313,11 @@ export function RedisStreamViewer({
       );
       setBrowser((current) => mapViewResultToBrowserState(result, current));
     } catch (e) {
-      toast.error(
+      handleApiError(
         mode === "append"
-          ? "Failed to load more stream entries"
-          : "Failed to load stream entries",
-        { description: errorMessage(e) },
+          ? t("redis.stream.loadMoreFailed")
+          : t("redis.stream.loadFailed"),
+        e,
       );
     } finally {
       setIsLoadingView(false);
@@ -366,9 +366,7 @@ export function RedisStreamViewer({
       setShowCreateGroupDialog(false);
       await refreshView();
     } catch (e) {
-      toast.error("Failed to create group", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.stream.createGroupFailed"), e);
     }
   };
 
@@ -395,9 +393,7 @@ export function RedisStreamViewer({
       });
       await refreshView();
     } catch (e) {
-      toast.error("Failed to delete group", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.stream.deleteGroupFailed"), e);
     }
   };
 
@@ -415,9 +411,7 @@ export function RedisStreamViewer({
       setResetGroupTarget(null);
       await refreshView();
     } catch (e) {
-      toast.error("Failed to reset group cursor", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.stream.resetCursorFailed"), e);
     }
   };
 
@@ -446,9 +440,7 @@ export function RedisStreamViewer({
           [groupName]: result as RedisXPendingSummary,
         }));
       } catch (e) {
-        toast.error("Failed to load pending info", {
-          description: errorMessage(e),
-        });
+        handleApiError(t("redis.stream.loadPendingFailed"), e);
       } finally {
         setPendingLoading((s) => ({ ...s, [groupName]: false }));
       }
@@ -473,9 +465,7 @@ export function RedisStreamViewer({
       }));
       setSelectedPendingIds(new Set());
     } catch (e) {
-      toast.error("Failed to load pending entries", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.stream.loadPendingEntriesFailed"), e);
     } finally {
       setPendingLoading((s) => ({ ...s, [groupName]: false }));
     }
@@ -496,9 +486,7 @@ export function RedisStreamViewer({
       await loadPendingDetails(groupName);
       await refreshView();
     } catch (e) {
-      toast.error("Failed to acknowledge", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.stream.acknowledgeFailed"), e);
     }
   };
 
@@ -521,9 +509,7 @@ export function RedisStreamViewer({
       setClaimTarget(null);
       await loadPendingDetails(groupName);
     } catch (e) {
-      toast.error("Failed to claim entry", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.stream.claimFailed"), e);
     }
   };
 
@@ -542,9 +528,7 @@ export function RedisStreamViewer({
       setShowTrimDialog(false);
       await refreshView();
     } catch (e) {
-      toast.error("Failed to trim stream", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.stream.trimFailed"), e);
     }
   };
 
@@ -552,7 +536,7 @@ export function RedisStreamViewer({
 
   const handleXreadgroup = async () => {
     if (!xrgGroup || !xrgConsumer) {
-      toast.error("Please select a group and enter a consumer name");
+      toast.error(t("redis.stream.selectGroupRequired"));
       return;
     }
     setIsLoadingXrg(true);
@@ -569,9 +553,7 @@ export function RedisStreamViewer({
       );
       setXrgEntries(entries);
     } catch (e) {
-      toast.error("Failed to read from consumer group", {
-        description: errorMessage(e),
-      });
+      handleApiError(t("redis.stream.readFromGroupFailed"), e);
     } finally {
       setIsLoadingXrg(false);
     }
