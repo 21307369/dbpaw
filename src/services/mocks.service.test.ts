@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  invokeMock,
-  mockGetMysqlCharsets,
-  mockGetMysqlCollations,
-} from "./mocks";
+import { invokeMock } from "./mocks";
+import { mockGetMysqlCharsets, mockGetMysqlCollations } from "./mocks/connections";
 
 describe("invokeMock service layer", () => {
   test("returns table list for metadata command", async () => {
