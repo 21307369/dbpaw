@@ -75,11 +75,24 @@ export function useRedisKey({
   const [loadedOffset, setLoadedOffset] = useState(0);
   const [loadedCount, setLoadedCount] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [setOptionsExpanded, setSetOptionsExpanded] = useState(false);
-  const [setNx, setSetNx] = useState(false);
-  const [setXx, setSetXx] = useState(false);
-  const [setPx, setSetPx] = useState("");
-  const [setKeepttl, setSetKeepttl] = useState(false);
+  interface SetOptions {
+    expanded: boolean;
+    nx: boolean;
+    xx: boolean;
+    px: string;
+    keepttl: boolean;
+  }
+
+  const [setOptions, setSetOptions] = useState<SetOptions>({
+    expanded: false,
+    nx: false,
+    xx: false,
+    px: "",
+    keepttl: false,
+  });
+
+  const handleSetOptionsChange = (patch: Partial<SetOptions>) =>
+    setSetOptions((prev) => ({ ...prev, ...patch }));
 
   const isCreateMode = redisKey.trim().length === 0;
   const jsonValidationError = getJsonValidationError(value);
@@ -197,15 +210,15 @@ export function useRedisKey({
       isValueUnchanged(originalValue, value);
 
     if (isCreateMode) {
-      const pxValue = setPx.trim() ? parseInt(setPx, 10) : undefined;
+      const pxValue = setOptions.px.trim() ? parseInt(setOptions.px, 10) : undefined;
       await api.redis.setKey(connectionId, database, {
         key: normalizedKey,
         value,
         ttlSeconds: parsedTtl,
-        setNx: setNx || undefined,
-        setXx: setXx || undefined,
+        setNx: setOptions.nx || undefined,
+        setXx: setOptions.xx || undefined,
         setPx: pxValue && pxValue > 0 ? pxValue : undefined,
-        setKeepttl: setKeepttl || undefined,
+        setKeepttl: setOptions.keepttl || undefined,
       });
     } else if (ttlOnly) {
       await api.redis.setTtl(connectionId, database, normalizedKey, parsedTtl);
@@ -368,16 +381,8 @@ export function useRedisKey({
     loadedOffset,
     loadedCount,
     isLoadingMore,
-    setOptionsExpanded,
-    setSetOptionsExpanded,
-    setNx,
-    setSetNx,
-    setXx,
-    setSetXx,
-    setPx,
-    setSetPx,
-    setKeepttl,
-    setSetKeepttl,
+    setOptions,
+    handleSetOptionsChange,
     isCreateMode,
     jsonValidationError,
     jsonModuleMissing,
