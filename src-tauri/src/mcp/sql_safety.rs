@@ -1,4 +1,5 @@
-use crate::db::drivers::{first_sql_keyword, split_sql_statements};
+use crate::db::drivers::first_sql_keyword;
+use crate::sql::query_guard::{classify_statement, is_single_statement, StatementKind};
 
 /// SQL 安全检查配置
 pub struct SqlSafetyConfig {
@@ -24,21 +25,6 @@ impl SqlSafetyConfig {
     }
 }
 
-/// 只读关键字
-const READ_KEYWORDS: &[&str] = &[
-    "SELECT", "SHOW", "DESCRIBE", "EXPLAIN", "WITH", "TABLE", "VALUES",
-];
-
-/// 危险关键字
-const DANGEROUS_KEYWORDS: &[&str] = &[
-    "DROP", "TRUNCATE", "ALTER", "CREATE", "GRANT", "REVOKE",
-];
-
-/// 写关键字
-const WRITE_KEYWORDS: &[&str] = &[
-    "INSERT", "UPDATE", "DELETE", "UPSERT", "MERGE", "REPLACE",
-];
-
 /// SQL 安全检查结果
 pub enum SqlSafetyCheck {
     /// 允许执行
@@ -56,8 +42,7 @@ pub fn check_sql_safety(sql: &str, config: &SqlSafetyConfig) -> SqlSafetyCheck {
     }
 
     // Layer 2: 单语句检查
-    let statements = split_sql_statements(trimmed);
-    if statements.len() > 1 {
+    if !is_single_statement(trimmed) {
         return SqlSafetyCheck::Rejected(
             "Multiple statements are not allowed. Please execute one statement at a time."
                 .to_string(),
@@ -71,7 +56,9 @@ pub fn check_sql_safety(sql: &str, config: &SqlSafetyConfig) -> SqlSafetyCheck {
     };
 
     // Layer 3: 危险关键字检查
-    if !config.allow_dangerous && DANGEROUS_KEYWORDS.contains(&keyword.as_str()) {
+    let statement_kind = classify_statement(trimmed);
+
+    if !config.allow_dangerous && statement_kind == StatementKind::Dangerous {
         return SqlSafetyCheck::Rejected(format!(
             "Dangerous keyword '{}' is not allowed. Set DBPAW_MCP_ALLOW_DANGEROUS=1 to enable.",
             keyword
@@ -80,7 +67,7 @@ pub fn check_sql_safety(sql: &str, config: &SqlSafetyConfig) -> SqlSafetyCheck {
 
     // Layer 4: 只读检查
     if !config.allow_writes {
-        if WRITE_KEYWORDS.contains(&keyword.as_str()) {
+        if statement_kind == StatementKind::Write {
             return SqlSafetyCheck::Rejected(format!(
                 "Write operation '{}' is not allowed. Set DBPAW_MCP_ALLOW_WRITES=1 to enable.",
                 keyword
@@ -88,7 +75,10 @@ pub fn check_sql_safety(sql: &str, config: &SqlSafetyConfig) -> SqlSafetyCheck {
         }
 
         // 对于非读关键字，也拒绝
-        if !READ_KEYWORDS.contains(&keyword.as_str()) {
+        if !matches!(
+            statement_kind,
+            StatementKind::Select | StatementKind::ReadOnly
+        ) {
             return SqlSafetyCheck::Rejected(format!(
                 "Statement '{}' is not allowed in read-only mode. Set DBPAW_MCP_ALLOW_WRITES=1 to enable.",
                 keyword
@@ -220,6 +210,18 @@ mod tests {
         assert!(matches!(
             check_sql_safety("UPDATE users SET name = 'test' WHERE id = 1", &config),
             SqlSafetyCheck::Allowed
+        ));
+    }
+
+    #[test]
+    fn test_with_update_blocked_in_read_only_mode() {
+        let config = test_config();
+        assert!(matches!(
+            check_sql_safety(
+                "WITH c AS (SELECT 1) UPDATE users SET name = 'test' WHERE id = 1",
+                &config
+            ),
+            SqlSafetyCheck::Rejected(_)
         ));
     }
 

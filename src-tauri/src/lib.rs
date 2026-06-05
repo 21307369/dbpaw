@@ -317,6 +317,7 @@ pub mod events;
 pub mod import;
 pub mod mcp;
 pub mod models;
+pub mod sql;
 pub mod ssh;
 pub mod state;
 pub mod utils;
