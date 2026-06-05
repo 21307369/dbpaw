@@ -509,9 +509,13 @@ function renderTab(tab: TabItem) {
   }
 }
 
+export function shouldMountTabContent(tabId: string, activeTab: string): boolean {
+  return tabId === activeTab;
+}
+
 export function TabContentRenderer({
   tabs,
-  activeTab: _activeTab,
+  activeTab,
   ...rest
 }: TabContentRendererProps) {
   const { t } = useTranslation();
@@ -530,14 +534,14 @@ export function TabContentRenderer({
   return (
     <TabActionsProvider {...rest}>
       {tabs.map((tab) => {
+        const shouldMount = shouldMountTabContent(tab.id, activeTab);
         return (
           <TabsContent
             key={tab.id}
             value={tab.id}
-            forceMount
             className="h-full m-0"
           >
-            <ErrorBoundary>{renderTab(tab)}</ErrorBoundary>
+            {shouldMount && <ErrorBoundary>{renderTab(tab)}</ErrorBoundary>}
           </TabsContent>
         );
       })}
