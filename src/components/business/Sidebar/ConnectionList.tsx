@@ -36,7 +36,7 @@ import { GroupNodeRenderer, type TreeNodeDeps } from "./connection-list/TreeNode
 import { ConnectionDialog } from "./connection-list/ConnectionDialog";
 import { ImportDialog } from "./ImportDialog";
 import { ConnectionContextMenu } from "./ConnectionContextMenu";
-import { renderConnectionStatusIndicator } from "./connection-list/helpers";
+import { getConnectionStatusLabelI18n, renderConnectionStatusIndicator } from "./connection-list/helpers";
 import { getDatasourceTreeAdapter as getDatasourceTreeAdapterFn } from "./connection-list/getDatasourceTreeAdapter";
 import { useConnectionCrud } from "./hooks/useConnectionCrud";
 import { useTreeDataFetching } from "./hooks/useTreeDataFetching";
@@ -378,24 +378,6 @@ export function ConnectionList({
     schemaName: string,
     tableName: string,
   ) => `${connectionId}-${databaseName}-${schemaName}-${tableName}`;
-
-  const getConnectionStatusLabel = (connection: Connection) => {
-    if (connection.connectState === "success") {
-      return t("connection.status.connected");
-    }
-    if (connection.connectState === "error") {
-      if (connection.connectError) {
-        return t("connection.status.failedWithReason", {
-          error: connection.connectError,
-        });
-      }
-      return t("connection.status.failed");
-    }
-    if (connection.connectState === "connecting") {
-      return t("connection.status.connecting");
-    }
-    return t("connection.status.idle");
-  };
 
   const filteredConnections = useMemo(() => {
     if (!searchTerm) return connections;
@@ -1222,8 +1204,8 @@ export function ConnectionList({
                 <span
                   className="inline-flex items-center justify-center shrink-0"
                   role="status"
-                  aria-label={getConnectionStatusLabel(connection)}
-                  title={getConnectionStatusLabel(connection)}
+                  aria-label={getConnectionStatusLabelI18n(connection, t)}
+                  title={getConnectionStatusLabelI18n(connection, t)}
                 >
                   {renderConnectionStatusIndicator(connection)}
                 </span>

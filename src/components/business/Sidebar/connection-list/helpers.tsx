@@ -46,6 +46,29 @@ export const getConnectionStatusLabel = (connection: ConnectionStatusLike) => {
   return "Not connected";
 };
 
+type TFunction = (key: string, options?: Record<string, unknown>) => string;
+
+export const getConnectionStatusLabelI18n = (
+  connection: ConnectionStatusLike,
+  t: TFunction,
+) => {
+  if (connection.connectState === "success") {
+    return t("connection.status.connected");
+  }
+  if (connection.connectState === "error") {
+    if (connection.connectError) {
+      return t("connection.status.failedWithReason", {
+        error: connection.connectError,
+      });
+    }
+    return t("connection.status.failed");
+  }
+  if (connection.connectState === "connecting") {
+    return t("connection.status.connecting");
+  }
+  return t("connection.status.idle");
+};
+
 export interface ConnectionLike {
   id: string;
   databases: unknown[];

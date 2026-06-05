@@ -1,7 +1,7 @@
 import { Database, FileCode, FolderOpen, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { DatabaseGroupConfig } from "@/lib/tree-adapters/types";
-import { getConnectionIcon, supportsSchemaBrowsing } from "@/lib/driver-registry";
+import { getConnectionIcon, supportsSchemaBrowsing, type Driver } from "@/lib/driver-registry";
 import { TreeNode } from "./TreeNode";
 import { GroupNodeRenderer, type TreeNodeDeps } from "./TreeNodeRenderers";
 import type {
@@ -14,7 +14,10 @@ import type {
 import type { SavedQuery } from "@/services/api";
 import { ConnectionContextMenu } from "../ConnectionContextMenu";
 import type { ContextMenuState } from "./InlineContextMenu";
-import { renderConnectionStatusIndicator } from "./helpers";
+import {
+  getConnectionStatusLabelI18n,
+  renderConnectionStatusIndicator,
+} from "./helpers";
 
 interface ConnectionTreeContentProps {
   // 数据
@@ -92,29 +95,11 @@ export function ConnectionTreeContent(props: ConnectionTreeContentProps) {
     onImportConnection,
   } = props;
 
-  const supportsSchemaNodeForDriver = (driver: string) =>
-    supportsSchemaBrowsing(driver as any);
+  const supportsSchemaNodeForDriver = (driver: Driver) =>
+    supportsSchemaBrowsing(driver);
 
   const getSchemaNodeKey = (databaseKey: string, schema: string) =>
     `${databaseKey}::${schema}`;
-
-  const getConnectionStatusLabel = (connection: Connection) => {
-    if (connection.connectState === "success") {
-      return t("connection.status.connected");
-    }
-    if (connection.connectState === "error") {
-      if (connection.connectError) {
-        return t("connection.status.failedWithReason", {
-          error: connection.connectError,
-        });
-      }
-      return t("connection.status.failed");
-    }
-    if (connection.connectState === "connecting") {
-      return t("connection.status.connecting");
-    }
-    return t("connection.status.idle");
-  };
 
   const renderDatabaseTreeNode = (
     connection: Connection,
@@ -324,8 +309,8 @@ export function ConnectionTreeContent(props: ConnectionTreeContentProps) {
                   <span
                     className="inline-flex items-center justify-center shrink-0"
                     role="status"
-                    aria-label={getConnectionStatusLabel(connection)}
-                    title={getConnectionStatusLabel(connection)}
+                    aria-label={getConnectionStatusLabelI18n(connection, t)}
+                    title={getConnectionStatusLabelI18n(connection, t)}
                   >
                     {renderConnectionStatusIndicator(connection)}
                   </span>
