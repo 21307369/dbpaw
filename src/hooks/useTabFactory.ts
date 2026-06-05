@@ -3,7 +3,19 @@ import { api } from "@/services/api";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { RoutineType } from "@/services/api";
-import type { TabItem } from "@/types/tab";
+import type {
+  TabItem,
+  RedisConsoleTabItem,
+  RedisBrowserTabItem,
+  RedisServerInfoTabItem,
+  ElasticsearchIndexTabItem,
+  DdlTabItem,
+  RoutineTabItem,
+  CreateTableTabItem,
+  AlterTableTabItem,
+  RedisKeyTabItem,
+  ERDiagramTabItem,
+} from "@/types/tab";
 
 interface UseTabFactoryParams {
   tabs: TabItem[];
@@ -19,7 +31,7 @@ export function useTabFactory({
   t,
 }: UseTabFactoryParams) {
   const openOrCreateTab = useCallback(
-    (tabId: string, tabData: Omit<TabItem, "id">) => {
+    (tabId: string, tabData: Omit<TabItem, "id"> & { type: TabItem["type"] }) => {
       const existing = tabs.find((item) => item.id === tabId);
       if (existing) {
         setActiveTab(tabId);
