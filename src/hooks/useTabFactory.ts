@@ -3,19 +3,7 @@ import { api } from "@/services/api";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { RoutineType } from "@/services/api";
-import type {
-  TabItem,
-  RedisConsoleTabItem,
-  RedisBrowserTabItem,
-  RedisServerInfoTabItem,
-  ElasticsearchIndexTabItem,
-  DdlTabItem,
-  RoutineTabItem,
-  CreateTableTabItem,
-  AlterTableTabItem,
-  RedisKeyTabItem,
-  ERDiagramTabItem,
-} from "@/types/tab";
+import type { TabItem } from "@/types/tab";
 
 interface UseTabFactoryParams {
   tabs: TabItem[];
@@ -31,7 +19,7 @@ export function useTabFactory({
   t,
 }: UseTabFactoryParams) {
   const openOrCreateTab = useCallback(
-    (tabId: string, tabData: Omit<TabItem, "id"> & { type: TabItem["type"] }) => {
+    (tabId: string, tabData: Omit<TabItem, "id">) => {
       const existing = tabs.find((item) => item.id === tabId);
       if (existing) {
         setActiveTab(tabId);
@@ -52,7 +40,7 @@ export function useTabFactory({
         database,
         connectionId,
         driver,
-      });
+      } as Omit<TabItem, "id">);
     },
     [openOrCreateTab],
   );
@@ -66,7 +54,7 @@ export function useTabFactory({
         database,
         connectionId,
         driver,
-      });
+      } as Omit<TabItem, "id">);
     },
     [openOrCreateTab],
   );
@@ -80,7 +68,7 @@ export function useTabFactory({
         database,
         connectionId,
         driver,
-      });
+      } as Omit<TabItem, "id">);
     },
     [openOrCreateTab],
   );
@@ -94,7 +82,7 @@ export function useTabFactory({
         connectionId,
         driver,
         elasticsearchIndex: index,
-      });
+      } as Omit<TabItem, "id">);
     },
     [openOrCreateTab],
   );
@@ -110,7 +98,7 @@ export function useTabFactory({
           database: ctx.database,
           schema: ctx.schema,
           tableName: ctx.table,
-        },
+        } as Omit<TabItem, "id">,
       );
     },
     [openOrCreateTab, t],
@@ -138,7 +126,7 @@ export function useTabFactory({
           routineType,
           connectionId,
           driver,
-        },
+        } as Omit<TabItem, "id">,
       );
     },
     [openOrCreateTab],
@@ -154,7 +142,7 @@ export function useTabFactory({
         database,
         schema,
         driver,
-      });
+      } as Omit<TabItem, "id">);
     },
     [openOrCreateTab, t],
   );
@@ -177,7 +165,7 @@ export function useTabFactory({
           schema,
           tableName: table,
           driver,
-        },
+        } as Omit<TabItem, "id">,
       );
     },
     [openOrCreateTab, t],
@@ -199,7 +187,7 @@ export function useTabFactory({
         redisKey,
         connectionId,
         driver,
-      });
+      } as Omit<TabItem, "id">);
     },
     [openOrCreateTab],
   );
@@ -216,7 +204,7 @@ export function useTabFactory({
         connectionId,
         database,
         schema: ctx?.schema,
-      });
+      } as Omit<TabItem, "id">);
     },
     [openOrCreateTab],
   );
