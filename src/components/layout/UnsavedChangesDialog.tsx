@@ -78,7 +78,7 @@ export function UnsavedChangesDialog({
             ? currentCloseTab.title
             : ""
         }
-        initialDescription={currentCloseTab?.savedQueryDescription}
+        initialDescription={currentCloseTab?.type === "editor" ? currentCloseTab.savedQueryDescription : undefined}
       />
     </>
   );

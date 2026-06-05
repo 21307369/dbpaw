@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef } from "react";
-import type { TabItem } from "@/types/tab";
+import type { EditorTabItem, TabItem } from "@/types/tab";
 
 interface UseUnsavedChangesParams {
   tabs: TabItem[];
   closeTabNow: (tabId: string) => void;
-  saveEditorTab: (tab: TabItem, name: string, description: string) => Promise<void>;
+  saveEditorTab: (tab: EditorTabItem, name: string, description: string) => Promise<void>;
 }
 
 export function useUnsavedChanges({

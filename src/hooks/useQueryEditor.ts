@@ -8,7 +8,7 @@ import {
   normalizeDatabaseOptions,
   resolvePreferredDatabase,
 } from "@/lib/sqlEditorDatabase";
-import type { TabItem } from "@/types/tab";
+import type { TabItem, EditorTabItem } from "@/types/tab";
 
 const DEFAULT_SQL = "";
 
@@ -62,7 +62,7 @@ export function useQueryEditor({
       const initialDatabase = normalizedDatabaseName || undefined;
       const titleDatabase = normalizedDatabaseName || fallbackDatabaseLabel;
       const newTabId = `query-${connectionId}-${titleDatabase}-${Date.now()}`;
-      const newTab: TabItem = {
+      const newTab: EditorTabItem = {
         id: newTabId,
         type: "editor",
         title: t("app.tab.queryTitle", { database: titleDatabase }),
@@ -136,7 +136,9 @@ export function useQueryEditor({
       const newTabId = `saved-query-${query.id}`;
 
       const existingTab = tabs.find(
-        (t) => t.id === newTabId || t.savedQueryId === query.id,
+        (t) =>
+          t.id === newTabId ||
+          (t.type === "editor" && t.savedQueryId === query.id),
       );
       if (existingTab) {
         setActiveTab(existingTab.id);
@@ -193,7 +195,7 @@ export function useQueryEditor({
               }
             }
 
-            const newTab: TabItem = {
+            const newTab: EditorTabItem = {
               id: newTabId,
               type: "editor",
               title: query.name,
@@ -218,7 +220,7 @@ export function useQueryEditor({
         }
       }
 
-      const newTab: TabItem = {
+      const newTab: EditorTabItem = {
         id: newTabId,
         type: "editor",
         title: query.name,
@@ -247,6 +249,7 @@ export function useQueryEditor({
       setTabs((prev) =>
         prev.map((t) => {
           if (t.id !== tabId) return t;
+          if (t.type !== "editor") return t;
           return {
             ...t,
             sqlContent: sql,
@@ -261,7 +264,7 @@ export function useQueryEditor({
   const handleExecuteQuery = useCallback(
     async (tabId: string, sql: string) => {
       const tab = tabs.find((t) => t.id === tabId);
-      if (!tab || !tab.connectionId) {
+      if (!tab || tab.type !== "editor" || !tab.connectionId) {
         toast.info(t("app.error.selectConnectionFirst"));
         return;
       }
@@ -380,9 +383,7 @@ export function useQueryEditor({
   );
 
   const saveEditorTab = useCallback(
-    async (tab: TabItem, name: string, description: string) => {
-      if (tab.type !== "editor") return;
-
+    async (tab: EditorTabItem, name: string, description: string) => {
       try {
         const query = tab.sqlContent || "";
         const payload = {
