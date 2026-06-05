@@ -26,22 +26,14 @@ interface ConnectionTreeContentProps {
   expandedConnections: Set<string>;
   expandedDatabases: Set<string>;
   expandedSchemas: Set<string>;
-  expandedTables: Set<string>;
-  expandedGroupNodes: Set<string>;
   expandedQueryGroups: Set<string>;
   expandedDatabaseGroups: Set<string>;
   // Loading 状态
   loadingDatabaseKeys: Set<string>;
-  loadingTableKeys: Set<string>;
-  // 选中状态
-  selectedTableKey: string | null;
-  tableNodeRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
   // 切换回调
   toggleConnection: (id: string, connections: Connection[]) => void;
   toggleDatabase: (key: string, onNeedsLoading?: (connId: string, dbName: string, key: string) => void) => void;
   toggleSchema: (key: string) => void;
-  toggleTable: (key: string, onNeedsLoading?: () => void) => void;
-  toggleGroupNode: (key: string) => void;
   toggleQueryGroup: (key: string) => void;
   toggleDatabaseGroup: (key: string) => void;
   // 数据加载回调
@@ -59,24 +51,9 @@ interface ConnectionTreeContentProps {
   onSelectSavedQuery?: (query: SavedQuery) => void;
   // Database group helpers
   getGroupItems: (database: DatabaseInfo, group: DatabaseGroupConfig, dbKey: string, schema?: SchemaInfo) => { name: string; [key: string]: any }[];
-  // Context menu state
-  contextMenu: ContextMenuState;
-  contextMenuConnection: Connection | null | undefined;
-  contextMenuDatabaseAdapter: DatasourceTreeAdapter | null;
   // Context menu actions
   onNewConnection: () => void;
   onImportConnection: () => void;
-  onEdit: (id: string) => void;
-  onDuplicate: (id: string) => void;
-  onReconnect: (id: string) => void;
-  onCreateQuery: (connectionId: string | null | undefined, databaseName?: string | null) => void;
-  onCreateDatabase: (id: string) => void;
-  onDelete: (id: string | null) => void;
-  supportsCreateDatabaseForDriver: (driver: string) => boolean;
-  onRefreshDatabaseTables: (connectionId: string, databaseName: string) => void;
-  onDatabaseImport: (connectionId: string, databaseName: string) => void;
-  onDatabaseExport: (connection: Connection, database: DatabaseInfo) => void;
-  onCreateTable?: (connectionId: number, database: string, schema: string, driver: string) => void;
 }
 
 const loadingSpinner = (
