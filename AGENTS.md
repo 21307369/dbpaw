@@ -10,10 +10,12 @@ it never happens again.
   done. TypeScript compilation alone does not catch Rust errors.
 - When adding a new database driver, do **three** things — not two, not four:
   1. Add the module in `src-tauri/src/db/drivers/<name>.rs`
-  2. Register it in the `connect()` match arms in `mod.rs` (line ~384)
-  3. Add the `pub mod <name>;` declaration and `use` import at the top of `mod.rs`
+  2. Add the `pub mod <name>;` declaration in `src-tauri/src/db/drivers/mod.rs`
+  3. Register it in the `connect()` match arms and imports in
+     `src-tauri/src/db/drivers/registry.rs`
 - When a driver's type is MySQL-family (mariadb, tidb, starrocks, doris),
-  update `is_mysql_family_driver()` in `mod.rs` if the new driver belongs there.
+  update `is_mysql_family_driver()` in `src-tauri/src/db/drivers/registry.rs`
+  if the new driver belongs there.
 - Oracle tests require the Oracle Instant Client installed locally. The
   `scripts/test-integration.sh` script detects this via `DYLD_LIBRARY_PATH` and
   common paths. Integration tests for Oracle will be **skipped** if the client
@@ -50,7 +52,8 @@ it never happens again.
 
 ## Database Drivers
 
-- Every driver implements the `DatabaseDriver` trait in `mod.rs` (line ~310).
+- Every driver implements the `DatabaseDriver` trait re-exported by
+  `src-tauri/src/db/drivers/mod.rs`.
   The trait has required methods (`connect`, `list_databases`, `list_tables`,
   `get_table_structure`, `get_table_metadata`, `get_table_ddl`,
   `get_table_data`, `get_table_data_chunk`, `execute_query`,
@@ -59,8 +62,10 @@ it never happens again.
 - Do not add driver-specific connection logic outside the driver module.
   SSH tunneling is handled transparently in the connection layer, not in
   individual drivers.
-- SQL statement splitting lives in `mod.rs` (`split_sql_statements`,
-  `first_sql_keyword`). Do not reimplement SQL parsing in individual drivers.
+- SQL statement splitting lives in `src-tauri/src/db/sql/splitter.rs`
+  (`split_sql_statements`, `first_sql_keyword`). `src-tauri/src/db/drivers/mod.rs`
+  only re-exports splitter helpers as a compatibility layer. Do not reimplement
+  SQL parsing in individual drivers.
 
 ## Testing
 
