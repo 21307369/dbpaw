@@ -1,9 +1,9 @@
 import { describe, it, expect } from "bun:test";
 import { renderHook, act } from "@testing-library/react";
 import { useTabManager } from "./useTabManager";
-import type { TabItem } from "@/types/tab";
+import type { EditorTabItem, TabItem } from "@/types/tab";
 
-function makeTab(id: string, title?: string): TabItem {
+function makeTab(id: string, title?: string): EditorTabItem {
   return {
     id,
     type: "editor",
