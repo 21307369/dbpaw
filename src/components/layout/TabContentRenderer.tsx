@@ -1,13 +1,24 @@
-import { lazy, Suspense, type ComponentType } from "react";
+import { lazy, Suspense } from "react";
 import { TabsContent } from "@/components/ui/tabs";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TableView } from "@/components/business/DataGrid/TableView";
 import { TableMetadataView } from "@/components/business/Metadata/TableMetadataView";
 import { RoutineMetadataView } from "@/components/business/Metadata/RoutineMetadataView";
 import { FileCode } from "lucide-react";
-import { isMysqlFamilyDriver } from "@/lib/driver-registry";
+import { resolveTableScope } from "@/lib/driver-registry";
 import { api } from "@/services/api";
 import { useTranslation } from "react-i18next";
+import {
+  TabActionsProvider,
+  useEditorActions,
+  useRedisActions,
+  useSchemaActions,
+  useTabActions,
+  useTableActions,
+  type OpenErDiagramContext,
+  type TableDdlContext,
+  type TableRefreshOverrides,
+} from "./tab-contexts";
 import type {
   TabItem,
   EditorTabItem,
@@ -86,37 +97,54 @@ function LazyPanelFallback({
   );
 }
 
-function resolveTableSchema(driver: string, database: string, schema?: string): string {
-  if (isMysqlFamilyDriver(driver as any) || driver === "clickhouse") {
-    return database;
-  }
-  if (driver === "mssql") {
-    return schema || "dbo";
-  }
-  if (driver === "duckdb") {
-    return "main";
-  }
-  return schema || "public";
-}
-
 export interface TabContentRendererProps {
   tabs: TabItem[];
   activeTab: string;
   handleExecuteQuery: (tabId: string, sql: string) => Promise<void>;
   handleSqlChange: (tabId: string, sql: string) => void;
-  handleEditorDatabaseChange: (tabId: string, database: string) => Promise<void>;
+  handleEditorDatabaseChange: (
+    tabId: string,
+    database: string,
+  ) => Promise<void>;
   handlePageChange: (tabId: string, page: number) => Promise<void>;
   handlePageSizeChange: (tabId: string, pageSize: number) => Promise<void>;
-  handleSortChange: (tabId: string, column: string, direction: "asc" | "desc") => Promise<void>;
-  handleFilterChange: (tabId: string, filter: string, orderBy: string) => Promise<void>;
-  handleTableRefresh: (tabId: string, overrides?: any) => Promise<void>;
-  handleOpenTableDDL: (ctx: any) => void;
-  handleOpenERDiagram: (ctx?: any) => void;
-  handleCreateQuery: (connectionId: number, databaseName: string, driver: string) => void;
+  handleSortChange: (
+    tabId: string,
+    column: string,
+    direction: "asc" | "desc",
+  ) => Promise<void>;
+  handleFilterChange: (
+    tabId: string,
+    filter: string,
+    orderBy: string,
+  ) => Promise<void>;
+  handleTableRefresh: (
+    tabId: string,
+    overrides?: TableRefreshOverrides,
+  ) => Promise<void>;
+  handleOpenTableDDL: (ctx: TableDdlContext) => void;
+  handleOpenERDiagram: (ctx?: OpenErDiagramContext) => void;
+  handleCreateQuery: (
+    connectionId: number,
+    databaseName: string,
+    driver: string,
+  ) => void;
   handleCloseTab: (tabId: string) => void;
-  handleCreateTableSuccess: (tabId: string, connectionId: number, database: string, schema: string | undefined, tableName: string, driver: string) => void;
+  handleCreateTableSuccess: (
+    tabId: string,
+    connectionId: number,
+    database: string,
+    schema: string | undefined,
+    tableName: string,
+    driver: string,
+  ) => void;
   handleAlterTableSuccess: (tabId: string) => void;
-  handleOpenRedisConsole: (connection: string, database: string, connectionId: number, driver: string) => void;
+  handleOpenRedisConsole: (
+    connection: string,
+    database: string,
+    connectionId: number,
+    driver: string,
+  ) => void;
   notifyRedisRefresh: (connectionId: number, database: string) => void;
   setQueriesLastUpdated: (timestamp: number) => void;
   setTabs: React.Dispatch<React.SetStateAction<TabItem[]>>;
@@ -126,48 +154,50 @@ export interface TabContentRendererProps {
   showZebraStripes: boolean;
 }
 
-function EditorTab({ tab, props }: { tab: EditorTabItem; props: TabContentRendererProps }) {
+function EditorTab({ tab }: { tab: EditorTabItem }) {
   const { t } = useTranslation();
+  const {
+    handleExecuteQuery,
+    handleSqlChange,
+    handleEditorDatabaseChange,
+    setQueriesLastUpdated,
+    setTabs,
+    isDefaultQueryTitle,
+  } = useEditorActions();
   return (
     <Suspense fallback={<LazyPanelFallback label={t("common.loading")} />}>
       <SqlEditor
         databaseName={tab.database}
         availableDatabases={tab.availableDatabases}
-        onExecute={(sql) => props.handleExecuteQuery(tab.id, sql)}
+        onExecute={(sql) => handleExecuteQuery(tab.id, sql)}
         onCancel={() =>
           tab.connectionId && tab.activeQueryId
-            ? api.query.cancel(
-                String(tab.connectionId),
-                tab.activeQueryId,
-              )
+            ? api.query.cancel(String(tab.connectionId), tab.activeQueryId)
             : Promise.resolve(false)
         }
         isExecuting={!!tab.activeQueryId}
         queryResults={tab.queryResults}
         value={tab.sqlContent}
-        onChange={(sql) => props.handleSqlChange(tab.id, sql)}
+        onChange={(sql) => handleSqlChange(tab.id, sql)}
         onDatabaseChange={(database) =>
-          void props.handleEditorDatabaseChange(tab.id, database)
+          void handleEditorDatabaseChange(tab.id, database)
         }
         connectionId={tab.connectionId}
         driver={tab.driver}
         schemaOverview={tab.schemaOverview}
         savedQueryId={tab.savedQueryId}
-        initialName={
-          props.isDefaultQueryTitle(tab.title) ? "" : tab.title
-        }
+        initialName={isDefaultQueryTitle(tab.title) ? "" : tab.title}
         initialDescription={tab.savedQueryDescription}
         onSaveSuccess={(savedQuery) => {
-          props.setQueriesLastUpdated(Date.now());
-          props.setTabs((prev) =>
+          setQueriesLastUpdated(Date.now());
+          setTabs((prev) =>
             prev.map((t) => {
               if (t.id === tab.id) {
                 return {
                   ...t,
                   savedQueryId: savedQuery.id,
                   title: savedQuery.name,
-                  savedQueryDescription:
-                    savedQuery.description || undefined,
+                  savedQueryDescription: savedQuery.description || undefined,
                   sqlContent: savedQuery.query,
                   lastSavedSql: savedQuery.query,
                   isDirty: false,
@@ -182,7 +212,20 @@ function EditorTab({ tab, props }: { tab: EditorTabItem; props: TabContentRender
   );
 }
 
-function TableTab({ tab, props }: { tab: TableTabItem; props: TabContentRendererProps }) {
+function TableTab({ tab }: { tab: TableTabItem }) {
+  const {
+    handlePageChange,
+    handlePageSizeChange,
+    handleSortChange,
+    handleFilterChange,
+    handleTableRefresh,
+    handleOpenTableDDL,
+    handleOpenERDiagram,
+    handleCreateQuery,
+    showColumnComments,
+    showRowNumbers,
+    showZebraStripes,
+  } = useTableActions();
   return (
     <TableView
       isLoading={tab.isLoading}
@@ -192,75 +235,73 @@ function TableTab({ tab, props }: { tab: TableTabItem; props: TabContentRenderer
       page={tab.page}
       pageSize={tab.pageSize}
       executionTimeMs={tab.executionTimeMs}
-      onPageChange={(p) => props.handlePageChange(tab.id, p)}
-      onPageSizeChange={(size) =>
-        props.handlePageSizeChange(tab.id, size)
-      }
+      onPageChange={(p) => handlePageChange(tab.id, p)}
+      onPageSizeChange={(size) => handlePageSizeChange(tab.id, size)}
       sortColumn={tab.sortColumn}
       sortDirection={tab.sortDirection}
-      onSortChange={(col, dir) =>
-        props.handleSortChange(tab.id, col, dir)
-      }
+      onSortChange={(col, dir) => handleSortChange(tab.id, col, dir)}
       filter={tab.filter}
       orderBy={tab.orderBy}
-      onFilterChange={(f, ob) =>
-        props.handleFilterChange(tab.id, f, ob)
-      }
-      onOpenDDL={props.handleOpenTableDDL}
+      onFilterChange={(f, ob) => handleFilterChange(tab.id, f, ob)}
+      onOpenDDL={handleOpenTableDDL}
       onOpenERDiagram={(ctx) => {
-        props.handleOpenERDiagram({
+        handleOpenERDiagram({
           connectionId: ctx.connectionId,
           database: ctx.database,
         });
       }}
-      onDataRefresh={(params) =>
-        props.handleTableRefresh(tab.id, params)
-      }
-      onCreateQuery={props.handleCreateQuery}
+      onDataRefresh={(params) => handleTableRefresh(tab.id, params)}
+      onCreateQuery={handleCreateQuery}
       tableContext={
-        tab.connectionId &&
-        tab.database &&
-        tab.tableName &&
-        tab.driver
+        tab.connectionId && tab.database && tab.tableName && tab.driver
           ? {
               connectionId: tab.connectionId,
               database: tab.database,
-              schema: resolveTableSchema(tab.driver, tab.database, tab.schema),
+              schema: resolveTableScope(tab.driver, tab.database, tab.schema)
+                .schema,
               table: tab.tableName,
               driver: tab.driver,
             }
           : undefined
       }
-      showColumnComments={props.showColumnComments}
-      showRowNumbers={props.showRowNumbers}
-      showZebraStripes={props.showZebraStripes}
+      showColumnComments={showColumnComments}
+      showRowNumbers={showRowNumbers}
+      showZebraStripes={showZebraStripes}
     />
   );
 }
 
-function RedisKeyTab({ tab, props }: { tab: RedisKeyTabItem; props: TabContentRendererProps }) {
-  if (tab.connectionId === undefined || !tab.database || tab.redisKey === undefined) {
+function RedisKeyTab({ tab }: { tab: RedisKeyTabItem }) {
+  const { setTabs, handleCloseTab } = useTabActions();
+  const { notifyRedisRefresh } = useRedisActions();
+  if (
+    tab.connectionId === undefined ||
+    !tab.database ||
+    tab.redisKey === undefined
+  ) {
     return null;
   }
+  const connectionId = tab.connectionId;
+  const database = tab.database;
   return (
     <Suspense fallback={<LazyPanelFallback label="Loading Redis key..." />}>
       <RedisKeyView
-        connectionId={tab.connectionId}
-        database={tab.database}
+        connectionId={connectionId}
+        database={database}
         redisKey={tab.redisKey}
         onSavedKeyChange={(key) => {
-          props.setTabs((prev) =>
+          setTabs((prev) =>
             prev.map((item) =>
               item.id === tab.id
                 ? { ...item, title: key, redisKey: key }
                 : item,
             ),
           );
-          props.notifyRedisRefresh(tab.connectionId!, tab.database!);
+          notifyRedisRefresh(connectionId, database);
         }}
         onDeleted={() => {
-          props.handleCloseTab(tab.id);
-          props.notifyRedisRefresh(tab.connectionId!, tab.database!);
+          handleCloseTab(tab.id);
+          notifyRedisRefresh(connectionId, database);
         }}
       />
     </Suspense>
@@ -276,20 +317,27 @@ function RedisConsoleTab({ tab }: { tab: RedisConsoleTabItem }) {
   );
 }
 
-function RedisBrowserTab({ tab, props }: { tab: RedisBrowserTabItem; props: TabContentRendererProps }) {
-  if (tab.connectionId === undefined || !tab.database) return null;
+function RedisBrowserTab({ tab }: { tab: RedisBrowserTabItem }) {
+  const { handleOpenRedisConsole } = useRedisActions();
+  if (
+    tab.connectionId === undefined ||
+    !tab.connection ||
+    !tab.database ||
+    !tab.driver
+  ) {
+    return null;
+  }
+  const connection = tab.connection;
+  const connectionId = tab.connectionId;
+  const database = tab.database;
+  const driver = tab.driver;
   return (
     <Suspense fallback={<LazyPanelFallback label="Loading Redis Browser..." />}>
       <RedisBrowserView
-        connectionId={tab.connectionId}
-        database={tab.database}
+        connectionId={connectionId}
+        database={database}
         onOpenConsole={() =>
-          props.handleOpenRedisConsole(
-            tab.connection!,
-            tab.database!,
-            tab.connectionId!,
-            tab.driver!,
-          )
+          handleOpenRedisConsole(connection, database, connectionId, driver)
         }
       />
     </Suspense>
@@ -300,7 +348,10 @@ function RedisServerInfoTab({ tab }: { tab: RedisServerInfoTabItem }) {
   if (tab.connectionId === undefined || !tab.database) return null;
   return (
     <Suspense fallback={<LazyPanelFallback label="Loading Server Info..." />}>
-      <RedisServerInfoView connectionId={tab.connectionId} database={tab.database} />
+      <RedisServerInfoView
+        connectionId={tab.connectionId}
+        database={tab.database}
+      />
     </Suspense>
   );
 }
@@ -308,7 +359,9 @@ function RedisServerInfoTab({ tab }: { tab: RedisServerInfoTabItem }) {
 function ElasticsearchIndexTab({ tab }: { tab: ElasticsearchIndexTabItem }) {
   if (tab.connectionId === undefined || !tab.elasticsearchIndex) return null;
   return (
-    <Suspense fallback={<LazyPanelFallback label="Loading Elasticsearch index..." />}>
+    <Suspense
+      fallback={<LazyPanelFallback label="Loading Elasticsearch index..." />}
+    >
       <ElasticsearchIndexView
         connectionId={tab.connectionId}
         index={tab.elasticsearchIndex}
@@ -331,45 +384,63 @@ function ERDiagramTab({ tab }: { tab: ERDiagramTabItem }) {
   );
 }
 
-function CreateTableTab({ tab, props }: { tab: CreateTableTabItem; props: TabContentRendererProps }) {
+function CreateTableTab({ tab }: { tab: CreateTableTabItem }) {
   const { t } = useTranslation();
-  if (tab.connectionId === undefined || !tab.database || !tab.driver) return null;
+  const { handleCreateTableSuccess } = useSchemaActions();
+  const { handleCloseTab } = useTabActions();
+  if (tab.connectionId === undefined || !tab.database || !tab.driver)
+    return null;
+  const connectionId = tab.connectionId;
+  const database = tab.database;
+  const driver = tab.driver;
   return (
     <Suspense fallback={<LazyPanelFallback label={t("common.loading")} />}>
       <CreateTableView
-        connectionId={tab.connectionId}
-        database={tab.database}
+        connectionId={connectionId}
+        database={database}
         schema={tab.schema ?? ""}
-        driver={tab.driver}
+        driver={driver}
         onSuccess={(tableName) =>
-          props.handleCreateTableSuccess(
+          handleCreateTableSuccess(
             tab.id,
-            tab.connectionId!,
-            tab.database!,
+            connectionId,
+            database,
             tab.schema,
             tableName,
-            tab.driver!,
+            driver,
           )
         }
-        onCancel={() => props.handleCloseTab(tab.id)}
+        onCancel={() => handleCloseTab(tab.id)}
       />
     </Suspense>
   );
 }
 
-function AlterTableTab({ tab, props }: { tab: AlterTableTabItem; props: TabContentRendererProps }) {
+function AlterTableTab({ tab }: { tab: AlterTableTabItem }) {
   const { t } = useTranslation();
-  if (tab.connectionId === undefined || !tab.database || !tab.tableName || !tab.driver) return null;
+  const { handleAlterTableSuccess } = useSchemaActions();
+  const { handleCloseTab } = useTabActions();
+  if (
+    tab.connectionId === undefined ||
+    !tab.database ||
+    !tab.tableName ||
+    !tab.driver
+  )
+    return null;
+  const connectionId = tab.connectionId;
+  const database = tab.database;
+  const tableName = tab.tableName;
+  const driver = tab.driver;
   return (
     <Suspense fallback={<LazyPanelFallback label={t("common.loading")} />}>
       <AlterTableView
-        connectionId={tab.connectionId}
-        database={tab.database}
+        connectionId={connectionId}
+        database={database}
         schema={tab.schema ?? ""}
-        table={tab.tableName}
-        driver={tab.driver}
-        onSuccess={() => props.handleAlterTableSuccess(tab.id)}
-        onCancel={() => props.handleCloseTab(tab.id)}
+        table={tableName}
+        driver={driver}
+        onSuccess={() => handleAlterTableSuccess(tab.id)}
+        onCancel={() => handleCloseTab(tab.id)}
       />
     </Suspense>
   );
@@ -397,7 +468,8 @@ function RoutineTab({ tab }: { tab: RoutineTabItem }) {
 }
 
 function MetadataFallbackTab({ tab }: { tab: DdlTabItem }) {
-  if (!tab.connectionId || !tab.database || !tab.schema || !tab.tableName) return null;
+  if (!tab.connectionId || !tab.database || !tab.schema || !tab.tableName)
+    return null;
   return (
     <TableMetadataView
       connectionId={tab.connectionId}
@@ -408,22 +480,34 @@ function MetadataFallbackTab({ tab }: { tab: DdlTabItem }) {
   );
 }
 
-type TabRenderer = ComponentType<{ tab: any; props: TabContentRendererProps }>;
-
-const TAB_RENDERERS: Record<TabItem["type"], TabRenderer> = {
-  editor: EditorTab,
-  table: TableTab,
-  routine: RoutineTab,
-  "redis-key": RedisKeyTab,
-  "redis-console": RedisConsoleTab,
-  "redis-browser": RedisBrowserTab,
-  "redis-server-info": RedisServerInfoTab,
-  "elasticsearch-index": ElasticsearchIndexTab,
-  "er-diagram": ERDiagramTab,
-  "create-table": CreateTableTab,
-  "alter-table": AlterTableTab,
-  ddl: MetadataFallbackTab,
-};
+function renderTab(tab: TabItem) {
+  switch (tab.type) {
+    case "editor":
+      return <EditorTab tab={tab} />;
+    case "table":
+      return <TableTab tab={tab} />;
+    case "routine":
+      return <RoutineTab tab={tab} />;
+    case "redis-key":
+      return <RedisKeyTab tab={tab} />;
+    case "redis-console":
+      return <RedisConsoleTab tab={tab} />;
+    case "redis-browser":
+      return <RedisBrowserTab tab={tab} />;
+    case "redis-server-info":
+      return <RedisServerInfoTab tab={tab} />;
+    case "elasticsearch-index":
+      return <ElasticsearchIndexTab tab={tab} />;
+    case "er-diagram":
+      return <ERDiagramTab tab={tab} />;
+    case "create-table":
+      return <CreateTableTab tab={tab} />;
+    case "alter-table":
+      return <AlterTableTab tab={tab} />;
+    case "ddl":
+      return <MetadataFallbackTab tab={tab} />;
+  }
+}
 
 export function TabContentRenderer({
   tabs,
@@ -431,7 +515,6 @@ export function TabContentRenderer({
   ...rest
 }: TabContentRendererProps) {
   const { t } = useTranslation();
-  const props = { tabs, activeTab: _activeTab, ...rest } as TabContentRendererProps;
 
   if (tabs.length === 0) {
     return (
@@ -445,9 +528,8 @@ export function TabContentRenderer({
   }
 
   return (
-    <>
+    <TabActionsProvider {...rest}>
       {tabs.map((tab) => {
-        const Renderer = TAB_RENDERERS[tab.type] ?? MetadataFallbackTab;
         return (
           <TabsContent
             key={tab.id}
@@ -455,12 +537,10 @@ export function TabContentRenderer({
             forceMount
             className="h-full m-0"
           >
-            <ErrorBoundary>
-              <Renderer tab={tab} props={props} />
-            </ErrorBoundary>
+            <ErrorBoundary>{renderTab(tab)}</ErrorBoundary>
           </TabsContent>
         );
       })}
-    </>
+    </TabActionsProvider>
   );
 }

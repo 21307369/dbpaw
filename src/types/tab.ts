@@ -2,7 +2,7 @@ import type { RoutineType, SchemaOverview } from "@/services/api";
 import type { SingleResultState } from "@/lib/queryExecutionState";
 
 export interface QueryResults {
-  data: any[];
+  data: unknown[];
   columns: string[];
   executionTime: string;
   error?: string;
@@ -40,7 +40,7 @@ export interface TableTabItem {
   tableName?: string;
   connectionId?: number;
   driver?: string;
-  data?: any[];
+  data?: unknown[];
   columns?: string[];
   total?: number;
   page?: number;

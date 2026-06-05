@@ -2,6 +2,30 @@ import { createContext, useContext, type ReactNode } from "react";
 import type { TabItem } from "@/types/tab";
 import type { TabContentRendererProps } from "./TabContentRenderer";
 
+export type TableRefreshOverrides = {
+  page?: number;
+  limit?: number;
+  filter?: string;
+  orderBy?: string;
+};
+
+export type TableDdlContext = {
+  connectionId: number;
+  database: string;
+  schema: string;
+  table: string;
+};
+
+export type TableErDiagramContext = TableDdlContext & {
+  driver: string;
+};
+
+export type OpenErDiagramContext = {
+  connectionId?: number;
+  database?: string;
+  schema?: string;
+};
+
 // ── Editor Actions ──
 interface EditorActions {
   handleExecuteQuery: (tabId: string, sql: string) => Promise<void>;
@@ -31,9 +55,12 @@ interface TableActions {
     filter: string,
     orderBy: string,
   ) => Promise<void>;
-  handleTableRefresh: (tabId: string, overrides?: any) => Promise<void>;
-  handleOpenTableDDL: (ctx: any) => void;
-  handleOpenERDiagram: (ctx?: any) => void;
+  handleTableRefresh: (
+    tabId: string,
+    overrides?: TableRefreshOverrides,
+  ) => Promise<void>;
+  handleOpenTableDDL: (ctx: TableDdlContext) => void;
+  handleOpenERDiagram: (ctx?: OpenErDiagramContext) => void;
   handleCreateQuery: (
     connectionId: number,
     databaseName: string,
