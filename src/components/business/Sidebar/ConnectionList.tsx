@@ -1,50 +1,32 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 
-import { api } from "@/services/api";
-import type {
-  ConnectionForm,
-  Driver,
-  RoutineType,
-  SavedQuery,
-} from "@/services/api";
+import type { ConnectionForm, RoutineType, SavedQuery } from "@/services/api";
 import type { DatabaseGroupConfig } from "@/lib/tree-adapters/types";
-import { supportsSchemaBrowsing } from "@/lib/driver-registry";
 import type { TreeCallbacks } from "@/lib/tree-adapters/types.tsx";
-import { toast } from "sonner";
 import { SidebarHeader } from "./connection-list/SidebarHeader";
 import { SidebarSearch } from "./connection-list/SidebarSearch";
 import { ConnectionTreeContent } from "./connection-list/ConnectionTreeContent";
 import { ConnectionTreeDialogs } from "./connection-list/ConnectionTreeDialogs";
 import type { TreeNodeDeps } from "./connection-list/TreeNodeRenderers";
-import { getDatasourceTreeAdapter as getDatasourceTreeAdapterFn } from "./connection-list/getDatasourceTreeAdapter";
 import { useConnectionCrud } from "./hooks/useConnectionCrud";
 import { useTreeDataFetching } from "./hooks/useTreeDataFetching";
 import { useConnectionForm } from "./hooks/useConnectionForm";
 import { useTranslation } from "react-i18next";
-import {
-  elasticsearchIndexActionSuccessMessage,
-  executeElasticsearchIndexAction,
-  type ElasticsearchIndexAction,
-} from "@/components/business/Elasticsearch/elasticsearch-index-management";
 import type {
   TableInfo,
   SchemaInfo,
   DatabaseInfo,
   DatabaseExportFormat,
   Connection,
-  SelectedTableNode,
 } from "./connection-list/types";
 import { useTreeExpansion } from "./hooks/useTreeExpansion";
 import { useRedisKeys } from "./hooks/useRedisKeys";
 import { useImportExport } from "./hooks/useImportExport";
 import { useCreateDatabase } from "./hooks/useCreateDatabase";
-import { errorMessage } from "@/lib/errors";
+import { useSavedQueriesTree } from "./hooks/useSavedQueriesTree";
+import { useConnectionTreeSearch } from "./hooks/useConnectionTreeSearch";
+import { useConnectionRevealSync } from "./hooks/useConnectionRevealSync";
+import { useConnectionTreeAdapters } from "./hooks/useConnectionTreeAdapters";
 
 interface ConnectionListProps {
   onTableSelect?: (
@@ -146,9 +128,6 @@ export function ConnectionList({
   simpleMode = false,
 }: ConnectionListProps) {
   const { t } = useTranslation();
-  const tableNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const handledRevealRequestIdRef = useRef<number | null>(null);
-  const handledRedisRefreshIdRef = useRef<number | null>(null);
   const {
     expandedConnections,
     setExpandedConnections,
@@ -193,8 +172,7 @@ export function ConnectionList({
     setExpandedDatabases,
     setExpandedSchemas,
     setExpandedTables,
-    listDatabases: (connection) =>
-      getAdapter(connection).listDatabases(),
+    listDatabases: (connection) => getAdapter(connection).listDatabases(),
   });
 
   const {
@@ -280,13 +258,6 @@ export function ConnectionList({
   // listing them as deps (avoids re-firing on every connection state update).
   connectionsRef.current = connections;
   expandedDatabasesRef.current = expandedDatabases;
-  const [selectedTableNode, setSelectedTableNode] =
-    useState<SelectedTableNode | null>(null);
-  const selectedTableKey = selectedTableNode?.key ?? null;
-  const [autoScrollRequest, setAutoScrollRequest] = useState<{
-    key: string;
-    id: number;
-  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     x: number;
@@ -295,26 +266,27 @@ export function ConnectionList({
     databaseName?: string | null;
     schemaName?: string | null;
     type: "connection" | "database" | "schema";
-  }>({ visible: false, x: 0, y: 0, connectionId: null, type: "connection"   });
-  const [showElasticsearchSystemIndices, setShowElasticsearchSystemIndices] =
-    useState(false);
-  const [showMongoSystemCollections, setShowMongoSystemCollections] =
-    useState(false);
-  const [createEsIndexConnectionId, setCreateEsIndexConnectionId] = useState<
-    string | null
-  >(null);
-  const [isCreateEsIndexDialogOpen, setIsCreateEsIndexDialogOpen] =
-    useState(false);
-  const [isLoadingQueries, setIsLoadingQueries] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  }>({ visible: false, x: 0, y: 0, connectionId: null, type: "connection" });
+  const { isLoadingQueries, savedQueriesByConnection } = useSavedQueriesTree({
+    showSavedQueriesInTree,
+    lastUpdated,
+  });
+  const { searchTerm, setSearchTerm, filteredConnections } =
+    useConnectionTreeSearch({
+      connections,
+      savedQueriesByConnection,
+      showSavedQueriesInTree,
+      setExpandedConnections,
+      setExpandedDatabases,
+      setExpandedSchemas,
+      setExpandedDatabaseGroups,
+      setExpandedQueryGroups,
+    });
   const { loadRedisKeysPage } = useRedisKeys({
     connectionsRef,
     setConnections,
     searchTerm,
   });
-  const [savedQueriesByConnection, setSavedQueriesByConnection] = useState<
-    Record<string, SavedQuery[]>
-  >({});
 
   const {
     isImportingSql,
@@ -347,303 +319,46 @@ export function ConnectionList({
     handleRefreshDatabaseTables,
   });
 
-
-  const supportsSchemaNodeForDriver = (driver: Driver) =>
-    supportsSchemaBrowsing(driver);
-  const getSchemaNodeKey = (databaseKey: string, schema: string) =>
-    `${databaseKey}::${schema}`;
-  const getTableNodeKey = (
-    connectionId: string,
-    databaseName: string,
-    schemaName: string,
-    tableName: string,
-  ) => `${connectionId}-${databaseName}-${schemaName}-${tableName}`;
-
-  const filteredConnections = useMemo(() => {
-    if (!searchTerm) return connections;
-    const lowerTerm = searchTerm.toLowerCase();
-    return connections
-      .map((conn) => {
-        const filteredDbs = conn.databases
-          .map((db) => {
-            const filteredSchemas = db.schemas
-              .map((schema) => {
-                const filteredTables = schema.tables.filter((t) =>
-                  t.name.toLowerCase().includes(lowerTerm),
-                );
-                const filteredProcedures = schema.procedures.filter((routine) =>
-                  routine.name.toLowerCase().includes(lowerTerm),
-                );
-                const filteredFunctions = schema.functions.filter((routine) =>
-                  routine.name.toLowerCase().includes(lowerTerm),
-                );
-                if (
-                  filteredTables.length > 0 ||
-                  filteredProcedures.length > 0 ||
-                  filteredFunctions.length > 0
-                ) {
-                  return {
-                    ...schema,
-                    tables: filteredTables,
-                    procedures: filteredProcedures,
-                    functions: filteredFunctions,
-                  };
-                }
-                return null;
-              })
-              .filter(Boolean) as SchemaInfo[];
-            const filteredTables = db.tables.filter((t) =>
-              t.name.toLowerCase().includes(lowerTerm),
-            );
-            if (filteredSchemas.length > 0 || filteredTables.length > 0) {
-              return {
-                ...db,
-                schemas: filteredSchemas,
-                tables: filteredTables,
-              };
-            }
-            return null;
-          })
-          .filter(Boolean) as DatabaseInfo[];
-
-        const hasMatchingQuery =
-          showSavedQueriesInTree &&
-          (savedQueriesByConnection[conn.id] || []).some((query) =>
-            query.name.toLowerCase().includes(lowerTerm),
-          );
-
-        if (filteredDbs.length > 0 || hasMatchingQuery) {
-          return { ...conn, databases: filteredDbs };
-        }
-        return null;
-      })
-      .filter(Boolean) as Connection[];
-  }, [
+  const {
+    getAdapter,
+    createEsIndexConnectionId,
+    setCreateEsIndexConnectionId,
+    isCreateEsIndexDialogOpen,
+    setIsCreateEsIndexDialogOpen,
+    handleCreateQueryFromContext,
+  } = useConnectionTreeAdapters({
     connections,
-    savedQueriesByConnection,
+    expandedDatabases,
+    treeCallbacks,
+    onTableSelect,
+    onCreateQuery,
+    onAlterTable,
     searchTerm,
-    showSavedQueriesInTree,
-  ]);
+    loadRedisKeysPage,
+    handleRefreshDatabaseTables,
+    fetchSqlTablesAsTableInfo,
+    handleTableExportDialog,
+    setContextMenu,
+  });
 
-  useEffect(() => {
-    if (searchTerm) {
-      setExpandedConnections((prev) => {
-        const next = new Set(prev);
-        filteredConnections.forEach((conn) => {
-          next.add(conn.id);
-        });
-        return next;
-      });
-      setExpandedDatabases((prev) => {
-        const next = new Set(prev);
-        filteredConnections.forEach((conn) => {
-          conn.databases.forEach((db) => {
-            next.add(`${conn.id}-${db.name}`);
-          });
-        });
-        return next;
-      });
-      setExpandedSchemas((prev) => {
-        const next = new Set(prev);
-        filteredConnections.forEach((conn) => {
-          conn.databases.forEach((db) => {
-            const databaseKey = `${conn.id}-${db.name}`;
-            db.schemas.forEach((schema) => {
-              next.add(getSchemaNodeKey(databaseKey, schema.name));
-            });
-          });
-      });
-      return next;
-    });
-    if (showSavedQueriesInTree) {
-        setExpandedDatabaseGroups((prev) => {
-          const next = new Set(prev);
-          filteredConnections.forEach((conn) => {
-            next.add(`${conn.id}::databases`);
-          });
-          return next;
-        });
-        setExpandedQueryGroups((prev) => {
-          const next = new Set(prev);
-          filteredConnections.forEach((conn) => {
-            next.add(`${conn.id}::queries`);
-          });
-          return next;
-        });
-      }
-    }
-  }, [searchTerm, filteredConnections, showSavedQueriesInTree]);
+  const { tableNodeRefs, selectedTableKey } = useConnectionRevealSync({
+    activeTableTarget,
+    sidebarRevealRequest,
+    redisRefreshRequest,
+    connections,
+    connectionsRef,
+    expandedDatabasesRef,
+    searchTerm,
+    setExpandedConnections,
+    setExpandedDatabases,
+    setExpandedSchemas,
+    fetchAndSetTables,
+    loadRedisKeysPage,
+  });
 
   useEffect(() => {
     fetchConnections();
   }, []);
-
-  useEffect(() => {
-    if (!showSavedQueriesInTree) return;
-    void fetchSavedQueriesByConnection();
-  }, [showSavedQueriesInTree, lastUpdated]);
-
-  const fetchSavedQueriesByConnection = async () => {
-    setIsLoadingQueries(true);
-    try {
-      const queries = await api.queries.list();
-      const grouped: Record<string, SavedQuery[]> = {};
-      queries.forEach((query) => {
-        if (!query.connectionId) return;
-        const key = String(query.connectionId);
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(query);
-      });
-      Object.values(grouped).forEach((items) =>
-        items.sort((a, b) => a.name.localeCompare(b.name)),
-      );
-      setSavedQueriesByConnection(grouped);
-    } catch (e) {
-      const message = errorMessage(e);
-      console.error("Failed to fetch saved queries for tree", message);
-      toast.error(t("connection.toast.loadQueriesFailed"), {
-        description: message,
-      });
-    } finally {
-      setIsLoadingQueries(false);
-    }
-  };
-
-  useEffect(() => {
-    connectionsRef.current.forEach((conn) => {
-      if (getAdapter(conn).isDatabaseExpandable) return;
-      conn.databases.forEach((db) => {
-        const dbKey = `${conn.id}-${db.name}`;
-        if (!expandedDatabasesRef.current.has(dbKey) || db.tables.length === 0)
-          return;
-        void loadRedisKeysPage(conn.id, db.name, "0", false);
-      });
-    });
-  }, [searchTerm, loadRedisKeysPage]);
-
-  const openCreateElasticsearchIndexDialog = useCallback(
-    (connectionId: string, _databaseName = "Indices") => {
-      const connection = connections.find((conn) => conn.id === connectionId);
-      if (!connection || connection.type !== "elasticsearch") return;
-      setCreateEsIndexConnectionId(connectionId);
-      setIsCreateEsIndexDialogOpen(true);
-    },
-    [connections],
-  );
-
-  const handleElasticsearchIndexAction = useCallback(
-    async (
-      connectionId: string,
-      databaseName: string,
-      index: string,
-      action: ElasticsearchIndexAction,
-    ) => {
-      if (action === "delete" && !window.confirm(`Delete index "${index}"?`)) {
-        return;
-      }
-
-      try {
-        await executeElasticsearchIndexAction(
-          Number(connectionId),
-          index,
-          action,
-        );
-        toast.success(elasticsearchIndexActionSuccessMessage(action, index));
-        await handleRefreshDatabaseTables(connectionId, databaseName);
-      } catch (e) {
-        toast.error(`Failed to ${action} Elasticsearch index`, {
-          description: errorMessage(e),
-        });
-      }
-    },
-    [handleRefreshDatabaseTables],
-  );
-
-  const handleOpenERDiagram = useCallback(
-    (connectionId: string, database: string) => {
-      treeCallbacks?.onOpenERDiagram?.({
-        connectionId,
-        connectionName: "",
-        connectionType: "" as any,
-        driverKind: "sql" as any,
-        databaseName: database,
-      });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-
-  const handleCreateQueryFromContext = useCallback(
-    (connectionId: string | null | undefined, databaseName?: string | null) => {
-      if (!onCreateQuery || !connectionId) return;
-      const connection = connections.find((c) => c.id === connectionId);
-      if (!connection) return;
-
-      const explicitDatabaseName = (databaseName || "").trim();
-      const fallbackDatabaseName =
-        (connection.database || "").trim() ||
-        connection.databases.find((db) => db.name.trim().length > 0)?.name ||
-        (connection.type === "sqlite" || connection.type === "duckdb"
-          ? "main"
-          : "");
-      const resolvedDatabaseName = explicitDatabaseName || fallbackDatabaseName;
-
-      if (!resolvedDatabaseName) {
-        toast.error(t("connection.toast.newQueryNoDatabase"));
-        return;
-      }
-
-      onCreateQuery(Number(connectionId), resolvedDatabaseName, connection.type);
-    },
-    [onCreateQuery, connections, t],
-  );
-
-  const getAdapter = useCallback(
-    (connection: Connection) =>
-      getDatasourceTreeAdapterFn({
-        connection,
-        treeCallbacks,
-        deps: {
-          onTableSelect,
-          loadRedisKeysPage,
-          handleRefreshDatabaseTables,
-          openCreateElasticsearchIndexDialog,
-          handleElasticsearchIndexAction,
-          handleOpenERDiagram,
-          showElasticsearchSystemIndices,
-          showMongoSystemCollections,
-          searchTerm,
-          t,
-          fetchSqlTablesAsTableInfo,
-          handleCreateQueryFromContext,
-          handleTableExportDialog,
-          onAlterTable,
-          setShowElasticsearchSystemIndices,
-          setShowMongoSystemCollections,
-          setContextMenu,
-        },
-      }),
-    [
-      treeCallbacks,
-      onTableSelect,
-      loadRedisKeysPage,
-      handleRefreshDatabaseTables,
-      openCreateElasticsearchIndexDialog,
-      handleElasticsearchIndexAction,
-      handleOpenERDiagram,
-      showElasticsearchSystemIndices,
-      showMongoSystemCollections,
-      searchTerm,
-      t,
-      fetchSqlTablesAsTableInfo,
-      handleCreateQueryFromContext,
-      handleTableExportDialog,
-      onAlterTable,
-      setShowElasticsearchSystemIndices,
-      setShowMongoSystemCollections,
-      setContextMenu,
-    ],
-  );
 
   const handleTableClick = (
     connection: Connection,
@@ -671,209 +386,6 @@ export function ConnectionList({
     t,
   };
 
-  // Sync UI state (expansion, selection) and load data if needed.
-  useEffect(() => {
-    if (!activeTableTarget) {
-      setSelectedTableNode(null);
-      return;
-    }
-
-    const connectionId = String(activeTableTarget.connectionId);
-    const databaseName = activeTableTarget.database;
-    const tableName = activeTableTarget.table;
-    const schemaName = activeTableTarget.schema || "";
-    const dbKey = `${connectionId}-${databaseName}`;
-    let cancelled = false;
-
-    setExpandedConnections((prev) => {
-      const next = new Set(prev);
-      next.add(connectionId);
-      return next;
-    });
-    setExpandedDatabases((prev) => {
-      const next = new Set(prev);
-      next.add(dbKey);
-      return next;
-    });
-
-    const ensureDatabaseTablesLoaded = async () => {
-      const targetConnection = connections.find(
-        (conn) => conn.id === connectionId,
-      );
-      const targetDatabase = targetConnection?.databases.find(
-        (db) => db.name === databaseName,
-      );
-      if (!targetDatabase) return;
-
-      const supportsSchemaNode = supportsSchemaNodeForDriver(
-        targetConnection?.type || "postgres",
-      );
-      const hasLoadedTables = supportsSchemaNode
-        ? targetDatabase.schemas.length > 0
-        : targetDatabase.tables.length > 0;
-      let availableTables = supportsSchemaNode
-        ? targetDatabase.schemas.flatMap((schema) => schema.tables)
-        : targetDatabase.tables;
-      if (!hasLoadedTables) {
-        availableTables = await fetchAndSetTables(connectionId, databaseName);
-      }
-      if (cancelled) return;
-      const resolvedSchema =
-        schemaName ||
-        availableTables.find((table) => table.name === tableName)?.schema ||
-        "";
-      if (supportsSchemaNode && resolvedSchema) {
-        setExpandedSchemas((prev) => {
-          const next = new Set(prev);
-          next.add(getSchemaNodeKey(dbKey, resolvedSchema));
-          return next;
-        });
-      }
-      const resolvedTableKey = getTableNodeKey(
-        connectionId,
-        databaseName,
-        resolvedSchema,
-        tableName,
-      );
-      setSelectedTableNode({
-        key: resolvedTableKey,
-        connectionId: activeTableTarget.connectionId,
-        database: databaseName,
-        table: tableName,
-        schema: resolvedSchema,
-      });
-    };
-
-    void ensureDatabaseTablesLoaded();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTableTarget, connections]);
-
-  useEffect(() => {
-    if (!sidebarRevealRequest || !activeTableTarget || !selectedTableNode)
-      return;
-    if (handledRevealRequestIdRef.current === sidebarRevealRequest.id) return;
-    if (
-      sidebarRevealRequest.connectionId !== activeTableTarget.connectionId ||
-      sidebarRevealRequest.database !== activeTableTarget.database ||
-      sidebarRevealRequest.table !== activeTableTarget.table
-    ) {
-      return;
-    }
-    if (
-      selectedTableNode.connectionId !== sidebarRevealRequest.connectionId ||
-      selectedTableNode.database !== sidebarRevealRequest.database ||
-      selectedTableNode.table !== sidebarRevealRequest.table
-    ) {
-      return;
-    }
-    if (
-      sidebarRevealRequest.schema &&
-      sidebarRevealRequest.schema !== selectedTableNode.schema
-    ) {
-      return;
-    }
-
-    handledRevealRequestIdRef.current = sidebarRevealRequest.id;
-    setAutoScrollRequest({
-      key: selectedTableNode.key,
-      id: sidebarRevealRequest.id,
-    });
-  }, [activeTableTarget, selectedTableNode, sidebarRevealRequest]);
-
-  useEffect(() => {
-    if (!redisRefreshRequest) return;
-    if (handledRedisRefreshIdRef.current === redisRefreshRequest.id) return;
-    handledRedisRefreshIdRef.current = redisRefreshRequest.id;
-    const dbKey = `${String(redisRefreshRequest.connectionId)}-${redisRefreshRequest.database}`;
-    if (!expandedDatabasesRef.current.has(dbKey)) return;
-    void loadRedisKeysPage(
-      String(redisRefreshRequest.connectionId),
-      redisRefreshRequest.database,
-      "0",
-      false,
-    );
-  }, [redisRefreshRequest, loadRedisKeysPage]);
-
-  useEffect(() => {
-    if (!autoScrollRequest) return;
-    let cancelled = false;
-    let retriesLeft = 12;
-    let frame1 = 0;
-    let frame2 = 0;
-
-    const run = () => {
-      frame1 = requestAnimationFrame(() => {
-        frame2 = requestAnimationFrame(() => {
-          if (cancelled) return;
-          const target = tableNodeRefs.current[autoScrollRequest.key];
-          if (target) {
-            target.scrollIntoView({
-              block: "center",
-              inline: "nearest",
-              behavior: "auto",
-            });
-            setAutoScrollRequest((prev) =>
-              prev?.id === autoScrollRequest.id ? null : prev,
-            );
-            return;
-          }
-
-          retriesLeft -= 1;
-          if (retriesLeft > 0) {
-            run();
-            return;
-          }
-
-          setAutoScrollRequest((prev) =>
-            prev?.id === autoScrollRequest.id ? null : prev,
-          );
-        });
-      });
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-      if (frame1) cancelAnimationFrame(frame1);
-      if (frame2) cancelAnimationFrame(frame2);
-    };
-  }, [autoScrollRequest]);
-
-  useEffect(() => {
-    connections
-      .filter(
-        (connection) =>
-          connection.type === "elasticsearch" &&
-          connection.connectState === "success" &&
-          expandedDatabases.has(`${connection.id}-Indices`),
-      )
-      .forEach((connection) => {
-        void handleRefreshDatabaseTables(connection.id, "Indices");
-      });
-    // Re-apply the client-side system-index filter for already opened ES trees.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showElasticsearchSystemIndices]);
-
-  useEffect(() => {
-    connections
-      .filter(
-        (connection) =>
-          connection.type === "mongodb" &&
-          connection.connectState === "success",
-      )
-      .forEach((connection) => {
-        connection.databases.forEach((db) => {
-          if (expandedDatabases.has(`${connection.id}-${db.name}`)) {
-            void handleRefreshDatabaseTables(connection.id, db.name);
-          }
-        });
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showMongoSystemCollections]);
-
   const getGroupItems = (
     database: DatabaseInfo,
     group: DatabaseGroupConfig,
@@ -882,18 +394,17 @@ export function ConnectionList({
   ): { name: string; [key: string]: any }[] => {
     switch (group.source) {
       case "tables": {
-        const tables = schema ? schema.tables : (database.tables || []);
+        const tables = schema ? schema.tables : database.tables || [];
         return group.sourceFilter
           ? tables.filter((t) => t.type === group.sourceFilter)
-          : tables.filter(
-              (t) => t.type === "table" || t.type === "BASE TABLE",
-            );
+          : tables.filter((t) => t.type === "table" || t.type === "BASE TABLE");
       }
       case "routines": {
         if (schema) {
-          const routines = group.sourceFilter === "procedure" 
-            ? schema.procedures 
-            : schema.functions;
+          const routines =
+            group.sourceFilter === "procedure"
+              ? schema.procedures
+              : schema.functions;
           return routines;
         }
         const routines = database.routines || [];
@@ -995,7 +506,9 @@ export function ConnectionList({
       />
       <ConnectionTreeDialogs
         contextMenu={contextMenu}
-        onCloseContextMenu={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
+        onCloseContextMenu={() =>
+          setContextMenu((prev) => ({ ...prev, visible: false }))
+        }
         connections={connections}
         contextMenuConnection={contextMenuConnection}
         contextMenuDatabaseAdapter={contextMenuDatabaseAdapter}
@@ -1018,7 +531,10 @@ export function ConnectionList({
         }}
         onEsIndexCreated={async () => {
           if (createEsIndexConnectionId) {
-            await handleRefreshDatabaseTables(createEsIndexConnectionId, "Indices");
+            await handleRefreshDatabaseTables(
+              createEsIndexConnectionId,
+              "Indices",
+            );
           }
         }}
         isCreateDbDialogOpen={isCreateDbDialogOpen}
@@ -1058,7 +574,9 @@ export function ConnectionList({
         isDatabaseExportDialogOpen={isDatabaseExportDialogOpen}
         isExportingDatabaseSql={isExportingDatabaseSql}
         pendingDatabaseExportName={pendingDatabaseExport?.databaseName}
-        pendingDatabaseExportFormat={pendingDatabaseExport?.format || "sql_full"}
+        pendingDatabaseExportFormat={
+          pendingDatabaseExport?.format || "sql_full"
+        }
         onDatabaseExportDialogOpenChange={setIsDatabaseExportDialogOpen}
         onClearPendingDatabaseExport={() => setPendingDatabaseExport(null)}
         onDatabaseExportFormatChange={(value: DatabaseExportFormat) =>
