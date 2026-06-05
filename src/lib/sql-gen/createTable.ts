@@ -1,3 +1,5 @@
+import { quoteIdentifier } from "./quote";
+
 export interface ColumnDef {
   id: string;
   name: string;
@@ -192,21 +194,6 @@ function supportsColumnComment(driver: DbDriver): boolean {
   return ["mysql", "mariadb", "tidb", "starrocks", "clickhouse"].includes(
     driver,
   );
-}
-
-function quoteIdentifier(name: string, driver: DbDriver): string {
-  switch (driver) {
-    case "mysql":
-    case "mariadb":
-    case "tidb":
-    case "starrocks":
-    case "clickhouse":
-      return `\`${name}\``;
-    case "mssql":
-      return `[${name}]`;
-    default:
-      return `"${name}"`;
-  }
 }
 
 function buildTableRef(

@@ -5,6 +5,7 @@ import {
   formatDefault,
   supportsAutoIncrement,
 } from "./createTable";
+import { quoteIdentifier } from "./quote";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -50,18 +51,7 @@ export function columnInfoToAlterDef(col: ColumnInfo): AlterColumnDef {
 // ─── internal helpers ─────────────────────────────────────────────────────────
 
 function q(name: string, driver: DbDriver): string {
-  switch (driver) {
-    case "mysql":
-    case "mariadb":
-    case "tidb":
-    case "starrocks":
-    case "clickhouse":
-      return `\`${name}\``;
-    case "mssql":
-      return `[${name}]`;
-    default:
-      return `"${name}"`;
-  }
+  return quoteIdentifier(name, driver);
 }
 
 function tref(schema: string, table: string, driver: DbDriver): string {

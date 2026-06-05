@@ -1,5 +1,6 @@
 import { DbDriver } from "./createTable";
 import { IndexInfo } from "@/services/api";
+import { quoteIdentifier } from "./quote";
 
 export interface IndexDef {
   id: string;
@@ -52,19 +53,12 @@ export function supportsIndexManagement(driver: DbDriver): boolean {
   return driver !== "clickhouse" && driver !== "starrocks";
 }
 
-function quoteIdent(name: string, driver: DbDriver): string {
-  if (driver === "mssql") return `[${name}]`;
-  if (driver === "mysql" || driver === "mariadb" || driver === "tidb")
-    return `\`${name}\``;
-  return `"${name}"`;
-}
-
 function buildTableRef(
   schema: string,
   table: string,
   driver: DbDriver,
 ): string {
-  const q = (n: string) => quoteIdent(n, driver);
+  const q = (n: string) => quoteIdentifier(n, driver);
   if (driver === "sqlite" || driver === "duckdb") return q(table);
   if (schema) return `${q(schema)}.${q(table)}`;
   return q(table);
@@ -76,7 +70,7 @@ function buildDropSQL(
   table: string,
   driver: DbDriver,
 ): string {
-  const q = (n: string) => quoteIdent(n, driver);
+  const q = (n: string) => quoteIdentifier(n, driver);
   switch (driver) {
     case "mysql":
     case "mariadb":
@@ -103,7 +97,7 @@ function buildCreateSQL(
   table: string,
   driver: DbDriver,
 ): string {
-  const q = (n: string) => quoteIdent(n, driver);
+  const q = (n: string) => quoteIdentifier(n, driver);
   const tableRef = buildTableRef(schema, table, driver);
   const cols = def.columns.map((c) => q(c)).join(", ");
   const unique = def.unique ? "UNIQUE " : "";
