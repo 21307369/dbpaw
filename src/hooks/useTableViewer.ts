@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { api } from "@/services/api";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { TabItem } from "@/types/tab";
+import type { TabItem, TableTabItem } from "@/types/tab";
 
 export type TableRefreshOverrides = {
   page?: number;
@@ -58,7 +58,7 @@ export function useTableViewer({
           connectionId,
           driver,
           isLoading: true,
-        },
+        } satisfies TableTabItem,
       ]);
       setActiveTab(tabId);
 
@@ -97,30 +97,32 @@ export function useTableViewer({
         }
 
         setTabs((prev) =>
-          prev.map((t) =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  isLoading: false,
-                  schema,
-                  tableName: table,
-                  data: resp.data,
-                  columns,
-                  total: resp.total,
-                  page: resp.page,
-                  pageSize: resp.limit,
-                  executionTimeMs: resp.executionTimeMs,
-                }
-              : t,
-          ),
+          prev.map((t) => {
+            if (t.id !== tabId) return t;
+            if (t.type !== "table") return t;
+            return {
+              ...t,
+              isLoading: false,
+              schema,
+              tableName: table,
+              data: resp.data,
+              columns,
+              total: resp.total,
+              page: resp.page,
+              pageSize: resp.limit,
+              executionTimeMs: resp.executionTimeMs,
+            };
+          }),
         );
       } catch (e) {
         const message = errorMessage(e);
         console.error("get_table_data failed", message);
         setTabs((prev) =>
-          prev.map((t) =>
-            t.id === tabId ? { ...t, isLoading: false } : t,
-          ),
+          prev.map((t) => {
+            if (t.id !== tabId) return t;
+            if (t.type !== "table") return t;
+            return { ...t, isLoading: false };
+          }),
         );
         toast.error(t("app.error.loadTableData"), {
           description: message,
@@ -133,7 +135,8 @@ export function useTableViewer({
   const handleTableRefresh = useCallback(
     async (tabId: string, overrides?: TableRefreshOverrides) => {
       const tab = tabs.find((t) => t.id === tabId);
-      if (!tab || !tab.connectionId || !tab.driver || !tab.tableName) return;
+      if (!tab || tab.type !== "table") return;
+      if (!tab.connectionId || !tab.driver || !tab.tableName) return;
 
       const hasOwn = <K extends keyof TableRefreshOverrides>(key: K) =>
         !!overrides && Object.prototype.hasOwnProperty.call(overrides, key);
@@ -165,6 +168,7 @@ export function useTableViewer({
         setTabs((prev) =>
           prev.map((t) => {
             if (t.id !== tabId) return t;
+            if (t.type !== "table") return t;
             return {
               ...t,
               data: resp.data,
@@ -191,7 +195,8 @@ export function useTableViewer({
   const handlePageChange = useCallback(
     async (tabId: string, page: number) => {
       const tab = tabs.find((t) => t.id === tabId);
-      if (!tab || !tab.connectionId || !tab.driver || !tab.tableName) return;
+      if (!tab || tab.type !== "table") return;
+      if (!tab.connectionId || !tab.driver || !tab.tableName) return;
 
       try {
         const { schema, dbParam } = resolveTableScope(
@@ -215,6 +220,7 @@ export function useTableViewer({
         setTabs((prev) =>
           prev.map((t) => {
             if (t.id !== tabId) return t;
+            if (t.type !== "table") return t;
             return {
               ...t,
               data: resp.data,
@@ -238,7 +244,8 @@ export function useTableViewer({
   const handlePageSizeChange = useCallback(
     async (tabId: string, pageSize: number) => {
       const tab = tabs.find((t) => t.id === tabId);
-      if (!tab || !tab.connectionId || !tab.driver || !tab.tableName) return;
+      if (!tab || tab.type !== "table") return;
+      if (!tab.connectionId || !tab.driver || !tab.tableName) return;
 
       try {
         const { schema, dbParam } = resolveTableScope(
@@ -262,6 +269,7 @@ export function useTableViewer({
         setTabs((prev) =>
           prev.map((t) => {
             if (t.id !== tabId) return t;
+            if (t.type !== "table") return t;
             return {
               ...t,
               data: resp.data,
@@ -286,12 +294,14 @@ export function useTableViewer({
   const handleSortChange = useCallback(
     async (tabId: string, column: string, direction: "asc" | "desc") => {
       const tab = tabs.find((t) => t.id === tabId);
-      if (!tab || !tab.connectionId || !tab.driver || !tab.tableName) return;
+      if (!tab || tab.type !== "table") return;
+      if (!tab.connectionId || !tab.driver || !tab.tableName) return;
 
       // Optimistically update sort state
       setTabs((prev) =>
         prev.map((t) => {
           if (t.id !== tabId) return t;
+          if (t.type !== "table") return t;
           return { ...t, sortColumn: column, sortDirection: direction };
         }),
       );
@@ -318,6 +328,7 @@ export function useTableViewer({
         setTabs((prev) =>
           prev.map((t) => {
             if (t.id !== tabId) return t;
+            if (t.type !== "table") return t;
             return {
               ...t,
               data: resp.data,
@@ -343,12 +354,14 @@ export function useTableViewer({
   const handleFilterChange = useCallback(
     async (tabId: string, filter: string, orderBy: string) => {
       const tab = tabs.find((t) => t.id === tabId);
-      if (!tab || !tab.connectionId || !tab.driver || !tab.tableName) return;
+      if (!tab || tab.type !== "table") return;
+      if (!tab.connectionId || !tab.driver || !tab.tableName) return;
 
       // Optimistically update filter/orderBy state
       setTabs((prev) =>
         prev.map((t) => {
           if (t.id !== tabId) return t;
+          if (t.type !== "table") return t;
           return { ...t, filter, orderBy };
         }),
       );
@@ -375,6 +388,7 @@ export function useTableViewer({
         setTabs((prev) =>
           prev.map((t) => {
             if (t.id !== tabId) return t;
+            if (t.type !== "table") return t;
             return {
               ...t,
               data: resp.data,
