@@ -56,16 +56,17 @@ export function useKeyboardShortcuts({
       if (match(e, "global.newQueryTab")) {
         e.preventDefault();
         const currentTab = tabs.find((t) => t.id === activeTab);
+        const driver = currentTab && "driver" in currentTab ? currentTab.driver : undefined;
         if (
           currentTab &&
           currentTab.connectionId &&
           currentTab.database &&
-          currentTab.driver
+          driver
         ) {
           handleCreateQuery(
             currentTab.connectionId,
             currentTab.database,
-            currentTab.driver,
+            driver,
           );
         }
         return;

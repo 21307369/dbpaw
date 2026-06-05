@@ -121,7 +121,7 @@ export function AppLayout({
                 <AISidebar
                   connectionId={activeTabItem?.connectionId}
                   database={activeTabItem?.database}
-                  schemaOverview={activeTabItem?.schemaOverview}
+                  schemaOverview={activeTabItem?.type === "editor" ? activeTabItem.schemaOverview : undefined}
                 />
               </Suspense>
             </ResizablePanel>
