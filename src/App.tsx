@@ -10,7 +10,6 @@ import {
 import { Tabs } from "@/components/ui/tabs";
 import type { RedisRefreshRequest } from "@/components/business/Sidebar/ConnectionList";
 import { Loader2 } from "lucide-react";
-import { isMysqlFamilyDriver } from "@/lib/driver-registry";
 import { isTauri } from "@/services/api";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
@@ -75,27 +74,6 @@ function isDefaultQueryTitle(title?: string) {
 export default function App() {
   const { t } = useTranslation();
 
-  const resolveTableScope = (
-    driver: string,
-    database?: string,
-    schemaOverride?: string,
-  ) => {
-    const isDatabaseScoped =
-      (driver && isMysqlFamilyDriver(driver as any)) || driver === "clickhouse";
-    const normalizedSchemaOverride = (schemaOverride || "").trim();
-    return {
-      schema: isDatabaseScoped
-        ? database || ""
-        : normalizedSchemaOverride ||
-          (driver === "mssql"
-            ? "dbo"
-            : driver === "sqlite" || driver === "duckdb"
-              ? "main"
-              : "public"),
-      dbParam: isDatabaseScoped ? undefined : database,
-    };
-  };
-
   const [aiVisible, setAiVisible] = useState(false);
   const [sidebarRevealRequest, setSidebarRevealRequest] =
     useState<SidebarRevealRequest>();
@@ -108,37 +86,94 @@ export default function App() {
   const sidebarRevealRequestIdRef = useRef(0);
 
   const {
-    sidebarLayout, setSidebarLayout,
-    showColumnComments, setShowColumnComments,
-    showRowNumbers, setShowRowNumbers,
-    showZebraStripes, setShowZebraStripes,
+    sidebarLayout,
+    setSidebarLayout,
+    showColumnComments,
+    setShowColumnComments,
+    showRowNumbers,
+    setShowRowNumbers,
+    showZebraStripes,
+    setShowZebraStripes,
   } = useAppSettings();
   const isFullscreen = useWindowFullscreen();
 
-  const { tabs, setTabs, activeTab, setActiveTab, handleDragEnd, handleCycleTabs: baseHandleCycleTabs, closeTabNow: baseCloseTabNow } = useTabManager();
+  const {
+    tabs,
+    setTabs,
+    activeTab,
+    setActiveTab,
+    handleDragEnd,
+    handleCycleTabs: baseHandleCycleTabs,
+    closeTabNow: baseCloseTabNow,
+  } = useTabManager();
 
-  const { handleCreateQuery, handleOpenSavedQuery, handleSqlChange, handleExecuteQuery, handleEditorDatabaseChange, saveEditorTab } = useQueryEditor({
-    tabs, setTabs, setActiveTab, setQueriesLastUpdated, t,
-  });
-
-  const { handleTableSelect, handleTableRefresh, handlePageChange, handlePageSizeChange, handleSortChange, handleFilterChange } = useTableViewer({
-    tabs, setTabs, setActiveTab, resolveTableScope, t,
-  });
-
-  const { handleCloseTab, handleCloseOtherTabs, isUnsavedConfirmOpen, isCloseSaveDialogOpen, currentCloseTab, handleUnsavedCloseCancel, handleUnsavedCloseWithoutSave, handleUnsavedCloseSave, handleCloseSaveDialogOpenChange, handleCloseFlowSave } = useUnsavedChanges({
-    tabs, closeTabNow: baseCloseTabNow, saveEditorTab,
+  const {
+    handleCreateQuery,
+    handleOpenSavedQuery,
+    handleSqlChange,
+    handleExecuteQuery,
+    handleEditorDatabaseChange,
+    saveEditorTab,
+  } = useQueryEditor({
+    tabs,
+    setTabs,
+    setActiveTab,
+    setQueriesLastUpdated,
+    t,
   });
 
   const {
-    openRedisConsole, openRedisBrowser, openRedisServerInfo,
-    openRedisKey, openElasticsearchIndex, openTableDDL,
-    openRoutine, openCreateTable, openAlterTable,
-    openERDiagram, exportTable, exportDatabase,
+    handleTableSelect,
+    handleTableRefresh,
+    handlePageChange,
+    handlePageSizeChange,
+    handleSortChange,
+    handleFilterChange,
+  } = useTableViewer({
+    tabs,
+    setTabs,
+    setActiveTab,
+    t,
+  });
+
+  const {
+    handleCloseTab,
+    handleCloseOtherTabs,
+    isUnsavedConfirmOpen,
+    isCloseSaveDialogOpen,
+    currentCloseTab,
+    handleUnsavedCloseCancel,
+    handleUnsavedCloseWithoutSave,
+    handleUnsavedCloseSave,
+    handleCloseSaveDialogOpenChange,
+    handleCloseFlowSave,
+  } = useUnsavedChanges({
+    tabs,
+    closeTabNow: baseCloseTabNow,
+    saveEditorTab,
+  });
+
+  const {
+    openRedisConsole,
+    openRedisBrowser,
+    openRedisServerInfo,
+    openRedisKey,
+    openElasticsearchIndex,
+    openTableDDL,
+    openRoutine,
+    openCreateTable,
+    openAlterTable,
+    openERDiagram,
+    exportTable,
+    exportDatabase,
   } = useTabFactory({ tabs, setTabs, setActiveTab, t });
 
   const treeCallbacks = useTreeCallbacks({
-    openRedisKey, openRedisBrowser, openRedisConsole,
-    openRedisServerInfo, openElasticsearchIndex,
+    openRedisKey,
+    openRedisBrowser,
+    openRedisConsole,
+    openRedisServerInfo,
+    openElasticsearchIndex,
   });
 
   const revealSidebarForTab = useCallback(
@@ -174,7 +209,9 @@ export default function App() {
     (direction: 1 | -1) => {
       baseHandleCycleTabs(direction);
       const nextIndex =
-        (tabs.findIndex((item) => item.id === activeTab) + direction + tabs.length) %
+        (tabs.findIndex((item) => item.id === activeTab) +
+          direction +
+          tabs.length) %
         tabs.length;
       if (tabs[nextIndex]) {
         revealSidebarForTab(tabs[nextIndex].id);
@@ -193,38 +230,70 @@ export default function App() {
   );
 
   useKeyboardShortcuts({
-    tabs, activeTab, handleCycleTabs, handleCloseTab,
-    handleCreateQuery, setAiVisible, setOpenSettings,
+    tabs,
+    activeTab,
+    handleCycleTabs,
+    handleCloseTab,
+    handleCreateQuery,
+    setAiVisible,
+    setOpenSettings,
   });
 
   const handleCreateTableSuccess = useCallback(
-    (tabId: string, connectionId: number, database: string, schema: string | undefined, tableName: string, driver: string) => {
+    (
+      tabId: string,
+      connectionId: number,
+      database: string,
+      schema: string | undefined,
+      tableName: string,
+      driver: string,
+    ) => {
       closeTabNow(tabId);
-      void handleTableSelect(String(connectionId), database, tableName, connectionId, driver, schema);
+      void handleTableSelect(
+        String(connectionId),
+        database,
+        tableName,
+        connectionId,
+        driver,
+        schema,
+      );
       setSidebarRevealRequest({
-        id: Date.now(), connectionId, database, table: tableName, schema,
+        id: Date.now(),
+        connectionId,
+        database,
+        table: tableName,
+        schema,
       });
     },
     [closeTabNow, handleTableSelect],
   );
 
   const handleAlterTableSuccess = useCallback(
-    (tabId: string) => { closeTabNow(tabId); },
+    (tabId: string) => {
+      closeTabNow(tabId);
+    },
     [closeTabNow],
   );
 
-  const notifyRedisRefresh = useCallback((connectionId: number, database: string) => {
-    setRedisRefreshRequest({
-      id: ++redisRefreshIdRef.current,
-      connectionId,
-      database,
-    });
-  }, []);
+  const notifyRedisRefresh = useCallback(
+    (connectionId: number, database: string) => {
+      setRedisRefreshRequest({
+        id: ++redisRefreshIdRef.current,
+        connectionId,
+        database,
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!isTauri()) return;
-    const unlistenSettings = listen("open-settings", () => setOpenSettings(true));
-    return () => { unlistenSettings.then((f) => f()); };
+    const unlistenSettings = listen("open-settings", () =>
+      setOpenSettings(true),
+    );
+    return () => {
+      unlistenSettings.then((f) => f());
+    };
   }, []);
 
   const activeTabItem = tabs.find((item) => item.id === activeTab);

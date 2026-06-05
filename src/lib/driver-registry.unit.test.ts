@@ -10,6 +10,9 @@ import {
   supportsRoutines,
   supportsSchemaBrowsing,
   getConnectionIcon,
+  getQualifiedTableName,
+  quoteIdentifierForDriver,
+  resolveTableScope,
   type Driver,
 } from "./driver-registry";
 
@@ -307,6 +310,83 @@ describe("supportsRoutines", () => {
     for (const d of noRoutines) {
       expect(supportsRoutines(d)).toBe(false);
     }
+  });
+});
+
+// ─── Table scope rules ───────────────────────────────────────────────────────
+
+describe("resolveTableScope", () => {
+  test("uses database as schema and omits database parameter for database-scoped drivers", () => {
+    for (const driver of [
+      "mysql",
+      "mariadb",
+      "tidb",
+      "starrocks",
+      "doris",
+      "clickhouse",
+    ] as Driver[]) {
+      expect(resolveTableScope(driver, "analytics", "ignored")).toEqual({
+        schema: "analytics",
+        dbParam: undefined,
+      });
+    }
+  });
+
+  test("uses schema override for schema-scoped drivers", () => {
+    expect(resolveTableScope("postgres", "appdb", "reporting")).toEqual({
+      schema: "reporting",
+      dbParam: "appdb",
+    });
+  });
+
+  test("uses driver default schema when override is empty", () => {
+    expect(resolveTableScope("postgres", "appdb")).toEqual({
+      schema: "public",
+      dbParam: "appdb",
+    });
+    expect(resolveTableScope("mssql", "appdb")).toEqual({
+      schema: "dbo",
+      dbParam: "appdb",
+    });
+    expect(resolveTableScope("sqlite", "main")).toEqual({
+      schema: "main",
+      dbParam: "main",
+    });
+    expect(resolveTableScope("duckdb", "main")).toEqual({
+      schema: "main",
+      dbParam: "main",
+    });
+  });
+});
+
+describe("quoteIdentifierForDriver", () => {
+  test("uses driver-specific identifier quoting", () => {
+    expect(quoteIdentifierForDriver("mysql", "users")).toBe("`users`");
+    expect(quoteIdentifierForDriver("clickhouse", "users")).toBe("`users`");
+    expect(quoteIdentifierForDriver("mssql", "tab]le")).toBe("[tab]]le]");
+    expect(quoteIdentifierForDriver("postgres", "users")).toBe('"users"');
+  });
+});
+
+describe("getQualifiedTableName", () => {
+  test("omits schema qualification for mysql-family drivers", () => {
+    expect(getQualifiedTableName("tidb", "analytics", "events")).toBe(
+      "`events`",
+    );
+  });
+
+  test("omits main/public schema qualification for file-backed drivers", () => {
+    expect(getQualifiedTableName("sqlite", "main", "users")).toBe('"users"');
+    expect(getQualifiedTableName("duckdb", "public", "users")).toBe('"users"');
+  });
+
+  test("keeps schema qualification for schema-scoped drivers", () => {
+    expect(getQualifiedTableName("postgres", "public", "users")).toBe(
+      '"public"."users"',
+    );
+    expect(getQualifiedTableName("mssql", "dbo", "users")).toBe(
+      "[dbo].[users]",
+    );
   });
 });
 

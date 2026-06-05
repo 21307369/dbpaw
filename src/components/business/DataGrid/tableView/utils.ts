@@ -1,4 +1,7 @@
-import { isMysqlFamilyDriver } from "@/lib/driver-registry";
+import {
+  getQualifiedTableName as getRegistryQualifiedTableName,
+  quoteIdentifierForDriver,
+} from "@/lib/driver-registry";
 
 export interface SearchMatch {
   row: number;
@@ -175,16 +178,7 @@ export function escapeSQL(value: string): string {
 }
 
 export function quoteIdent(driver: string | undefined, name: string): string {
-  if (
-    (driver && isMysqlFamilyDriver(driver as any)) ||
-    driver === "clickhouse"
-  ) {
-    return `\`${name}\``;
-  }
-  if (driver === "mssql") {
-    return `[${name.replace(/]/g, "]]")}]`;
-  }
-  return `"${name}"`;
+  return quoteIdentifierForDriver(driver, name);
 }
 
 export function formatSQLValue(
@@ -270,11 +264,18 @@ export function buildFilterExpression(
 
   const isNull = cellValue === null || cellValue === undefined;
   if (isNull) {
-    return operator === "<>" ? `${quotedCol} IS NOT NULL` : `${quotedCol} IS NULL`;
+    return operator === "<>"
+      ? `${quotedCol} IS NOT NULL`
+      : `${quotedCol} IS NULL`;
   }
 
   const strValue = cellValueToString(cellValue);
-  const formattedValue = formatSQLValue(strValue, cellValue, "execution", driver);
+  const formattedValue = formatSQLValue(
+    strValue,
+    cellValue,
+    "execution",
+    driver,
+  );
 
   switch (operator) {
     case "=":
@@ -342,22 +343,7 @@ export function getQualifiedTableName(
   schema: string,
   table: string,
 ): string {
-  if (isMysqlFamilyDriver(driver as any)) {
-    return quoteIdent(driver, table);
-  }
-
-  if (driver === "sqlite" || driver === "duckdb") {
-    const normalizedSchema = schema.trim().toLowerCase();
-    if (
-      normalizedSchema === "" ||
-      normalizedSchema === "main" ||
-      normalizedSchema === "public"
-    ) {
-      return quoteIdent(driver, table);
-    }
-  }
-
-  return `${quoteIdent(driver, schema)}.${quoteIdent(driver, table)}`;
+  return getRegistryQualifiedTableName(driver, schema, table);
 }
 
 export function isComplexValue(value: unknown): boolean {

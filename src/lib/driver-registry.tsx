@@ -77,6 +77,10 @@ export interface DriverConfig {
   defaultPort: number | null;
   isFileBased: boolean;
   isMysqlFamily: boolean;
+  isDatabaseScoped: boolean;
+  defaultSchema: string;
+  unqualifiedSchemas: string[];
+  identifierQuote: "double" | "backtick" | "bracket";
   supportsSSLCA: boolean;
   supportsSchemaBrowsing: boolean;
   supportsCreateDatabase: boolean;
@@ -94,13 +98,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 5432,
     isFileBased: false,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "public",
+    unqualifiedSchemas: [],
+    identifierQuote: "double",
     supportsSSLCA: true,
     supportsSchemaBrowsing: true,
     supportsCreateDatabase: true,
     supportsRoutines: true,
     importCapability: "supported",
     icon: () => renderSimpleIcon(siPostgresql),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, { supportsSchemaNode: true }, "postgres"),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, { supportsSchemaNode: true }, "postgres"),
   },
   {
     id: "mysql",
@@ -109,13 +118,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 3306,
     isFileBased: false,
     isMysqlFamily: true,
+    isDatabaseScoped: true,
+    defaultSchema: "",
+    unqualifiedSchemas: [],
+    identifierQuote: "backtick",
     supportsSSLCA: true,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: true,
     supportsRoutines: true,
     importCapability: "supported",
     icon: () => renderSimpleIcon(siMysql),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, undefined, "mysql"),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, undefined, "mysql"),
   },
   {
     id: "mariadb",
@@ -124,13 +138,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 3306,
     isFileBased: false,
     isMysqlFamily: true,
+    isDatabaseScoped: true,
+    defaultSchema: "",
+    unqualifiedSchemas: [],
+    identifierQuote: "backtick",
     supportsSSLCA: true,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: true,
     supportsRoutines: false,
     importCapability: "supported",
     icon: () => renderSimpleIcon(siMariadb),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, undefined, "mariadb"),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, undefined, "mariadb"),
   },
   {
     id: "tidb",
@@ -139,13 +158,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 4000,
     isFileBased: false,
     isMysqlFamily: true,
+    isDatabaseScoped: true,
+    defaultSchema: "",
+    unqualifiedSchemas: [],
+    identifierQuote: "backtick",
     supportsSSLCA: true,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: true,
     supportsRoutines: false,
     importCapability: "supported",
     icon: () => renderSimpleIcon(siTidb),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, undefined, "tidb"),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, undefined, "tidb"),
   },
   {
     id: "starrocks",
@@ -154,13 +178,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 9030,
     isFileBased: false,
     isMysqlFamily: true,
+    isDatabaseScoped: true,
+    defaultSchema: "",
+    unqualifiedSchemas: [],
+    identifierQuote: "backtick",
     supportsSSLCA: true,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: true,
     supportsRoutines: false,
     importCapability: "unsupported",
     icon: () => renderLocalIcon("/icons/db/starrocks.svg"),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, undefined, "starrocks"),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, undefined, "starrocks"),
   },
   {
     id: "doris",
@@ -169,13 +198,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 9030,
     isFileBased: false,
     isMysqlFamily: true,
+    isDatabaseScoped: true,
+    defaultSchema: "",
+    unqualifiedSchemas: [],
+    identifierQuote: "backtick",
     supportsSSLCA: true,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: true,
     supportsRoutines: false,
     importCapability: "unsupported",
     icon: () => renderSimpleIcon(siApachedoris),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, undefined, "doris"),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, undefined, "doris"),
   },
   {
     id: "sqlite",
@@ -184,13 +218,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: null,
     isFileBased: true,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "main",
+    unqualifiedSchemas: ["", "main", "public"],
+    identifierQuote: "double",
     supportsSSLCA: false,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: false,
     supportsRoutines: false,
     importCapability: "supported",
     icon: () => renderSimpleIcon(siSqlite),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, undefined, "sqlite"),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, undefined, "sqlite"),
   },
   {
     id: "duckdb",
@@ -199,13 +238,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: null,
     isFileBased: true,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "main",
+    unqualifiedSchemas: ["", "main", "public"],
+    identifierQuote: "double",
     supportsSSLCA: false,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: false,
     supportsRoutines: false,
     importCapability: "supported",
     icon: () => renderSimpleIcon(siDuckdb),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, undefined, "duckdb"),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, undefined, "duckdb"),
   },
   {
     id: "clickhouse",
@@ -214,6 +258,10 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 8123,
     isFileBased: false,
     isMysqlFamily: false,
+    isDatabaseScoped: true,
+    defaultSchema: "",
+    unqualifiedSchemas: [],
+    identifierQuote: "backtick",
     supportsSSLCA: false,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: true,
@@ -229,13 +277,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 1433,
     isFileBased: false,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "dbo",
+    unqualifiedSchemas: [],
+    identifierQuote: "bracket",
     supportsSSLCA: false,
     supportsSchemaBrowsing: true,
     supportsCreateDatabase: true,
     supportsRoutines: true,
     importCapability: "supported",
     icon: () => renderLocalIcon("/icons/db/mssql.svg"),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, { supportsSchemaNode: true }),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, { supportsSchemaNode: true }),
   },
   {
     id: "oracle",
@@ -244,13 +297,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 1521,
     isFileBased: false,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "public",
+    unqualifiedSchemas: [],
+    identifierQuote: "double",
     supportsSSLCA: false,
     supportsSchemaBrowsing: true,
     supportsCreateDatabase: false,
     supportsRoutines: false,
     importCapability: "supported",
     icon: () => renderLocalIcon("/icons/db/oracle.svg"),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, { supportsSchemaNode: true }),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, { supportsSchemaNode: true }),
   },
   {
     id: "db2",
@@ -259,13 +317,18 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 50000,
     isFileBased: false,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "public",
+    unqualifiedSchemas: [],
+    identifierQuote: "double",
     supportsSSLCA: false,
     supportsSchemaBrowsing: true,
     supportsCreateDatabase: false,
     supportsRoutines: true,
     importCapability: "supported",
     icon: () => renderLocalIcon("/icons/db/db2.svg"),
-    treeConfig: (callbacks) => createSqlTreeConfig(callbacks, { supportsSchemaNode: true }),
+    treeConfig: (callbacks) =>
+      createSqlTreeConfig(callbacks, { supportsSchemaNode: true }),
   },
   {
     id: "redis",
@@ -274,6 +337,10 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 6379,
     isFileBased: false,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "public",
+    unqualifiedSchemas: [],
+    identifierQuote: "double",
     supportsSSLCA: false,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: false,
@@ -289,6 +356,10 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 9200,
     isFileBased: false,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "public",
+    unqualifiedSchemas: [],
+    identifierQuote: "double",
     supportsSSLCA: true,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: false,
@@ -304,6 +375,10 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 27017,
     isFileBased: false,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "public",
+    unqualifiedSchemas: [],
+    identifierQuote: "double",
     supportsSSLCA: false,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: false,
@@ -319,6 +394,10 @@ export const DRIVER_REGISTRY: DriverConfig[] = [
     defaultPort: 9042,
     isFileBased: false,
     isMysqlFamily: false,
+    isDatabaseScoped: false,
+    defaultSchema: "public",
+    unqualifiedSchemas: [],
+    identifierQuote: "double",
     supportsSSLCA: false,
     supportsSchemaBrowsing: false,
     supportsCreateDatabase: true,
@@ -340,6 +419,78 @@ export const isFileBasedDriver = (driver: Driver): boolean =>
 
 export const isMysqlFamilyDriver = (driver: Driver): boolean =>
   getDriverConfig(driver).isMysqlFamily;
+
+export const isRegisteredDriver = (
+  driver: string | undefined,
+): driver is Driver => DRIVER_REGISTRY.some((config) => config.id === driver);
+
+export const isDatabaseScopedDriver = (
+  driver: Driver | string | undefined,
+): boolean =>
+  isRegisteredDriver(driver) ? getDriverConfig(driver).isDatabaseScoped : false;
+
+export const getDefaultSchema = (
+  driver: Driver | string | undefined,
+): string =>
+  isRegisteredDriver(driver) ? getDriverConfig(driver).defaultSchema : "public";
+
+export const resolveTableScope = (
+  driver: Driver | string | undefined,
+  database?: string,
+  schemaOverride?: string,
+): { schema: string; dbParam: string | undefined } => {
+  if (isDatabaseScopedDriver(driver)) {
+    return { schema: database || "", dbParam: undefined };
+  }
+
+  const schema = schemaOverride?.trim() || getDefaultSchema(driver);
+  return { schema, dbParam: database };
+};
+
+export const quoteIdentifierForDriver = (
+  driver: Driver | string | undefined,
+  name: string,
+): string => {
+  const quoteStyle = isRegisteredDriver(driver)
+    ? getDriverConfig(driver).identifierQuote
+    : "double";
+
+  if (quoteStyle === "backtick") {
+    return `\`${name}\``;
+  }
+  if (quoteStyle === "bracket") {
+    return `[${name.replace(/]/g, "]]")}]`;
+  }
+  return `"${name}"`;
+};
+
+export const shouldQualifyTableSchema = (
+  driver: Driver | string | undefined,
+  schema: string,
+): boolean => {
+  if (isDatabaseScopedDriver(driver)) {
+    return false;
+  }
+
+  const unqualifiedSchemas = isRegisteredDriver(driver)
+    ? getDriverConfig(driver).unqualifiedSchemas
+    : [];
+  return !unqualifiedSchemas.includes(schema.trim().toLowerCase());
+};
+
+export const getQualifiedTableName = (
+  driver: Driver | string | undefined,
+  schema: string,
+  table: string,
+): string => {
+  if (!shouldQualifyTableSchema(driver, schema)) {
+    return quoteIdentifierForDriver(driver, table);
+  }
+  return `${quoteIdentifierForDriver(driver, schema)}.${quoteIdentifierForDriver(
+    driver,
+    table,
+  )}`;
+};
 
 export const supportsSSLCA = (driver: Driver): boolean =>
   getDriverConfig(driver).supportsSSLCA;

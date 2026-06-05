@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { api } from "@/services/api";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { resolveTableScope } from "@/lib/driver-registry";
 import type { TabItem, TableTabItem } from "@/types/tab";
 
 export type TableRefreshOverrides = {
@@ -15,11 +16,6 @@ interface UseTableViewerParams {
   tabs: TabItem[];
   setTabs: React.Dispatch<React.SetStateAction<TabItem[]>>;
   setActiveTab: React.Dispatch<React.SetStateAction<string>>;
-  resolveTableScope: (
-    driver: string,
-    database?: string,
-    schemaOverride?: string,
-  ) => { schema: string; dbParam: string | undefined };
   t: (key: string, options?: any) => string;
 }
 
@@ -27,7 +23,6 @@ export function useTableViewer({
   tabs,
   setTabs,
   setActiveTab,
-  resolveTableScope,
   t,
 }: UseTableViewerParams) {
   const handleTableSelect = useCallback(
@@ -129,7 +124,7 @@ export function useTableViewer({
         });
       }
     },
-    [tabs, setTabs, setActiveTab, resolveTableScope, t],
+    [tabs, setTabs, setActiveTab, t],
   );
 
   const handleTableRefresh = useCallback(
@@ -189,7 +184,7 @@ export function useTableViewer({
         });
       }
     },
-    [tabs, setTabs, resolveTableScope, t],
+    [tabs, setTabs, t],
   );
 
   const handlePageChange = useCallback(
@@ -238,7 +233,7 @@ export function useTableViewer({
         });
       }
     },
-    [tabs, setTabs, resolveTableScope, t],
+    [tabs, setTabs, t],
   );
 
   const handlePageSizeChange = useCallback(
@@ -288,7 +283,7 @@ export function useTableViewer({
         });
       }
     },
-    [tabs, setTabs, resolveTableScope, t],
+    [tabs, setTabs, t],
   );
 
   const handleSortChange = useCallback(
@@ -348,7 +343,7 @@ export function useTableViewer({
         });
       }
     },
-    [tabs, setTabs, resolveTableScope, t],
+    [tabs, setTabs, t],
   );
 
   const handleFilterChange = useCallback(
@@ -409,7 +404,7 @@ export function useTableViewer({
         });
       }
     },
-    [tabs, setTabs, resolveTableScope, t],
+    [tabs, setTabs, t],
   );
 
   return {
