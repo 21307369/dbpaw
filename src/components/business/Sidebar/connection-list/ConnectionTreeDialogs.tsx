@@ -2,6 +2,7 @@ import { InlineContextMenu, type ContextMenuState } from "./InlineContextMenu";
 import { ConnectionDialogs } from "./ConnectionDialogs";
 import type { Connection, DatabaseInfo, DatasourceTreeAdapter } from "./types";
 import type { DatabaseExportFormat } from "./types";
+import type { Driver } from "@/services/api";
 
 interface ConnectionTreeDialogsProps {
   // InlineContextMenu
@@ -19,7 +20,7 @@ interface ConnectionTreeDialogsProps {
   ) => void;
   onCreateDatabase: (id: string) => void;
   onDelete: (id: string | null) => void;
-  supportsCreateDatabaseForDriver: (driver: string) => boolean;
+  supportsCreateDatabaseForDriver: (driver: Driver) => boolean;
   onRefreshDatabaseTables: (
     connectionId: string,
     databaseName: string,

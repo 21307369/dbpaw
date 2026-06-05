@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { Plus, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
@@ -24,7 +24,7 @@ interface SidebarHeaderProps {
   isTesting: boolean;
   isConnecting: boolean;
   isSavingEdit: boolean;
-  onSubmit: () => void;
+  onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
   onTestConnection: () => void;
   onCreateDriverSelect: (driver: Driver) => void;

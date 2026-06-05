@@ -6,17 +6,6 @@ import {
   useState,
 } from "react";
 
-import {
-  Database,
-  Plus,
-  RefreshCw,
-  Loader2,
-  FileCode,
-  Search,
-  FolderOpen,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { api } from "@/services/api";
 import type {
   ConnectionForm,
@@ -25,18 +14,14 @@ import type {
   SavedQuery,
 } from "@/services/api";
 import type { DatabaseGroupConfig } from "@/lib/tree-adapters/types";
-import {
-  getConnectionIcon,
-  supportsSchemaBrowsing,
-} from "@/lib/driver-registry";
+import { supportsSchemaBrowsing } from "@/lib/driver-registry";
 import type { TreeCallbacks } from "@/lib/tree-adapters/types.tsx";
 import { toast } from "sonner";
-import { TreeNode } from "./connection-list/TreeNode";
-import { GroupNodeRenderer, type TreeNodeDeps } from "./connection-list/TreeNodeRenderers";
-import { ConnectionDialog } from "./connection-list/ConnectionDialog";
-import { ImportDialog } from "./ImportDialog";
-import { ConnectionContextMenu } from "./ConnectionContextMenu";
-import { getConnectionStatusLabelI18n, renderConnectionStatusIndicator } from "./connection-list/helpers";
+import { SidebarHeader } from "./connection-list/SidebarHeader";
+import { SidebarSearch } from "./connection-list/SidebarSearch";
+import { ConnectionTreeContent } from "./connection-list/ConnectionTreeContent";
+import { ConnectionTreeDialogs } from "./connection-list/ConnectionTreeDialogs";
+import type { TreeNodeDeps } from "./connection-list/TreeNodeRenderers";
 import { getDatasourceTreeAdapter as getDatasourceTreeAdapterFn } from "./connection-list/getDatasourceTreeAdapter";
 import { useConnectionCrud } from "./hooks/useConnectionCrud";
 import { useTreeDataFetching } from "./hooks/useTreeDataFetching";
@@ -59,8 +44,6 @@ import { useTreeExpansion } from "./hooks/useTreeExpansion";
 import { useRedisKeys } from "./hooks/useRedisKeys";
 import { useImportExport } from "./hooks/useImportExport";
 import { useCreateDatabase } from "./hooks/useCreateDatabase";
-import { InlineContextMenu } from "./connection-list/InlineContextMenu";
-import { ConnectionDialogs } from "./connection-list/ConnectionDialogs";
 import { errorMessage } from "@/lib/errors";
 
 interface ConnectionListProps {
@@ -313,9 +296,6 @@ export function ConnectionList({
     schemaName?: string | null;
     type: "connection" | "database" | "schema";
   }>({ visible: false, x: 0, y: 0, connectionId: null, type: "connection"   });
-  const loadingSpinner = (
-    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-  );
   const [showElasticsearchSystemIndices, setShowElasticsearchSystemIndices] =
     useState(false);
   const [showMongoSystemCollections, setShowMongoSystemCollections] =
@@ -945,343 +925,77 @@ export function ConnectionList({
 
   return (
     <div className="h-full flex flex-col bg-background border-r border-border">
-      <div className="px-2 py-1 border-b border-border flex items-center justify-between h-8">
-        <div className="flex items-center gap-2">
-          <h2 className="font-semibold text-sm">{t("connection.title")}</h2>
-          {isLoadingQueries && (
-            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-          )}
-        </div>
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0"
-            onClick={fetchConnections}
-            loading={isLoadingConnections}
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </Button>
-          <ConnectionDialog
-            open={isDialogOpen}
-            onOpenChange={(open) => {
-              if (!open) {
-                closeConnectionDialog();
-                return;
-              }
-              setIsDialogOpen(true);
-            }}
-            trigger={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onClick={openCreateDialog}
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </Button>
-            }
-            dialogMode={dialogMode}
-            createStep={createStep}
-            form={form}
-            setForm={setForm}
-            validationMsg={validationMsg}
-            testMsg={testMsg}
-            requiredOk={requiredOk}
-            isTesting={isTesting}
-            isConnecting={isConnecting}
-            isSavingEdit={isSavingEdit}
-            onSubmit={handleDialogSubmit}
-            onClose={closeConnectionDialog}
-            onTestConnection={handleTestConnection}
-            onCreateDriverSelect={handleCreateDriverSelect}
-            onBackToType={() => setCreateStep("type")}
-            onPickSslCaCertFile={() => void handlePickSslCaCertFile()}
-            onPickSshKeyFile={() => void handlePickSshKeyFile()}
-            onPickDatabaseFile={(driver) => void handlePickDatabaseFile(driver)}
-          />
-          <ImportDialog
-            open={isImportDialogOpen}
-            onOpenChange={setIsImportDialogOpen}
-            onImported={fetchConnections}
-          />
-        </div>
-      </div>
-
-      <div className="p-2 border-b border-border">
-        <div className="relative">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t("connection.searchTables")}
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-            }}
-            className="pl-8"
-          />
-        </div>
-      </div>
-      <ConnectionContextMenu
+      <SidebarHeader
+        isLoadingConnections={isLoadingConnections}
+        isLoadingQueries={isLoadingQueries}
+        onRefresh={fetchConnections}
+        isDialogOpen={isDialogOpen}
+        onDialogOpenChange={(open) => {
+          if (!open) {
+            closeConnectionDialog();
+            return;
+          }
+          setIsDialogOpen(true);
+        }}
+        dialogMode={dialogMode}
+        createStep={createStep}
+        form={form}
+        setForm={setForm}
+        validationMsg={validationMsg}
+        testMsg={testMsg}
+        requiredOk={requiredOk}
+        isTesting={isTesting}
+        isConnecting={isConnecting}
+        isSavingEdit={isSavingEdit}
+        onSubmit={handleDialogSubmit}
+        onClose={closeConnectionDialog}
+        onTestConnection={handleTestConnection}
+        onCreateDriverSelect={handleCreateDriverSelect}
+        onBackToType={() => setCreateStep("type")}
+        onPickSslCaCertFile={() => void handlePickSslCaCertFile()}
+        onPickSshKeyFile={() => void handlePickSshKeyFile()}
+        onPickDatabaseFile={(driver) => void handlePickDatabaseFile(driver)}
+        openCreateDialog={openCreateDialog}
+        isImportDialogOpen={isImportDialogOpen}
+        onImportDialogOpenChange={setIsImportDialogOpen}
+        onImported={fetchConnections}
+      />
+      <SidebarSearch
+        searchTerm={searchTerm}
+        onSearchTermChange={setSearchTerm}
+      />
+      <ConnectionTreeContent
+        connections={connections}
+        filteredConnections={filteredConnections}
+        savedQueriesByConnection={savedQueriesByConnection}
+        searchTerm={searchTerm}
+        expandedConnections={expandedConnections}
+        expandedDatabases={expandedDatabases}
+        expandedSchemas={expandedSchemas}
+        expandedQueryGroups={expandedQueryGroups}
+        expandedDatabaseGroups={expandedDatabaseGroups}
+        loadingDatabaseKeys={loadingDatabaseKeys}
+        toggleConnection={toggleConnection}
+        toggleDatabase={toggleDatabase}
+        toggleSchema={toggleSchema}
+        toggleQueryGroup={toggleQueryGroup}
+        toggleDatabaseGroup={toggleDatabaseGroup}
+        connectConnection={connectConnection}
+        fetchAndSetTables={fetchAndSetTables}
+        setLoadingDatabaseKeys={setLoadingDatabaseKeys}
+        getAdapter={getAdapter}
+        treeNodeDeps={treeNodeDeps}
+        showSavedQueriesInTree={showSavedQueriesInTree}
+        simpleMode={simpleMode}
+        onContextMenuChange={setContextMenu}
+        onSelectSavedQuery={onSelectSavedQuery}
+        getGroupItems={getGroupItems}
         onNewConnection={openCreateDialog}
         onImportConnection={() => setIsImportDialogOpen(true)}
-      >
-        {({ onContextMenu }) => (
-          <div
-            className="flex-1 overflow-auto"
-            onClick={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
-            onContextMenu={onContextMenu}
-          >
-            {filteredConnections.map((connection) => {
-          const datasourceAdapter = getAdapter(connection);
-          const queriesForConnection = (
-            savedQueriesByConnection[connection.id] || []
-          ).filter((query) =>
-            query.name.toLowerCase().includes(searchTerm.toLowerCase()),
-          );
-          const visibleDatabases = connection.databases.filter(
-            (database) =>
-              !["information_schema", "performance_schema"].includes(
-                database.name.toLowerCase(),
-              ),
-          );
-
-          const renderDatabaseTreeNode = (
-            database: DatabaseInfo,
-            level: number,
-          ) => {
-            const dbKey = `${connection.id}-${database.name}`;
-            const supportsSchemaNode = datasourceAdapter.supportsSchemaNode;
-
-            return (
-              <TreeNode
-                key={dbKey}
-                level={level}
-                icon={<Database className="w-4 w-4" />}
-                label={
-                  <>
-                    {(connection.type === "sqlite" ||
-                      connection.type === "duckdb") &&
-                    database.name === "main"
-                      ? t(
-                          connection.type === "duckdb"
-                            ? "connection.duckdbMainLabel"
-                            : "connection.sqliteMainLabel",
-                        )
-                      : database.name}
-                    {connection.type === "redis" &&
-                      database.redisKeyCount != null && (
-                        <span className="ml-1.5 text-[10px] text-muted-foreground font-normal">
-                          · {database.redisKeyCount.toLocaleString()}
-                        </span>
-                      )}
-                  </>
-                }
-                isExpanded={
-                  datasourceAdapter.isDatabaseExpandable
-                    ? expandedDatabases.has(dbKey)
-                    : false
-                }
-                onToggle={() => toggleDatabase(dbKey, (connId, dbName, key) => {
-                  const conn = connections.find((c) => c.id === connId);
-                  if (conn) {
-                    const db = conn.databases.find((d) => d.name === dbName);
-                    if (
-                      db &&
-                      (supportsSchemaNodeForDriver(conn.type)
-                        ? db.schemas.length === 0
-                        : db.tables.length === 0)
-                    ) {
-                      setLoadingDatabaseKeys((prev) => new Set(prev).add(key));
-                      fetchAndSetTables(connId, dbName).finally(() => {
-                        setLoadingDatabaseKeys((prev) => {
-                          const next = new Set(prev);
-                          next.delete(key);
-                          return next;
-                        });
-                      });
-                    }
-                  }
-                })}
-                toggleOnRowClick={datasourceAdapter.isDatabaseExpandable}
-                hideToggle={!datasourceAdapter.isDatabaseExpandable}
-                statusIndicator={
-                  loadingDatabaseKeys.has(dbKey) ? loadingSpinner : undefined
-                }
-                actions={datasourceAdapter.getDatabaseRowActions(database)}
-                onDoubleClick={
-                  datasourceAdapter.onDatabaseDoubleClick
-                    ? () => datasourceAdapter.onDatabaseDoubleClick?.(database)
-                    : undefined
-                }
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setContextMenu({
-                    visible: true,
-                    x: e.clientX,
-                    y: e.clientY,
-                    connectionId: connection.id,
-                    databaseName: database.name,
-                    type: "database",
-                  });
-                }}
-              >
-                {(() => {
-                  const allGroups = datasourceAdapter.databaseGroups || [];
-                  const dbGroups = simpleMode
-                    ? allGroups.filter((g) => g.source === "tables" && !g.sourceFilter)
-                    : allGroups;
-                  return supportsSchemaNode ? (
-                    database.schemas.map((schemaNode) => {
-                      const schemaKey = getSchemaNodeKey(dbKey, schemaNode.name);
-                      return (
-                        <TreeNode
-                          key={schemaKey}
-                          level={level + 1}
-                          icon={<FolderOpen className="w-4 h-4" />}
-                          label={schemaNode.name}
-                          isExpanded={expandedSchemas.has(schemaKey)}
-                          onToggle={() => toggleSchema(schemaKey)}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setContextMenu({
-                              visible: true,
-                              x: e.clientX,
-                              y: e.clientY,
-                              connectionId: connection.id,
-                              databaseName: database.name,
-                              schemaName: schemaNode.name,
-                              type: "schema",
-                            });
-                          }}
-                        >
-                          {dbGroups.map((group) => {
-                            const items = getGroupItems(database, group, dbKey, schemaNode);
-                            return <GroupNodeRenderer key={`${dbKey}::${group.id}`} group={group} items={items} groupLevel={level + 2} dbKey={dbKey} connection={connection} database={database} deps={treeNodeDeps} />;
-                          })}
-                        </TreeNode>
-                      );
-                    })
-                  ) : (
-                    <>
-                      {dbGroups.map((group) => {
-                        const items = getGroupItems(database, group, dbKey);
-                        return <GroupNodeRenderer key={`${dbKey}::${group.id}`} group={group} items={items} groupLevel={level + 1} dbKey={dbKey} connection={connection} database={database} deps={treeNodeDeps} />;
-                      })}
-                    {datasourceAdapter.renderDatabaseFooter(database, level)}
-                  </>
-                  );
-                })()}
-              </TreeNode>
-            );
-          };
-
-          return (
-            <TreeNode
-              key={connection.id}
-              level={0}
-              icon={getConnectionIcon(connection.type)}
-              label={connection.name}
-              isExpanded={expandedConnections.has(connection.id)}
-              toggleOnRowClick={connection.connectState === "success"}
-              onToggle={() => toggleConnection(connection.id, connections)}
-              onDoubleClick={() => {
-                void connectConnection(connection.id);
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setContextMenu({
-                  visible: true,
-                  x: e.clientX,
-                  y: e.clientY,
-                  connectionId: connection.id,
-                  type: "connection",
-                });
-              }}
-              leadingIndicator={
-                <span
-                  className="inline-flex items-center justify-center shrink-0"
-                  role="status"
-                  aria-label={getConnectionStatusLabelI18n(connection, t)}
-                  title={getConnectionStatusLabelI18n(connection, t)}
-                >
-                  {renderConnectionStatusIndicator(connection)}
-                </span>
-              }
-            >
-              <>
-                {showSavedQueriesInTree ? (
-                  <TreeNode
-                    level={1}
-                    icon={<FileCode className="w-4 h-4" />}
-                    label={t("connection.tree.queries")}
-                    isExpanded={expandedQueryGroups.has(
-                      `${connection.id}::queries`,
-                    )}
-                    onToggle={() =>
-                      toggleQueryGroup(`${connection.id}::queries`)
-                    }
-                    forceShowToggle={queriesForConnection.length > 0}
-                    canToggle={queriesForConnection.length > 0}
-                  >
-                    {queriesForConnection.map((query) => (
-                      <TreeNode
-                        key={`conn-query-${query.id}`}
-                        level={2}
-                        icon={<FileCode className="w-4 h-4" />}
-                        label={query.name}
-                        toggleOnRowClick={false}
-                        canToggle={false}
-                        onDoubleClick={() => onSelectSavedQuery?.(query)}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                      >
-                        {null}
-                      </TreeNode>
-                    ))}
-                  </TreeNode>
-                ) : null}
-
-                {connection.connectState === "success" ? (
-                  showSavedQueriesInTree ? (
-                    <TreeNode
-                      level={1}
-                      icon={<Database className="w-4 h-4" />}
-                      label={t("connection.tree.database")}
-                      isExpanded={expandedDatabaseGroups.has(
-                        `${connection.id}::databases`,
-                      )}
-                      onToggle={() =>
-                        toggleDatabaseGroup(`${connection.id}::databases`)
-                      }
-                      forceShowToggle={visibleDatabases.length > 0}
-                      canToggle={visibleDatabases.length > 0}
-                    >
-                      {visibleDatabases.map((database) =>
-                        renderDatabaseTreeNode(database, 2),
-                      )}
-                    </TreeNode>
-                  ) : (
-                    visibleDatabases.map((database) =>
-                      renderDatabaseTreeNode(database, 1),
-                    )
-                  )
-                ) : null}
-              </>
-            </TreeNode>
-          );
-        })}
-          </div>
-        )}
-      </ConnectionContextMenu>
-
-      <InlineContextMenu
+      />
+      <ConnectionTreeDialogs
         contextMenu={contextMenu}
-        onClose={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
+        onCloseContextMenu={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
         connections={connections}
         contextMenuConnection={contextMenuConnection}
         contextMenuDatabaseAdapter={contextMenuDatabaseAdapter}
@@ -1296,8 +1010,6 @@ export function ConnectionList({
         onDatabaseImport={handleDatabaseImport}
         onDatabaseExport={handleDatabaseExport}
         onCreateTable={onCreateTable}
-      />
-      <ConnectionDialogs
         createEsIndexDialogOpen={isCreateEsIndexDialogOpen}
         createEsIndexConnectionId={createEsIndexConnectionId}
         onCreateEsIndexDialogOpenChange={(open) => {
@@ -1306,10 +1018,7 @@ export function ConnectionList({
         }}
         onEsIndexCreated={async () => {
           if (createEsIndexConnectionId) {
-            await handleRefreshDatabaseTables(
-              createEsIndexConnectionId,
-              "Indices",
-            );
+            await handleRefreshDatabaseTables(createEsIndexConnectionId, "Indices");
           }
         }}
         isCreateDbDialogOpen={isCreateDbDialogOpen}
@@ -1326,7 +1035,7 @@ export function ConnectionList({
         isMySqlFamilyCreateDb={isMySqlFamilyCreateDb}
         isPostgresCreateDb={isPostgresCreateDb}
         isMssqlCreateDb={isMssqlCreateDb}
-        onCreateDatabase={handleCreateDatabase}
+        onCreateDatabaseSubmit={handleCreateDatabase}
         deleteTargetConnectionId={deleteTargetConnectionId}
         onDeleteTargetChange={setDeleteTargetConnectionId}
         isDeleting={isDeleting}
