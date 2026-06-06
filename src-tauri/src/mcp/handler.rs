@@ -34,9 +34,7 @@ impl RequestHandler {
             "prompts/list" => self.handle_prompts_list().await,
             "prompts/get" => self.handle_prompts_get(request.params).await,
 
-            "sampling/createMessage" => {
-                self.handle_sampling_create_message(request.params).await
-            }
+            "sampling/createMessage" => self.handle_sampling_create_message(request.params).await,
 
             "completion/complete" => self.handle_completion_complete(request.params).await,
 
@@ -67,7 +65,7 @@ impl RequestHandler {
             },
             "serverInfo": {
                 "name": "dbpaw",
-                "version": "0.5.2"
+                "version": "0.5.3"
             }
         }))
     }
