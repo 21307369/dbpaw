@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { isModKey } from "@/lib/keyboard";
+import { useTranslation } from "react-i18next";
 
 interface SaveQueryDialogProps {
   open: boolean;
@@ -27,6 +28,7 @@ export function SaveQueryDialog({
   initialName = "",
   initialDescription = "",
 }: SaveQueryDialogProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
   const [isSaving, setIsSaving] = useState(false);
@@ -60,20 +62,22 @@ export function SaveQueryDialog({
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Save Query</DialogTitle>
+            <DialogTitle>{t("saveQueryDialog.title")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Query Name</Label>
+              <Label htmlFor="name">{t("saveQueryDialog.name")}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="My Query"
+                placeholder={t("saveQueryDialog.namePlaceholder")}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="description">Description (Optional)</Label>
+              <Label htmlFor="description">
+                {t("saveQueryDialog.description")}
+              </Label>
               <Textarea
                 id="description"
                 value={description}
@@ -84,7 +88,7 @@ export function SaveQueryDialog({
                   e.preventDefault();
                   void submitSave();
                 }}
-                placeholder="What does this query do?"
+                placeholder={t("saveQueryDialog.descriptionPlaceholder")}
               />
             </div>
           </div>
@@ -94,10 +98,10 @@ export function SaveQueryDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSave || isSaving}>
-              Save
+              {t("common.save")}
             </Button>
           </DialogFooter>
         </form>

@@ -114,9 +114,11 @@ export const en = {
       showColumnCommentsDescription:
         "Display column comments in small text below the column name in table headers",
       showRowNumbers: "Show Row Numbers",
-      showRowNumbersDescription: "Display row number column on the left side of the table",
+      showRowNumbersDescription:
+        "Display row number column on the left side of the table",
       showZebraStripes: "Show Zebra Stripes",
-      showZebraStripesDescription: "Alternate row background colors for better readability",
+      showZebraStripesDescription:
+        "Alternate row background colors for better readability",
       filter: {
         title: "Filter",
       },
@@ -184,8 +186,7 @@ export const en = {
     },
     shortcuts: {
       title: "Shortcuts",
-      hint:
-        "Click Record, then press the new keys. Modifiers (Cmd / Ctrl / Alt / Shift) are required for new bindings.",
+      hint: "Click Record, then press the new keys. Modifiers (Cmd / Ctrl / Alt / Shift) are required for new bindings.",
       loading: "Loading shortcuts…",
       record: "Record",
       recording: "Press keys…",
@@ -199,7 +200,8 @@ export const en = {
       enable: "Enable",
       disabled: "Disabled",
       errorNoModifier: "At least one modifier is required",
-      conflictPrompt: "This shortcut is already used by “{{other}}”. Replace it?",
+      conflictPrompt:
+        "This shortcut is already used by “{{other}}”. Replace it?",
       confirmReplace: "Replace",
       group: {
         global: "Global",
@@ -657,6 +659,48 @@ export const en = {
       distanceFailed: "Failed to calculate distance",
       nearbyFailed: "Failed to search nearby locations",
     },
+    zset: {
+      geoHint:
+        "Geo spatial index detected. Scores are geohash values. Use Console for GEOPOS / GEODIST / GEORADIUS operations.",
+      memberCount: "{{count}} members",
+      scoreSort: "Score {{direction}}",
+      query: "Query",
+      addMember: "Add member",
+      popMin: "Pop Min",
+      popMax: "Pop Max",
+      popMinTitle: "Pop member with lowest score",
+      popMaxTitle: "Pop member with highest score",
+      scoreRange: "Score Range",
+      filter: "Filter",
+      clear: "Clear",
+      scoreRangeSummary:
+        "Showing {{count}} members matching score ∈ [{{min}}, {{max}}]",
+      memberRank: "Member Rank",
+      memberNamePlaceholder: "member name",
+      rankLabel: "Rank",
+      memberNotFound: "Member not found",
+      scoreLookup: "Score Lookup",
+      scoreLookupPlaceholder: "member (comma-sep for multi)",
+      lexRange: "Lex Range",
+      lexRangeHint: "(all members must share the same score)",
+      lexRangeSummary:
+        "Showing {{count}} members in lex range [{{min}}, {{max}}]",
+      filteredBanner:
+        "Filtered: score ∈ [{{min}}, {{max}}] — {{count}} results",
+      showAll: "Show all",
+      member: "Member",
+      score: "Score",
+      memberPlaceholder: "member",
+      emptyFiltered: "No members match the score range",
+      empty: "Empty sorted set",
+      decreaseScore: "Decrease score by 1",
+      increaseScore: "Increase score by 1",
+      lexBanner: "Lex range [{{min}}, {{max}}] — {{count}} members",
+      lowestScore: "lowest",
+      highestScore: "highest",
+      popConfirmDescription:
+        "This will remove and return the member with the {{score}} score. This action cannot be undone.",
+    },
   },
   aiSidebar: {
     title: "AI Assistant",
@@ -730,12 +774,29 @@ export const en = {
     },
     untitled: "Untitled",
   },
+  saveQueryDialog: {
+    title: "Save Query",
+    name: "Query Name",
+    namePlaceholder: "My Query",
+    description: "Description (Optional)",
+    descriptionPlaceholder: "What does this query do?",
+  },
   tableView: {
     header: {
       actionHint: "Click to copy column name, double-click to sort {{column}}",
     },
     toast: {
       columnNameCopied: "Copied column name: {{column}}",
+      copyFailed: "Failed to copy",
+      cellCopied: "Cell copied",
+      cellsCopied: "Copied {{rows}}×{{columns}} cells",
+      cellsPasted: "Pasted {{count}} cell(s)",
+    },
+    deleteRows: {
+      title: "Delete selected rows?",
+      description:
+        "This action will permanently delete {{count}} row(s) from the table.",
+      deleting: "Deleting...",
     },
   },
   tableMetadata: {

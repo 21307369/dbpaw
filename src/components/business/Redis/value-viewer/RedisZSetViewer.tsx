@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowUpDown,
   Check,
@@ -76,6 +77,7 @@ export function RedisZSetViewer({
   onZPopMin,
   onZPopMax,
 }: Props) {
+  const { t } = useTranslation();
   const [sortAsc, setSortAsc] = useState(true);
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [editingScore, setEditingScore] = useState("");
@@ -293,10 +295,7 @@ export function RedisZSetViewer({
       {isGeo && (
         <div className="flex items-center gap-2 text-xs text-teal-700 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-900 rounded px-3 py-2">
           <Info className="w-3.5 h-3.5 shrink-0" />
-          <span>
-            Geo spatial index detected. Scores are geohash values. Use Console
-            for GEOPOS / GEODIST / GEORADIUS operations.
-          </span>
+          <span>{t("redis.zset.geoHint")}</span>
           <Badge
             variant="outline"
             className="text-xs text-teal-600 border-teal-200 ml-auto"
@@ -309,7 +308,7 @@ export function RedisZSetViewer({
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
-          {value.length} members
+          {t("redis.zset.memberCount", { count: value.length })}
         </span>
         <div className="flex gap-1.5">
           <Button
@@ -319,7 +318,7 @@ export function RedisZSetViewer({
             onClick={() => setSortAsc((a) => !a)}
           >
             <ArrowUpDown className="w-3 h-3 mr-1" />
-            Score {sortAsc ? "↑" : "↓"}
+            {t("redis.zset.scoreSort", { direction: sortAsc ? "↑" : "↓" })}
           </Button>
           {hasQueryCapability && (
             <Button
@@ -329,7 +328,7 @@ export function RedisZSetViewer({
               onClick={() => setShowQueryPanel((v) => !v)}
             >
               <SlidersHorizontal className="w-3 h-3 mr-1" />
-              Query
+              {t("redis.zset.query")}
             </Button>
           )}
           <Button
@@ -340,7 +339,7 @@ export function RedisZSetViewer({
             disabled={showNewRow}
           >
             <Plus className="w-3 h-3 mr-1" />
-            Add member
+            {t("redis.zset.addMember")}
           </Button>
           {hasPopCapability && (
             <>
@@ -350,10 +349,10 @@ export function RedisZSetViewer({
                 className="h-7 text-destructive hover:text-destructive"
                 onClick={() => setPopDialog({ type: "min" })}
                 disabled={value.length === 0}
-                title="Pop member with lowest score"
+                title={t("redis.zset.popMinTitle")}
               >
                 <ArrowDownToLine className="w-3 h-3 mr-1" />
-                Pop Min
+                {t("redis.zset.popMin")}
               </Button>
               <Button
                 variant="outline"
@@ -361,10 +360,10 @@ export function RedisZSetViewer({
                 className="h-7 text-destructive hover:text-destructive"
                 onClick={() => setPopDialog({ type: "max" })}
                 disabled={value.length === 0}
-                title="Pop member with highest score"
+                title={t("redis.zset.popMaxTitle")}
               >
                 <ArrowUpFromLine className="w-3 h-3 mr-1" />
-                Pop Max
+                {t("redis.zset.popMax")}
               </Button>
             </>
           )}
@@ -378,7 +377,7 @@ export function RedisZSetViewer({
           {onZRangeByScore && (
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">
-                Score Range
+                {t("redis.zset.scoreRange")}
               </div>
               <div className="flex items-center gap-2">
                 <Input
@@ -404,7 +403,7 @@ export function RedisZSetViewer({
                   {isFiltering ? (
                     <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                   ) : null}
-                  Filter
+                  {t("redis.zset.filter")}
                 </Button>
                 {filterActive && (
                   <Button
@@ -414,7 +413,7 @@ export function RedisZSetViewer({
                     onClick={clearFilter}
                   >
                     <X className="w-3 h-3 mr-1" />
-                    Clear
+                    {t("redis.zset.clear")}
                   </Button>
                 )}
               </div>
@@ -423,8 +422,11 @@ export function RedisZSetViewer({
                   <Badge variant="secondary" className="text-xs mr-1.5">
                     ZCOUNT: {filterTotal}
                   </Badge>
-                  Showing {filteredMembers?.length ?? 0} members matching score
-                  ∈ [{filterMin}, {filterMax}]
+                  {t("redis.zset.scoreRangeSummary", {
+                    count: filteredMembers?.length ?? 0,
+                    min: filterMin,
+                    max: filterMax,
+                  })}
                 </div>
               )}
             </div>
@@ -434,7 +436,7 @@ export function RedisZSetViewer({
           {onZRank && (
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">
-                Member Rank
+                {t("redis.zset.memberRank")}
               </div>
               <div className="flex items-center gap-2">
                 <Input
@@ -444,7 +446,7 @@ export function RedisZSetViewer({
                     setRankMember(e.target.value);
                     setRankResult(null);
                   }}
-                  placeholder="member name"
+                  placeholder={t("redis.zset.memberNamePlaceholder")}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void handleRankLookup(false);
                   }}
@@ -480,7 +482,7 @@ export function RedisZSetViewer({
                     {rankResult.reverse ? "ZREVRANK" : "ZRANK"}
                   </Badge>
                   <span className="text-muted-foreground">
-                    Rank{" "}
+                    {t("redis.zset.rankLabel")}{" "}
                     <span className="font-mono text-foreground">
                       #{rankResult.rank}
                     </span>
@@ -489,7 +491,7 @@ export function RedisZSetViewer({
               )}
               {rankResult === null && rankMember.trim() && !isRanking && (
                 <div className="text-xs text-muted-foreground">
-                  Member not found
+                  {t("redis.zset.memberNotFound")}
                 </div>
               )}
             </div>
@@ -499,7 +501,7 @@ export function RedisZSetViewer({
           {(onZScore || onZMScore) && (
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">
-                Score Lookup
+                {t("redis.zset.scoreLookup")}
               </div>
               <div className="flex items-center gap-2">
                 <Input
@@ -509,7 +511,7 @@ export function RedisZSetViewer({
                     setScoreMember(e.target.value);
                     setScoreResult(null);
                   }}
-                  placeholder="member (comma-sep for multi)"
+                  placeholder={t("redis.zset.scoreLookupPlaceholder")}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void handleScoreLookup(false);
                   }}
@@ -566,7 +568,7 @@ export function RedisZSetViewer({
               )}
               {scoreResult === null && scoreMember.trim() && !isScoring && (
                 <div className="text-xs text-muted-foreground">
-                  Member not found
+                  {t("redis.zset.memberNotFound")}
                 </div>
               )}
             </div>
@@ -576,9 +578,9 @@ export function RedisZSetViewer({
           {onZRangeByLex && (
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">
-                Lex Range{" "}
+                {t("redis.zset.lexRange")}{" "}
                 <span className="text-muted-foreground/60 font-normal">
-                  (all members must share the same score)
+                  {t("redis.zset.lexRangeHint")}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -615,7 +617,7 @@ export function RedisZSetViewer({
                     onClick={clearLex}
                   >
                     <X className="w-3 h-3 mr-1" />
-                    Clear
+                    {t("redis.zset.clear")}
                   </Button>
                 )}
               </div>
@@ -624,8 +626,11 @@ export function RedisZSetViewer({
                   <Badge variant="secondary" className="text-xs mr-1.5">
                     ZLEXCOUNT: {lexTotal}
                   </Badge>
-                  Showing {lexMembers?.length ?? 0} members in lex range [
-                  {lexMin}, {lexMax}]
+                  {t("redis.zset.lexRangeSummary", {
+                    count: lexMembers?.length ?? 0,
+                    min: lexMin,
+                    max: lexMax,
+                  })}
                 </div>
               )}
               {lexActive && lexMembers && lexMembers.length > 0 && (
@@ -651,8 +656,11 @@ export function RedisZSetViewer({
         <div className="flex items-center gap-2 text-xs rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 px-3 py-1.5">
           <SlidersHorizontal className="w-3 h-3 text-blue-500" />
           <span className="text-blue-700 dark:text-blue-300">
-            Filtered: score ∈ [{filterMin}, {filterMax}] —{" "}
-            {filteredMembers?.length ?? 0} results
+            {t("redis.zset.filteredBanner", {
+              min: filterMin,
+              max: filterMax,
+              count: filteredMembers?.length ?? 0,
+            })}
           </span>
           <Button
             variant="ghost"
@@ -660,7 +668,7 @@ export function RedisZSetViewer({
             className="h-5 px-1.5 ml-auto text-xs text-blue-600 dark:text-blue-400"
             onClick={clearFilter}
           >
-            Show all
+            {t("redis.zset.showAll")}
           </Button>
         </div>
       )}
@@ -670,8 +678,12 @@ export function RedisZSetViewer({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-xs">Member</TableHead>
-              <TableHead className="w-[140px] text-xs">Score</TableHead>
+              <TableHead className="text-xs">
+                {t("redis.zset.member")}
+              </TableHead>
+              <TableHead className="w-[140px] text-xs">
+                {t("redis.zset.score")}
+              </TableHead>
               <TableHead className="w-[48px]" />
             </TableRow>
           </TableHeader>
@@ -683,7 +695,7 @@ export function RedisZSetViewer({
                     className="h-7 font-mono text-xs"
                     value={newMember}
                     onChange={(e) => setNewMember(e.target.value)}
-                    placeholder="member"
+                    placeholder={t("redis.zset.memberPlaceholder")}
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === "Enter") commitAdd();
@@ -742,8 +754,8 @@ export function RedisZSetViewer({
                   className="text-center text-muted-foreground text-sm py-6"
                 >
                   {filterActive
-                    ? "No members match the score range"
-                    : "Empty sorted set"}
+                    ? t("redis.zset.emptyFiltered")
+                    : t("redis.zset.empty")}
                 </TableCell>
               </TableRow>
             )}
@@ -819,7 +831,7 @@ export function RedisZSetViewer({
                             size="icon"
                             className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={() => onZsetIncrBy(member, -1)}
-                            title="Decrease score by 1"
+                            title={t("redis.zset.decreaseScore")}
                           >
                             <Minus className="w-3 h-3" />
                           </Button>
@@ -828,7 +840,7 @@ export function RedisZSetViewer({
                             size="icon"
                             className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={() => onZsetIncrBy(member, 1)}
-                            title="Increase score by 1"
+                            title={t("redis.zset.increaseScore")}
                           >
                             <Plus className="w-3 h-3" />
                           </Button>
@@ -856,7 +868,11 @@ export function RedisZSetViewer({
         <div className="flex items-center gap-2 text-xs rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20 px-3 py-1.5">
           <SlidersHorizontal className="w-3 h-3 text-purple-500" />
           <span className="text-purple-700 dark:text-purple-300">
-            Lex range [{lexMin}, {lexMax}] — {lexMembers?.length ?? 0} members
+            {t("redis.zset.lexBanner", {
+              min: lexMin,
+              max: lexMax,
+              count: lexMembers?.length ?? 0,
+            })}
           </span>
           <Button
             variant="ghost"
@@ -864,7 +880,7 @@ export function RedisZSetViewer({
             className="h-5 px-1.5 ml-auto text-xs text-purple-600 dark:text-purple-400"
             onClick={clearLex}
           >
-            Show all
+            {t("redis.zset.showAll")}
           </Button>
         </div>
       )}
@@ -882,13 +898,19 @@ export function RedisZSetViewer({
               {popDialog?.type === "min" ? "ZPOPMIN" : "ZPOPMAX"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove and return the member with the{" "}
-              {popDialog?.type === "min" ? "lowest" : "highest"} score. This
-              action cannot be undone.
+              {t("redis.zset.popConfirmDescription", {
+                score: t(
+                  popDialog?.type === "min"
+                    ? "redis.zset.lowestScore"
+                    : "redis.zset.highestScore",
+                ),
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPopping}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPopping}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => void handlePop()}
               disabled={isPopping}
@@ -897,7 +919,11 @@ export function RedisZSetViewer({
               {isPopping ? (
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" />
               ) : null}
-              Pop {popDialog?.type === "min" ? "Min" : "Max"}
+              {t(
+                popDialog?.type === "min"
+                  ? "redis.zset.popMin"
+                  : "redis.zset.popMax",
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

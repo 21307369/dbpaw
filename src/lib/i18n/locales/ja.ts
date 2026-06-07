@@ -118,7 +118,8 @@ export const ja: Translations = {
       showRowNumbers: "行番号を表示",
       showRowNumbersDescription: "テーブルの左側に行番号列を表示します",
       showZebraStripes: "ゼブラストライプを表示",
-      showZebraStripesDescription: "奇数行と偶数行で背景色を変えて読みやすくします",
+      showZebraStripesDescription:
+        "奇数行と偶数行で背景色を変えて読みやすくします",
       filter: {
         title: "フィルター",
       },
@@ -200,7 +201,8 @@ export const ja: Translations = {
       enable: "有効化",
       disabled: "無効",
       errorNoModifier: "修飾キーが1つ以上必要です",
-      conflictPrompt: "このショートカットは「{{other}}」で既に使われています。置き換えますか？",
+      conflictPrompt:
+        "このショートカットは「{{other}}」で既に使われています。置き換えますか？",
       confirmReplace: "置き換え",
       group: {
         global: "グローバル",
@@ -655,7 +657,8 @@ export const ja: Translations = {
       acknowledgeFailed: "確認に失敗しました",
       claimFailed: "エントリのクレームに失敗しました",
       trimFailed: "ストリームのトリムに失敗しました",
-      selectGroupRequired: "グループを選択し、コンシューマー名を入力してください",
+      selectGroupRequired:
+        "グループを選択し、コンシューマー名を入力してください",
       readFromGroupFailed: "コンシューマーグループからの読み込みに失敗しました",
     },
     geo: {
@@ -663,6 +666,47 @@ export const ja: Translations = {
       addFailed: "場所の追加に失敗しました",
       distanceFailed: "距離の計算に失敗しました",
       nearbyFailed: "近くの場所の検索に失敗しました",
+    },
+    zset: {
+      geoHint:
+        "Geo 空間インデックスを検出しました。スコアは geohash 値です。GEOPOS / GEODIST / GEORADIUS 操作は Console を使用してください。",
+      memberCount: "{{count}} 件のメンバー",
+      scoreSort: "スコア {{direction}}",
+      query: "クエリ",
+      addMember: "メンバーを追加",
+      popMin: "最小値をポップ",
+      popMax: "最大値をポップ",
+      popMinTitle: "スコアが最も低いメンバーをポップ",
+      popMaxTitle: "スコアが最も高いメンバーをポップ",
+      scoreRange: "スコア範囲",
+      filter: "絞り込み",
+      clear: "クリア",
+      scoreRangeSummary:
+        "スコア ∈ [{{min}}, {{max}}] に一致する {{count}} 件のメンバーを表示中",
+      memberRank: "メンバー順位",
+      memberNamePlaceholder: "メンバー名",
+      rankLabel: "順位",
+      memberNotFound: "メンバーが見つかりません",
+      scoreLookup: "スコア検索",
+      scoreLookupPlaceholder: "メンバー（複数はカンマ区切り）",
+      lexRange: "辞書順範囲",
+      lexRangeHint: "（すべてのメンバーは同じスコアである必要があります）",
+      lexRangeSummary:
+        "辞書順範囲 [{{min}}, {{max}}] の {{count}} 件のメンバーを表示中",
+      filteredBanner: "絞り込み中: スコア ∈ [{{min}}, {{max}}] — {{count}} 件",
+      showAll: "すべて表示",
+      member: "メンバー",
+      score: "スコア",
+      memberPlaceholder: "メンバー",
+      emptyFiltered: "このスコア範囲に一致するメンバーはありません",
+      empty: "ソート済みセットは空です",
+      decreaseScore: "スコアを 1 減らす",
+      increaseScore: "スコアを 1 増やす",
+      lexBanner: "辞書順範囲 [{{min}}, {{max}}] — {{count}} 件のメンバー",
+      lowestScore: "最も低い",
+      highestScore: "最も高い",
+      popConfirmDescription:
+        "{{score}}スコアのメンバーを削除して返します。この操作は元に戻せません。",
     },
   },
   aiSidebar: {
@@ -695,6 +739,16 @@ export const ja: Translations = {
     },
     toast: {
       columnNameCopied: "列名をコピーしました: {{column}}",
+      copyFailed: "コピーに失敗しました",
+      cellCopied: "セルをコピーしました",
+      cellsCopied: "{{rows}}×{{columns}} セルをコピーしました",
+      cellsPasted: "{{count}} セルを貼り付けました",
+    },
+    deleteRows: {
+      title: "選択した行を削除しますか？",
+      description:
+        "この操作により {{count}} 行がテーブルから完全に削除されます。",
+      deleting: "削除中...",
     },
   },
   tableSelector: {
@@ -744,6 +798,13 @@ export const ja: Translations = {
       failed: "クエリの保存に失敗しました",
     },
     untitled: "無題",
+  },
+  saveQueryDialog: {
+    title: "クエリを保存",
+    name: "クエリ名",
+    namePlaceholder: "マイクエリ",
+    description: "説明（任意）",
+    descriptionPlaceholder: "このクエリは何をしますか？",
   },
   tableMetadata: {
     title: "テーブルメタデータ",

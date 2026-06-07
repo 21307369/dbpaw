@@ -40,7 +40,7 @@ export interface TableTabItem {
   tableName?: string;
   connectionId?: number;
   driver?: string;
-  data?: unknown[];
+  data?: Record<string, unknown>[];
   columns?: string[];
   total?: number;
   page?: number;
