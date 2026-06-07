@@ -1,4 +1,5 @@
 use super::{conn_failed_error, DatabaseDriver, DriverResult};
+use crate::error::AppError;
 use crate::models::{
     CassandraTableExtra, ColumnInfo, ColumnSchema, ConnectionForm, IndexInfo, QueryColumn,
     QueryResult, RoutineInfo, SchemaOverview, TableDataResponse, TableInfo, TableMetadata,
@@ -23,22 +24,22 @@ pub struct CassandraDriver {
     ssh_tunnel: Option<crate::ssh::SshTunnel>,
 }
 
-fn normalize_cassandra_error(e: impl std::fmt::Display) -> String {
+fn normalize_cassandra_error(e: impl std::fmt::Display) -> AppError {
     let msg = e.to_string();
     let lower = msg.to_ascii_lowercase();
 
     if lower.contains("authentication") || lower.contains("credentials") {
-        format!("[CASSANDRA_ERROR] Authentication failed: {}", msg)
+        AppError::conn_auth_failed(format!("Authentication failed: {}", msg))
     } else if lower.contains("refused") || lower.contains("connect") {
-        format!("[CASSANDRA_ERROR] Connection refused: {}", msg)
+        AppError::conn_failed(format!("Connection refused: {}", msg), "Check host and port")
     } else if lower.contains("timeout") || lower.contains("timed out") {
-        format!("[CASSANDRA_ERROR] Connection timed out: {}", msg)
+        AppError::conn_timeout(format!("Connection timed out: {}", msg))
     } else if lower.contains("resolve") || lower.contains("lookup") || lower.contains("dns") {
-        format!("[CASSANDRA_ERROR] DNS resolution failed: {}", msg)
+        AppError::conn_failed(format!("DNS resolution failed: {}", msg), "Check hostname")
     } else if lower.contains("tls") || lower.contains("ssl") || lower.contains("certificate") {
-        format!("[CASSANDRA_ERROR] TLS/SSL error: {}", msg)
+        AppError::conn_tls_error(format!("TLS/SSL error: {}", msg))
     } else {
-        format!("[CASSANDRA_ERROR] {}", msg)
+        AppError::query_failed(msg)
     }
 }
 
@@ -276,12 +277,12 @@ fn cql_value_to_json(val: Option<&CqlValue>) -> Value {
 }
 
 impl CassandraDriver {
-    pub async fn connect(form: &ConnectionForm) -> Result<Self, String> {
+    pub async fn connect(form: &ConnectionForm) -> DriverResult<Self> {
         let host = form
             .host
             .clone()
             .filter(|h| !h.trim().is_empty())
-            .ok_or_else(|| "[VALIDATION_ERROR] host cannot be empty".to_string())?;
+            .ok_or_else(|| AppError::validation("host cannot be empty"))?;
         let port = form.port.unwrap_or(DEFAULT_CASSANDRA_PORT);
 
         let mut effective_form = form.clone();
@@ -381,7 +382,7 @@ impl DatabaseDriver for CassandraDriver {
             .unwrap_or_else(|| self.default_keyspace.clone());
 
         if keyspace.is_empty() {
-            return Err("[VALIDATION_ERROR] keyspace is required".to_string().into());
+            return Err(AppError::validation("keyspace is required"));
         }
 
         let result = self
@@ -704,14 +705,14 @@ impl DatabaseDriver for CassandraDriver {
         let trimmed = sql.trim();
 
         if trimmed.is_empty() {
-            return Err("[QUERY_ERROR] Empty query".to_string().into());
+            return Err(AppError::query_failed("Empty query"));
         }
 
         let result = self
             .session
             .query_unpaged(trimmed, &[])
             .await
-            .map_err(|e| format!("[QUERY_ERROR] {}", e))?;
+            .map_err(|e| AppError::query_failed(e.to_string()))?;
 
         let duration = start.elapsed();
 
@@ -748,10 +749,10 @@ impl DatabaseDriver for CassandraDriver {
         let mut data = Vec::new();
         let mut iter = rows_result
             .rows::<scylla::value::Row>()
-            .map_err(|e| format!("[QUERY_ERROR] {}", e))?;
+            .map_err(|e| AppError::query_failed(e.to_string()))?;
 
         while let Some(row) = iter.next() {
-            let row = row.map_err(|e| format!("[QUERY_ERROR] {}", e))?;
+            let row = row.map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut obj = serde_json::Map::new();
             for (i, (col_name, _)) in column_specs.iter().enumerate() {
                 let value = cql_value_to_json(row.columns.get(i).and_then(|c| c.as_ref()));
@@ -779,7 +780,7 @@ impl DatabaseDriver for CassandraDriver {
             .unwrap_or_else(|| self.default_keyspace.clone());
 
         if keyspace.is_empty() {
-            return Err("[VALIDATION_ERROR] keyspace is required".to_string().into());
+            return Err(AppError::validation("keyspace is required"));
         }
 
         let tables = self.list_tables(Some(keyspace.clone())).await?;
@@ -814,7 +815,7 @@ impl CassandraDriver {
         &self,
         keyspace: &str,
         table: &str,
-    ) -> Result<Vec<IndexInfo>, String> {
+    ) -> DriverResult<Vec<IndexInfo>> {
         let result = self
             .session
             .query_unpaged(
@@ -871,7 +872,7 @@ impl CassandraDriver {
         &self,
         keyspace: &str,
         table: &str,
-    ) -> Result<CassandraTableExtra, String> {
+    ) -> DriverResult<CassandraTableExtra> {
         // Get partition key and clustering columns
         let columns_result = self
             .session
@@ -982,10 +983,10 @@ impl CassandraDriver {
                 default_time_to_live,
             })
         } else {
-            Err(format!(
-                "[NOT_FOUND] Table '{}.{}' not found",
+            Err(AppError::not_found(format!(
+                "Table '{}.{}' not found",
                 keyspace, table
-            ))
+            )))
         }
     }
 }
