@@ -8,7 +8,6 @@ export function useRedisDialogs() {
   // MSET dialog state
   const [msetDialogOpen, setMsetDialogOpen] = useState(false);
   const [msetImportText, setMsetImportText] = useState("");
-  const [msetLoading, setMsetLoading] = useState(false);
 
   // EXPIRE dialog state
   const [expireDialogOpen, setExpireDialogOpen] = useState(false);
@@ -45,10 +44,8 @@ export function useRedisDialogs() {
     // MSET
     msetDialogOpen,
     msetImportText,
-    msetLoading,
     setMsetDialogOpen,
     setMsetImportText,
-    setMsetLoading,
     openMsetDialog,
     closeMsetDialog,
     // EXPIRE
