@@ -88,11 +88,11 @@ export function useRedisSelection({ keys, onScanRefresh }: UseRedisSelectionPara
 
   return {
     selectedKeys,
-    // Exposed because Task 10 orchestrator calls selection.setDetail directly.
-    // Will be removed once the orchestrator is refactored to use handleNewKey/handleKeySaved.
-    setSelectedKeys,
     lastClickedIndex,
     detail,
+    // Raw setters exposed because the Task 10 orchestrator calls them directly.
+    // Will be removed once the orchestrator is refactored to use handleNewKey/handleKeySaved.
+    setSelectedKeys,
     setDetail,
     handleSelectKey,
     handleNewKey,
