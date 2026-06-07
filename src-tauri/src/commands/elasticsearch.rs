@@ -217,3 +217,25 @@ pub async fn elasticsearch_execute_raw(
         .execute_raw(method, path, body)
         .await
 }
+
+#[macro_export]
+macro_rules! elasticsearch_commands {
+    () => {
+        $crate::commands::elasticsearch::elasticsearch_test_connection,
+        $crate::commands::elasticsearch::elasticsearch_test_connection_ephemeral,
+        $crate::commands::elasticsearch::elasticsearch_list_indices,
+        $crate::commands::elasticsearch::elasticsearch_get_index_mapping,
+        $crate::commands::elasticsearch::elasticsearch_create_index,
+        $crate::commands::elasticsearch::elasticsearch_delete_index,
+        $crate::commands::elasticsearch::elasticsearch_refresh_index,
+        $crate::commands::elasticsearch::elasticsearch_open_index,
+        $crate::commands::elasticsearch::elasticsearch_close_index,
+        $crate::commands::elasticsearch::elasticsearch_search_documents,
+        $crate::commands::elasticsearch::elasticsearch_get_document,
+        $crate::commands::elasticsearch::elasticsearch_upsert_document,
+        $crate::commands::elasticsearch::elasticsearch_delete_document,
+        $crate::commands::elasticsearch::elasticsearch_export_documents,
+        $crate::commands::elasticsearch::elasticsearch_import_documents,
+        $crate::commands::elasticsearch::elasticsearch_execute_raw,
+    };
+}
