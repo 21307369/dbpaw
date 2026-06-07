@@ -1,4 +1,5 @@
 use super::{conn_failed_error, DatabaseDriver, DriverResult};
+use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
     RoutineInfo, SchemaForeignKey, SchemaOverview, SequenceInfo, SingleResultSet,
@@ -71,22 +72,22 @@ fn odbc_value_to_json(row: &mut odbc_api::CursorRow<'_>, col_idx: u16) -> serde_
 
 fn collect_cursor_data(
     mut cursor: odbc_api::CursorImpl<odbc_api::handles::StatementImpl<'_>>,
-) -> Result<(Vec<String>, Vec<serde_json::Value>), String> {
+) -> DriverResult<(Vec<String>, Vec<serde_json::Value>)> {
     let num_cols = cursor
         .num_result_cols()
-        .map_err(|e| format!("[QUERY_ERROR] {e}"))? as u16;
+        .map_err(|e| AppError::query_failed(e.to_string()))? as u16;
     let mut col_names = Vec::with_capacity(num_cols as usize);
     for i in 1..=num_cols {
         let name = cursor
             .col_name(i)
-            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+            .map_err(|e| AppError::query_failed(e.to_string()))?;
         col_names.push(name);
     }
 
     let mut rows = Vec::new();
     while let Some(mut row) = cursor
         .next_row()
-        .map_err(|e| format!("[QUERY_ERROR] {e}"))?
+        .map_err(|e| AppError::query_failed(e.to_string()))?
     {
         let mut map = serde_json::Map::new();
         for (i, name) in col_names.iter().enumerate() {
@@ -98,7 +99,7 @@ fn collect_cursor_data(
 }
 
 impl Db2Driver {
-    pub async fn connect(form: &ConnectionForm) -> Result<Self, String> {
+    pub async fn connect(form: &ConnectionForm) -> DriverResult<Self> {
         let mut effective_form = form.clone();
         let mut ssh_tunnel = None;
 
@@ -114,23 +115,23 @@ impl Db2Driver {
             .clone()
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
-            .ok_or("[VALIDATION_ERROR] host cannot be empty")?;
+            .ok_or_else(|| AppError::validation("host cannot be empty"))?;
         let port = effective_form.port.unwrap_or(50000);
         if !(1..=65535).contains(&port) {
-            return Err("[VALIDATION_ERROR] port out of range".to_string().into());
+            return Err(AppError::validation("port out of range"));
         }
         let database = effective_form
             .database
             .clone()
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
-            .ok_or("[VALIDATION_ERROR] database cannot be empty")?;
+            .ok_or_else(|| AppError::validation("database cannot be empty"))?;
         let username = effective_form
             .username
             .clone()
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
-            .ok_or("[VALIDATION_ERROR] username cannot be empty")?;
+            .ok_or_else(|| AppError::validation("username cannot be empty"))?;
         let password = effective_form.password.clone().unwrap_or_default();
 
         let config = Db2Config {
@@ -148,9 +149,9 @@ impl Db2Driver {
         Ok(driver)
     }
 
-    async fn run_blocking<F, T>(&self, f: F) -> Result<T, String>
+    async fn run_blocking<F, T>(&self, f: F) -> DriverResult<T>
     where
-        F: FnOnce(odbc_api::Connection<'_>) -> Result<T, String> + Send + 'static,
+        F: FnOnce(odbc_api::Connection<'_>) -> DriverResult<T> + Send + 'static,
         T: Send + 'static,
     {
         let cfg = self.config.clone();
@@ -163,7 +164,7 @@ impl Db2Driver {
             f(conn)
         })
         .await
-        .map_err(|e| format!("[DB2_ERROR] {e}"))?
+        .map_err(|e| AppError::internal(format!("DB2 blocking task failed: {e}")))?
     }
 }
 
@@ -188,7 +189,7 @@ impl DatabaseDriver for Db2Driver {
         self.run_blocking(|conn| {
             let cursor = conn
                 .execute("SELECT CURRENT_SERVER FROM SYSIBM.SYSDUMMY1", ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             match cursor {
                 Some(c) => {
                     let (_, rows) = collect_cursor_data(c)?;
@@ -230,7 +231,7 @@ impl DatabaseDriver for Db2Driver {
             };
             let cursor = conn
                 .execute(&sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut result = Vec::new();
             if let Some(c) = cursor {
                 let (_, rows) = collect_cursor_data(c)?;
@@ -275,7 +276,7 @@ impl DatabaseDriver for Db2Driver {
             };
             let cursor = conn
                 .execute(&sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut result = Vec::new();
             if let Some(c) = cursor {
                 let (_, rows) = collect_cursor_data(c)?;
@@ -320,7 +321,7 @@ impl DatabaseDriver for Db2Driver {
             };
             let cursor = conn
                 .execute(&sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut result = Vec::new();
             if let Some(c) = cursor {
                 let (_, rows) = collect_cursor_data(c)?;
@@ -363,7 +364,7 @@ impl DatabaseDriver for Db2Driver {
             );
             let cursor = conn
                 .execute(&sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             if let Some(c) = cursor {
                 let (_, rows) = collect_cursor_data(c)?;
                 if let Some(row) = rows.first() {
@@ -372,7 +373,7 @@ impl DatabaseDriver for Db2Driver {
                     }
                 }
             }
-            Err("[QUERY_ERROR] Routine not found".to_string().into())
+            Err(AppError::query_failed("Routine not found"))
         })
         .await
     }
@@ -394,7 +395,7 @@ impl DatabaseDriver for Db2Driver {
             );
             let pk_cursor = conn
                 .execute(&pk_sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut pk_set = std::collections::HashSet::<String>::new();
             if let Some(c) = pk_cursor {
                 let (_, pk_rows) = collect_cursor_data(c)?;
@@ -416,7 +417,7 @@ impl DatabaseDriver for Db2Driver {
             );
             let col_cursor = conn
                 .execute(&col_sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut columns = Vec::new();
             if let Some(c) = col_cursor {
                 let (_, col_rows) = collect_cursor_data(c)?;
@@ -506,7 +507,7 @@ impl DatabaseDriver for Db2Driver {
                 );
                 let idx_cursor = conn
                     .execute(&idx_sql, ())
-                    .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                    .map_err(|e| AppError::query_failed(e.to_string()))?;
                 let mut idx_map: HashMap<String, (bool, Option<String>, Vec<(i64, String)>)> =
                     HashMap::new();
                 if let Some(c) = idx_cursor {
@@ -572,7 +573,7 @@ impl DatabaseDriver for Db2Driver {
                 );
                 let fk_cursor = conn
                     .execute(&fk_sql, ())
-                    .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                    .map_err(|e| AppError::query_failed(e.to_string()))?;
                 let mut foreign_keys = Vec::new();
                 if let Some(c) = fk_cursor {
                     let (_, fk_rows) = collect_cursor_data(c)?;
@@ -705,7 +706,7 @@ impl DatabaseDriver for Db2Driver {
             let count_sql = format!("SELECT COUNT(*) FROM {}{}", table_ref, where_clause);
             let count_cursor = conn
                 .execute(&count_sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut total: i64 = 0;
             if let Some(c) = count_cursor {
                 let (_, count_rows) = collect_cursor_data(c)?;
@@ -721,7 +722,7 @@ impl DatabaseDriver for Db2Driver {
             );
             let data_cursor = conn
                 .execute(&data_sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut data = Vec::new();
             if let Some(c) = data_cursor {
                 let (_, rows) = collect_cursor_data(c)?;
@@ -767,7 +768,7 @@ impl DatabaseDriver for Db2Driver {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
+            return Err(AppError::query_failed("Empty SQL statement"));
         }
 
         if statements.len() == 1 {
@@ -784,21 +785,22 @@ impl DatabaseDriver for Db2Driver {
                     if is_read {
                         let cursor = conn
                             .execute(sql_clean, ())
-                            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                            .map_err(|e| AppError::query_failed(e.to_string()))?;
                         match cursor {
                             Some(mut c) => {
                                 let num_cols = c
                                     .num_result_cols()
-                                    .map_err(|e| format!("[QUERY_ERROR] {e}"))?
+                                    .map_err(|e| AppError::query_failed(e.to_string()))?
                                     as u16;
                                 let mut col_names = Vec::with_capacity(num_cols as usize);
                                 let mut col_types = Vec::with_capacity(num_cols as usize);
                                 for i in 1..=num_cols {
-                                    let name =
-                                        c.col_name(i).map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                                    let name = c
+                                        .col_name(i)
+                                        .map_err(|e| AppError::query_failed(e.to_string()))?;
                                     let data_type = c
                                         .col_data_type(i)
-                                        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                                        .map_err(|e| AppError::query_failed(e.to_string()))?;
                                     col_names.push(name.clone());
                                     col_types.push(format!("{:?}", data_type));
                                 }
@@ -812,8 +814,9 @@ impl DatabaseDriver for Db2Driver {
                                     .collect();
 
                                 let mut data = Vec::new();
-                                while let Some(mut row) =
-                                    c.next_row().map_err(|e| format!("[QUERY_ERROR] {e}"))?
+                                while let Some(mut row) = c
+                                    .next_row()
+                                    .map_err(|e| AppError::query_failed(e.to_string()))?
                                 {
                                     let mut map = serde_json::Map::new();
                                     for (i, name) in col_names.iter().enumerate() {
@@ -848,15 +851,15 @@ impl DatabaseDriver for Db2Driver {
                     } else {
                         let mut prepared = conn
                             .prepare(sql_clean)
-                            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                            .map_err(|e| AppError::query_failed(e.to_string()))?;
                         prepared
                             .execute(())
-                            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                            .map_err(|e| AppError::query_failed(e.to_string()))?;
                         conn.commit()
-                            .map_err(|e| format!("[QUERY_ERROR] commit failed: {e}"))?;
+                            .map_err(|e| AppError::query_failed(format!("commit failed: {e}")))?;
                         let row_count = prepared
                             .row_count()
-                            .map_err(|e| format!("[QUERY_ERROR] {e}"))
+                            .map_err(|e| AppError::query_failed(e.to_string()))
                             .ok()
                             .flatten()
                             .unwrap_or(0) as i64;
@@ -890,21 +893,22 @@ impl DatabaseDriver for Db2Driver {
                 let result = if is_read {
                     let cursor = conn
                         .execute(sql_clean, ())
-                        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                        .map_err(|e| AppError::query_failed(e.to_string()))?;
                     match cursor {
                         Some(mut c) => {
                             let num_cols = c
                                 .num_result_cols()
-                                .map_err(|e| format!("[QUERY_ERROR] {e}"))?
+                                .map_err(|e| AppError::query_failed(e.to_string()))?
                                 as u16;
                             let mut col_names = Vec::with_capacity(num_cols as usize);
                             let mut col_types = Vec::with_capacity(num_cols as usize);
                             for i in 1..=num_cols {
-                                let name =
-                                    c.col_name(i).map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                                let name = c
+                                    .col_name(i)
+                                    .map_err(|e| AppError::query_failed(e.to_string()))?;
                                 let data_type = c
                                     .col_data_type(i)
-                                    .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                                    .map_err(|e| AppError::query_failed(e.to_string()))?;
                                 col_names.push(name.clone());
                                 col_types.push(format!("{:?}", data_type));
                             }
@@ -918,8 +922,9 @@ impl DatabaseDriver for Db2Driver {
                                 .collect();
 
                             let mut data = Vec::new();
-                            while let Some(mut row) =
-                                c.next_row().map_err(|e| format!("[QUERY_ERROR] {e}"))?
+                            while let Some(mut row) = c
+                                .next_row()
+                                .map_err(|e| AppError::query_failed(e.to_string()))?
                             {
                                 let mut map = serde_json::Map::new();
                                 for (i, name) in col_names.iter().enumerate() {
@@ -938,15 +943,15 @@ impl DatabaseDriver for Db2Driver {
                 } else {
                     let mut prepared = conn
                         .prepare(sql_clean)
-                        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                        .map_err(|e| AppError::query_failed(e.to_string()))?;
                     prepared
                         .execute(())
-                        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                        .map_err(|e| AppError::query_failed(e.to_string()))?;
                     conn.commit()
-                        .map_err(|e| format!("[QUERY_ERROR] commit failed: {e}"))?;
+                        .map_err(|e| AppError::query_failed(format!("commit failed: {e}")))?;
                     let row_count = prepared
                         .row_count()
-                        .map_err(|e| format!("[QUERY_ERROR] {e}"))
+                        .map_err(|e| AppError::query_failed(e.to_string()))
                         .ok()
                         .flatten()
                         .unwrap_or(0) as i64;
@@ -1017,7 +1022,7 @@ impl DatabaseDriver for Db2Driver {
             };
             let cursor = conn
                 .execute(&sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut table_map: HashMap<(String, String), Vec<ColumnSchema>> = HashMap::new();
             if let Some(c) = cursor {
                 let (_, rows) = collect_cursor_data(c)?;
@@ -1069,7 +1074,7 @@ impl DatabaseDriver for Db2Driver {
                      ORDER BY fk.CONSTNAME, refcol.COLSEQ";
             let cursor = conn
                 .execute(sql, ())
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
             let mut foreign_keys = Vec::new();
             if let Some(c) = cursor {
                 let (_, rows) = collect_cursor_data(c)?;
