@@ -1,4 +1,5 @@
-use super::{DatabaseDriver, DriverResult};
+use super::{conn_failed_error, DatabaseDriver, DriverResult};
+use crate::error::AppError;
 use crate::models::{
     ClickHouseTableExtra, ColumnInfo, ColumnSchema, ConnectionForm, QueryColumn, QueryResult,
     SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata, TableSchema,
@@ -59,12 +60,12 @@ struct ClickHouseRawResponse {
     summary: Option<ClickHouseSummary>,
 }
 
-fn build_config(form: &ConnectionForm) -> Result<ClickHouseConfig, String> {
+fn build_config(form: &ConnectionForm) -> DriverResult<ClickHouseConfig> {
     let host = form
         .host
         .clone()
         .filter(|v| !v.trim().is_empty())
-        .ok_or("[VALIDATION_ERROR] host cannot be empty")?;
+        .ok_or_else(|| AppError::validation("host cannot be empty"))?;
 
     let ssl = form.ssl.unwrap_or(false);
     let scheme = if ssl { "https" } else { "http" };
@@ -306,18 +307,18 @@ fn required_i64_from_json_row(
     row: Option<&Value>,
     key: &str,
     context_sql: &str,
-) -> Result<i64, String> {
+) -> DriverResult<i64> {
     let value = row.and_then(|v| v.get(key)).ok_or_else(|| {
-        format!(
-            "[PARSE_ERROR] Missing '{}' in response for SQL: {}",
+        AppError::query_failed(format!(
+            "Missing '{}' in response for SQL: {}",
             key, context_sql
-        )
+        ))
     })?;
     value_to_i64(value).ok_or_else(|| {
-        format!(
-            "[PARSE_ERROR] Invalid '{}' value {:?} for SQL: {}",
+        AppError::query_failed(format!(
+            "Invalid '{}' value {:?} for SQL: {}",
             key, value, context_sql
-        )
+        ))
     })
 }
 
@@ -398,7 +399,7 @@ fn extract_ttl_expr(create_table_query: &str) -> Option<String> {
 }
 
 impl ClickHouseDriver {
-    pub async fn connect(form: &ConnectionForm) -> Result<Self, String> {
+    pub async fn connect(form: &ConnectionForm) -> DriverResult<Self> {
         let mut dsn_form = form.clone();
         let mut ssh_tunnel = None;
 
@@ -413,7 +414,7 @@ impl ClickHouseDriver {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
-            .map_err(|e| format!("[CONN_FAILED] Failed to create HTTP client: {e}"))?;
+            .map_err(|e| conn_failed_error(&format!("Failed to create HTTP client: {e}")))?;
 
         Ok(Self {
             client,
@@ -429,7 +430,7 @@ impl ClickHouseDriver {
         &self,
         sql: &str,
         query_id: Option<&str>,
-    ) -> Result<ClickHouseRawResponse, String> {
+    ) -> DriverResult<ClickHouseRawResponse> {
         let mut request = self
             .client
             .post(&self.base_url)
@@ -442,18 +443,18 @@ impl ClickHouseDriver {
             .body(sql.to_string())
             .send()
             .await
-            .map_err(|e| format!("[QUERY_ERROR] HTTP request failed: {e}"))?;
+            .map_err(|e| AppError::query_failed(format!("HTTP request failed: {e}")))?;
 
         let status = response.status();
         let summary = parse_summary_header(response.headers());
         let body = response
             .text()
             .await
-            .map_err(|e| format!("[QUERY_ERROR] Failed to read response body: {e}"))?;
+            .map_err(|e| AppError::query_failed(format!("Failed to read response body: {e}")))?;
 
         if !status.is_success() {
             let message = body.trim();
-            return Err(format!("[QUERY_ERROR] HTTP {}: {}", status, message));
+            return Err(AppError::query_failed(format!("HTTP {}: {}", status, message)));
         }
 
         Ok(ClickHouseRawResponse { body, summary })
@@ -463,7 +464,7 @@ impl ClickHouseDriver {
         &self,
         sql: &str,
         query_id: Option<&str>,
-    ) -> Result<ClickHouseJsonResponse, String> {
+    ) -> DriverResult<ClickHouseJsonResponse> {
         let raw = self.execute_raw(sql, query_id).await?;
         let body = raw.body;
         serde_json::from_str::<ClickHouseJsonResponse>(&body).map_err(|e| {
@@ -472,14 +473,14 @@ impl ClickHouseDriver {
             } else {
                 body
             };
-            format!(
-                "[PARSE_ERROR] Failed to parse ClickHouse JSON response: {} | body: {}",
+            AppError::query_failed(format!(
+                "Failed to parse ClickHouse JSON response: {} | body: {}",
                 e, snippet
-            )
+            ))
         })
     }
 
-    async fn estimate_total_rows(&self, schema: &str, table: &str) -> Result<Option<i64>, String> {
+    async fn estimate_total_rows(&self, schema: &str, table: &str) -> DriverResult<Option<i64>> {
         let sql = format!(
             "SELECT total_rows FROM system.tables WHERE database = {} AND name = {} FORMAT JSON",
             quote_literal(schema),
@@ -498,7 +499,7 @@ impl ClickHouseDriver {
         &self,
         schema: &str,
         table: &str,
-    ) -> Result<Option<ClickHouseTableExtra>, String> {
+    ) -> DriverResult<Option<ClickHouseTableExtra>> {
         let sql = format!(
             "SELECT engine, partition_key, sorting_key, primary_key, sampling_key, create_table_query \
              FROM system.tables WHERE database = {} AND name = {} FORMAT JSON",
@@ -534,10 +535,10 @@ impl ClickHouseDriver {
         }))
     }
 
-    pub async fn kill_query(&self, query_id: &str) -> Result<(), String> {
+    pub async fn kill_query(&self, query_id: &str) -> DriverResult<()> {
         let qid = query_id.trim();
         if qid.is_empty() {
-            return Err("[VALIDATION_ERROR] query_id cannot be empty".to_string().into());
+            return Err(AppError::validation("query_id cannot be empty"));
         }
         let sql = format!("KILL QUERY WHERE query_id = {} ASYNC", quote_literal(qid));
         self.execute_raw(&sql, None).await.map(|_| ())
@@ -739,7 +740,7 @@ impl DatabaseDriver for ClickHouseDriver {
             }
         }
 
-        Err("[QUERY_ERROR] SHOW CREATE TABLE returned empty result".to_string().into())
+        Err(AppError::query_failed("SHOW CREATE TABLE returned empty result"))
     }
 
     async fn get_table_data(
@@ -802,7 +803,7 @@ impl DatabaseDriver for ClickHouseDriver {
             }
         } else if let Some(ref col) = sort_column {
             if !col.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string().into());
+                return Err(AppError::validation("Invalid sort column name"));
             }
             let dir = match sort_direction.as_deref() {
                 Some("desc") => "DESC",
@@ -877,7 +878,7 @@ impl DatabaseDriver for ClickHouseDriver {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
+            return Err(AppError::query_failed("Empty SQL statement"));
         }
 
         // Single statement: keep original behavior
@@ -950,10 +951,10 @@ impl DatabaseDriver for ClickHouseDriver {
                 } else {
                     raw.body.clone()
                 };
-                return Err(format!(
-                    "[PARSE_ERROR] Unable to determine affected rows from ClickHouse response. body: {}",
+                return Err(AppError::query_failed(format!(
+                    "Unable to determine affected rows from ClickHouse response. body: {}",
                     snippet
-                ).into());
+                )));
             };
             let duration = start.elapsed();
             return Ok(QueryResult {
@@ -969,7 +970,7 @@ impl DatabaseDriver for ClickHouseDriver {
 
         // Multiple statements: execute each and collect results
         let mut result_sets = Vec::new();
-        let mut last_error: Option<String> = None;
+        let mut last_error: Option<AppError> = None;
 
         for (idx, statement) in statements.iter().enumerate() {
             let keyword = super::first_sql_keyword(statement);
@@ -1045,7 +1046,7 @@ impl DatabaseDriver for ClickHouseDriver {
                 columns: vec![],
                 time_taken_ms: duration.as_millis() as i64,
                 success: false,
-                error: Some(err),
+                error: Some(err.to_string()),
                 result_sets: Some(result_sets),
             });
         }
