@@ -265,7 +265,7 @@ async fn test_mssql_command_create_database_by_id_invalid_name_returns_validatio
     let result = connection::create_database_by_id_direct(&ctx.state, ctx.conn_id, payload).await;
     assert!(result.is_err());
     let err = result.err().unwrap_or_default();
-    assert!(err.contains("[VALIDATION_ERROR]"));
+    assert!(err.contains("[ERR-3001]"));
 
     delete_stateful_connection(&ctx.state, ctx.conn_id).await;
 }

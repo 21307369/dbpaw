@@ -323,7 +323,7 @@ async fn test_doris_command_get_table_data_by_conn_invalid_pagination_returns_er
             .await;
     assert!(result.is_err());
     let error = result.err().unwrap_or_default();
-    assert!(error.contains("[VALIDATION_ERROR]"));
+    assert!(error.contains("[ERR-3001]"));
 
     cleanup_database(&form, &db_name).await;
 }

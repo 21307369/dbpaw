@@ -430,7 +430,7 @@ async fn test_starrocks_command_get_table_data_by_conn_invalid_pagination_return
             .await;
     assert!(result.is_err());
     let error = result.err().unwrap_or_default();
-    assert!(error.contains("[VALIDATION_ERROR]"));
+    assert!(error.contains("[ERR-3001]"));
 
     cleanup_table(&form_with_db, &db_name, &table).await;
     let _ = MysqlDriver::connect(&form)

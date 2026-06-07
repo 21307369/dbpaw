@@ -272,7 +272,7 @@ async fn test_sqlite_get_table_data_rejects_invalid_sort_column() {
         .await;
     let err = result.expect_err("invalid sort column should return error");
     assert!(
-        err.contains("[VALIDATION_ERROR] Invalid sort column name"),
+        err.contains("[ERR-3001] Invalid sort column name"),
         "unexpected error: {}",
         err
     );
@@ -650,7 +650,7 @@ async fn test_sqlite_error_handling_for_sql_error() {
         .await
         .expect_err("invalid SQL should return query error");
     assert!(
-        err.contains("[QUERY_ERROR]"),
+        err.contains("[ERR-2001]"),
         "unexpected error shape: {}",
         err
     );
@@ -776,7 +776,7 @@ async fn test_sqlite_connection_failure_with_invalid_file_path() {
         Err(err) => err,
     };
     assert!(
-        err.starts_with("[CONN_FAILED]"),
+        err.starts_with("[ERR-1001]"),
         "unexpected error: {}",
         err
     );
@@ -832,7 +832,7 @@ async fn test_sqlite_lock_conflict_or_busy_error() {
         .await
         .expect_err("concurrent write under lock should fail");
     assert!(
-        err.contains("[QUERY_ERROR]"),
+        err.contains("[ERR-2001]"),
         "unexpected lock error shape: {}",
         err
     );

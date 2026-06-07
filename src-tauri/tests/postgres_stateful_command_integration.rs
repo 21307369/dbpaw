@@ -218,7 +218,7 @@ async fn test_postgres_command_create_database_by_id_invalid_name_returns_valida
     let result = connection::create_database_by_id_direct(&state, conn_id, payload).await;
     assert!(result.is_err());
     let err = result.err().unwrap_or_default();
-    assert!(err.contains("[VALIDATION_ERROR]"));
+    assert!(err.contains("[ERR-3001]"));
 
     let _ = connection::delete_connection_direct(&state, conn_id).await;
 }

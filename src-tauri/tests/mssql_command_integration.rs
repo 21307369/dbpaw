@@ -307,7 +307,7 @@ async fn test_mssql_command_get_table_data_by_conn_invalid_pagination_returns_er
     let result = query::get_table_data_by_conn(form.clone(), schema, table.clone(), 0, 10).await;
     assert!(result.is_err());
     let error = result.err().unwrap_or_default();
-    assert!(error.contains("[VALIDATION_ERROR]"));
+    assert!(error.contains("[ERR-3001]"));
 
     cleanup_table(&form, &table).await;
 }

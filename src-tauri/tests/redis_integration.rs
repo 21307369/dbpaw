@@ -821,7 +821,7 @@ async fn json_write_rejects_invalid_payload() {
 
     let err = redis::set_key(&mut conn, payload).await.unwrap_err();
     assert!(
-        err.contains("[VALIDATION_ERROR] Invalid JSON"),
+        err.contains("[ERR-3001] Invalid JSON"),
         "unexpected error: {err}"
     );
 

@@ -433,7 +433,7 @@ async fn test_oracle_command_get_table_data_invalid_pagination_returns_error() {
         query::get_table_data_by_conn(form.clone(), schema.clone(), table.clone(), 0, 10).await;
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(err.contains("[VALIDATION_ERROR]"));
+    assert!(err.contains("[ERR-3001]"));
 
     cleanup_table(&schema, &table, &form).await;
 }

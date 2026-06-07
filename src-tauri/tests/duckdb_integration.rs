@@ -248,7 +248,7 @@ async fn test_duckdb_get_table_data_rejects_invalid_sort_column() {
         .await;
     let err = result.expect_err("invalid sort column should return error");
     assert!(
-        err.contains("[VALIDATION_ERROR] Invalid sort column name"),
+        err.contains("[ERR-3001] Invalid sort column name"),
         "unexpected error: {}",
         err
     );
@@ -579,7 +579,7 @@ async fn test_duckdb_error_handling_for_sql_error() {
         .await
         .expect_err("invalid SQL should return query error");
     assert!(
-        err.contains("[QUERY_ERROR]"),
+        err.contains("[ERR-2001]"),
         "unexpected error shape: {}",
         err
     );
@@ -602,7 +602,7 @@ async fn test_duckdb_connection_failure_with_invalid_path() {
         Err(err) => err,
     };
     assert!(
-        err.starts_with("[CONN_FAILED]"),
+        err.starts_with("[ERR-1001]"),
         "unexpected error: {}",
         err
     );
@@ -626,7 +626,7 @@ async fn test_duckdb_database_locked_error() {
         }
         Err(err) => {
             assert!(
-                err.starts_with("[CONN_FAILED]") || err.contains("busy") || err.contains("locked"),
+                err.starts_with("[ERR-1001]") || err.contains("busy") || err.contains("locked"),
                 "expected lock/busy error, got: {}",
                 err
             );
