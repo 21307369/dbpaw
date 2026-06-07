@@ -26,7 +26,9 @@ async fn connection_form(
 }
 
 async fn driver_from_id(state: &State<'_, AppState>, id: i64) -> Result<MongoDBDriver, String> {
-    MongoDBDriver::connect(&connection_form(state, id).await?).await
+    MongoDBDriver::connect(&connection_form(state, id).await?)
+        .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -38,6 +40,7 @@ pub async fn mongodb_test_connection(
         .await?
         .test_connection_info()
         .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -45,7 +48,7 @@ pub async fn mongodb_test_connection_ephemeral(
     form: crate::models::ConnectionForm,
 ) -> Result<TestConnectionResult, String> {
     let started = Instant::now();
-    let driver = MongoDBDriver::connect(&form).await?;
+    let driver = MongoDBDriver::connect(&form).await.map_err(String::from)?;
     match driver.test_connection_info().await {
         Ok(info) => Ok(TestConnectionResult {
             success: true,
@@ -55,7 +58,7 @@ pub async fn mongodb_test_connection_ephemeral(
             ),
             latency_ms: Some(started.elapsed().as_millis() as i64),
         }),
-        Err(e) => Err(e),
+        Err(e) => Err(String::from(e)),
     }
 }
 
@@ -68,6 +71,7 @@ pub async fn mongodb_list_databases(
         .await?
         .list_databases_info()
         .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -80,4 +84,5 @@ pub async fn mongodb_list_collections(
         .await?
         .list_collections_info(&database)
         .await
+        .map_err(String::from)
 }

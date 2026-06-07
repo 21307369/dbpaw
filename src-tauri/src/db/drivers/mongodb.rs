@@ -1,4 +1,5 @@
 use super::{DatabaseDriver, DriverResult};
+use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, IndexInfo, QueryColumn, QueryResult, SchemaOverview,
     SingleResultSet, TableDataResponse, TableInfo, TableMetadata, TableSchema, TableStructure,
@@ -26,27 +27,27 @@ fn trim_to_option(value: Option<&String>) -> Option<String> {
         .and_then(|v| if v.is_empty() { None } else { Some(v) })
 }
 
-fn normalize_mongo_error(e: impl std::fmt::Display) -> String {
+fn normalize_mongo_error(e: impl std::fmt::Display) -> AppError {
     let msg = e.to_string();
     if msg.contains("authentication") || msg.contains("auth") {
-        format!("[MONGODB_ERROR] Authentication failed: {}", msg)
+        AppError::conn_auth_failed(format!("Authentication failed: {}", msg))
     } else if msg.contains("dns") || msg.contains("resolve") || msg.contains("lookup") {
-        format!("[MONGODB_ERROR] DNS resolution failed: {}", msg)
+        AppError::conn_failed(format!("DNS resolution failed: {}", msg), "Check hostname")
     } else if msg.contains("timeout") || msg.contains("timed out") {
-        format!("[MONGODB_ERROR] Connection timed out: {}", msg)
+        AppError::conn_timeout(format!("Connection timed out: {}", msg))
     } else if msg.contains("refused") {
-        format!("[MONGODB_ERROR] Connection refused: {}", msg)
+        AppError::conn_failed(format!("Connection refused: {}", msg), "Check host and port")
     } else {
-        format!("[MONGODB_ERROR] {}", msg)
+        AppError::internal(format!("MongoDB error: {}", msg))
     }
 }
 
-fn build_connection_uri(form: &ConnectionForm) -> Result<String, String> {
+fn build_connection_uri(form: &ConnectionForm) -> DriverResult<String> {
     let host = trim_to_option(form.host.as_ref())
-        .ok_or_else(|| "[VALIDATION_ERROR] host cannot be empty".to_string())?;
+        .ok_or_else(|| AppError::validation("host cannot be empty"))?;
     let port = form.port.unwrap_or(DEFAULT_MONGODB_PORT);
     if !(1..=65535).contains(&port) {
-        return Err("[VALIDATION_ERROR] port must be between 1 and 65535".to_string().into());
+        return Err(AppError::validation("port must be between 1 and 65535"));
     }
 
     let username = trim_to_option(form.username.as_ref());
@@ -93,18 +94,18 @@ fn build_connection_uri(form: &ConnectionForm) -> Result<String, String> {
 }
 
 /// Parse a JSON string into a BSON Document, returning a user-friendly error on failure.
-fn parse_json_doc(json_str: &str, label: &str) -> Result<Document, String> {
+fn parse_json_doc(json_str: &str, label: &str) -> DriverResult<Document> {
     let trimmed = json_str.trim();
     if trimmed.is_empty() {
         return Ok(Document::new());
     }
     let value: serde_json::Value = serde_json::from_str(trimmed)
-        .map_err(|e| format!("[VALIDATION_ERROR] Invalid {} JSON: {}", label, e))?;
+        .map_err(|e| AppError::validation(format!("Invalid {} JSON: {}", label, e)))?;
     mongodb::bson::to_document(&value).map_err(|e| {
-        format!(
-            "[VALIDATION_ERROR] Failed to convert {} to BSON: {}",
+        AppError::validation(format!(
+            "Failed to convert {} to BSON: {}",
             label, e
-        )
+        ))
     })
 }
 
@@ -201,7 +202,7 @@ pub struct MongodbCollectionInfo {
 }
 
 impl MongoDBDriver {
-    pub async fn connect(form: &ConnectionForm) -> Result<Self, String> {
+    pub async fn connect(form: &ConnectionForm) -> DriverResult<Self> {
         let timeout_ms = form
             .connect_timeout_ms
             .filter(|&v| v > 0)
@@ -227,9 +228,10 @@ impl MongoDBDriver {
             let ssl_mode = trim_to_option(effective_form.ssl_mode.as_ref());
             if ssl_mode.as_deref() == Some("verify_ca") {
                 let ca_cert =
-                    trim_to_option(effective_form.ssl_ca_cert.as_ref()).ok_or_else(|| {
-                        "[VALIDATION_ERROR] sslCaCert cannot be empty in verify_ca mode".to_string()
-                    })?;
+                    trim_to_option(effective_form.ssl_ca_cert.as_ref())
+                        .ok_or_else(|| {
+                            AppError::validation("sslCaCert cannot be empty in verify_ca mode")
+                        })?;
                 let tls_options = TlsOptions::builder()
                     .ca_file_path(std::path::PathBuf::from(ca_cert))
                     .build();
@@ -264,7 +266,7 @@ impl MongoDBDriver {
         &self,
         db_name: &str,
         collection_name: &str,
-    ) -> Result<Vec<ColumnInfo>, String> {
+    ) -> DriverResult<Vec<ColumnInfo>> {
         let collection = self
             .client
             .database(db_name)
@@ -322,7 +324,7 @@ impl MongoDBDriver {
         mut cursor: mongodb::Cursor<Document>,
         statement: &str,
         start: Instant,
-    ) -> Result<QueryResult, String> {
+    ) -> DriverResult<QueryResult> {
         let mut data = Vec::new();
         let mut columns_set = HashSet::new();
 
@@ -369,7 +371,7 @@ impl MongoDBDriver {
     async fn collect_cursor(
         &self,
         mut cursor: mongodb::Cursor<Document>,
-    ) -> Result<Vec<Value>, String> {
+    ) -> DriverResult<Vec<Value>> {
         let mut rows = Vec::new();
         while cursor.advance().await.map_err(normalize_mongo_error)? {
             let doc = cursor
@@ -380,7 +382,7 @@ impl MongoDBDriver {
         Ok(rows)
     }
 
-    pub async fn test_connection_info(&self) -> Result<MongodbConnectionInfo, String> {
+    pub async fn test_connection_info(&self) -> DriverResult<MongodbConnectionInfo> {
         let db = self.get_database("admin");
         let result = db
             .run_command(doc! { "serverStatus": 1 })
@@ -399,7 +401,7 @@ impl MongoDBDriver {
         })
     }
 
-    pub async fn list_databases_info(&self) -> Result<Vec<MongodbDatabaseInfo>, String> {
+    pub async fn list_databases_info(&self) -> DriverResult<Vec<MongodbDatabaseInfo>> {
         let databases = self
             .client
             .list_databases()
@@ -418,7 +420,7 @@ impl MongoDBDriver {
     pub async fn list_collections_info(
         &self,
         database: &str,
-    ) -> Result<Vec<MongodbCollectionInfo>, String> {
+    ) -> DriverResult<Vec<MongodbCollectionInfo>> {
         let db = self.client.database(database);
         let mut cursor = db.list_collections().await.map_err(normalize_mongo_error)?;
 
@@ -546,11 +548,11 @@ impl DatabaseDriver for MongoDBDriver {
                 .map_err(normalize_mongo_error)?;
             if info.name == table {
                 return serde_json::to_string_pretty(&info)
-                    .map_err(|e| format!("[SERIALIZE_ERROR] {}", e).into());
+                    .map_err(|e| AppError::internal(format!("Serialization failed: {}", e)));
             }
         }
 
-        Err(format!("[NOT_FOUND] Collection '{}' not found", table).into())
+        Err(AppError::not_found(format!("Collection '{}' not found", table)))
     }
 
     async fn get_table_data(
@@ -639,15 +641,15 @@ impl DatabaseDriver for MongoDBDriver {
         let trimmed = query.trim();
 
         if trimmed.is_empty() {
-            return Err("[QUERY_ERROR] Empty query".to_string().into());
+            return Err(AppError::query_failed("Empty query"));
         }
 
         let parsed: serde_json::Value = serde_json::from_str(trimmed)
-            .map_err(|e| format!("[QUERY_ERROR] Invalid JSON: {}", e))?;
+            .map_err(|e| AppError::query_failed(format!("Invalid JSON: {}", e)))?;
 
         let obj = parsed
             .as_object()
-            .ok_or_else(|| "[QUERY_ERROR] Query must be a JSON object".to_string())?;
+            .ok_or_else(|| AppError::query_failed("Query must be a JSON object"))?;
 
         let db_name = obj
             .get("$db")
@@ -678,8 +680,7 @@ impl DatabaseDriver for MongoDBDriver {
             let cursor = builder.await.map_err(normalize_mongo_error)?;
             return self
                 .cursor_to_query_result(cursor, trimmed, start)
-                .await
-                .map_err(crate::error::AppError::from);
+                .await;
         }
 
         // --- aggregate command ---
@@ -687,13 +688,13 @@ impl DatabaseDriver for MongoDBDriver {
             let pipeline = obj
                 .get("pipeline")
                 .and_then(|v| v.as_array())
-                .ok_or_else(|| "[QUERY_ERROR] aggregate requires 'pipeline' array".to_string())?;
+                .ok_or_else(|| AppError::query_failed("aggregate requires 'pipeline' array"))?;
 
             let bson_pipeline: Vec<Document> = pipeline
                 .iter()
                 .map(|stage| {
                     mongodb::bson::to_document(stage)
-                        .map_err(|e| format!("[QUERY_ERROR] Invalid pipeline stage: {}", e))
+                        .map_err(|e| AppError::query_failed(format!("Invalid pipeline stage: {}", e)))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -707,11 +708,10 @@ impl DatabaseDriver for MongoDBDriver {
                 .map_err(normalize_mongo_error)?;
             return self
                 .cursor_to_query_result(cursor, trimmed, start)
-                .await
-                .map_err(crate::error::AppError::from);
+                .await;
         }
 
-        Err("[QUERY_ERROR] Unsupported query format. Use {\"find\": \"collection\", ...} or {\"aggregate\": \"collection\", \"pipeline\": [...]}" .to_string().into())
+        Err(AppError::query_failed("Unsupported query format. Use {\"find\": \"collection\", ...} or {\"aggregate\": \"collection\", \"pipeline\": [...]}"))
     }
 
     async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
@@ -847,10 +847,19 @@ mod tests {
 
     #[test]
     fn normalize_error_categorization() {
-        assert!(normalize_mongo_error("authentication failed").contains("Authentication failed"));
-        assert!(normalize_mongo_error("dns resolve error").contains("DNS resolution failed"));
-        assert!(normalize_mongo_error("connection timed out").contains("Connection timed out"));
-        assert!(normalize_mongo_error("connection refused").contains("Connection refused"));
-        assert!(normalize_mongo_error("some other error").starts_with("[MONGODB_ERROR]"));
+        let auth_err = normalize_mongo_error("authentication failed");
+        assert!(auth_err.to_string().contains("Authentication failed"));
+
+        let dns_err = normalize_mongo_error("dns resolve error");
+        assert!(dns_err.to_string().contains("DNS resolution failed"));
+
+        let timeout_err = normalize_mongo_error("connection timed out");
+        assert!(timeout_err.to_string().contains("Connection timed out"));
+
+        let refused_err = normalize_mongo_error("connection refused");
+        assert!(refused_err.to_string().contains("Connection refused"));
+
+        let other_err = normalize_mongo_error("some other error");
+        assert!(other_err.to_string().contains("MongoDB error"));
     }
 }
