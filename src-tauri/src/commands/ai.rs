@@ -848,3 +848,20 @@ mod tests {
         assert_eq!(final_messages[3].content, "latest question");
     }
 }
+
+#[macro_export]
+macro_rules! ai_commands {
+    () => {
+        $crate::commands::ai::ai_list_providers,
+        $crate::commands::ai::ai_create_provider,
+        $crate::commands::ai::ai_update_provider,
+        $crate::commands::ai::ai_delete_provider,
+        $crate::commands::ai::ai_set_default_provider,
+        $crate::commands::ai::ai_clear_provider_api_key,
+        $crate::commands::ai::ai_chat_start,
+        $crate::commands::ai::ai_chat_continue,
+        $crate::commands::ai::ai_list_conversations,
+        $crate::commands::ai::ai_get_conversation,
+        $crate::commands::ai::ai_delete_conversation,
+    };
+}

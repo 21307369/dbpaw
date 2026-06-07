@@ -327,3 +327,23 @@ mod tests {
         assert!(err.contains("orders"));
     }
 }
+
+#[macro_export]
+macro_rules! metadata_commands {
+    () => {
+        $crate::commands::metadata::list_tables,
+        $crate::commands::metadata::list_routines,
+        $crate::commands::metadata::list_events,
+        $crate::commands::metadata::list_sequences,
+        $crate::commands::metadata::list_types,
+        $crate::commands::metadata::list_synonyms,
+        $crate::commands::metadata::list_packages,
+        $crate::commands::metadata::get_table_structure,
+        $crate::commands::metadata::get_table_ddl,
+        $crate::commands::metadata::get_routine_ddl,
+        $crate::commands::metadata::get_table_metadata,
+        $crate::commands::metadata::get_schema_overview,
+        $crate::commands::metadata::get_schema_foreign_keys,
+        $crate::commands::metadata::list_tables_by_conn,
+    };
+}

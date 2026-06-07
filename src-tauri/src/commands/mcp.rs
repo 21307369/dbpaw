@@ -297,3 +297,15 @@ pub async fn mcp_configure_client(
 
     Ok(format!("Configured {} for DbPaw MCP", client_name))
 }
+
+#[macro_export]
+macro_rules! mcp_commands {
+    () => {
+        $crate::commands::mcp::mcp_status,
+        $crate::commands::mcp::mcp_start,
+        $crate::commands::mcp::mcp_stop,
+        $crate::commands::mcp::mcp_get_tools,
+        $crate::commands::mcp::mcp_detect_clients,
+        $crate::commands::mcp::mcp_configure_client,
+    };
+}

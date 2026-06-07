@@ -111,3 +111,13 @@ pub async fn get_saved_queries_direct(state: &AppState) -> Result<Vec<SavedQuery
         Err("Local DB not initialized".to_string())
     }
 }
+
+#[macro_export]
+macro_rules! storage_commands {
+    () => {
+        $crate::commands::storage::save_query,
+        $crate::commands::storage::get_saved_queries,
+        $crate::commands::storage::update_saved_query,
+        $crate::commands::storage::delete_saved_query,
+    };
+}

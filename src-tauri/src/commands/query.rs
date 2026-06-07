@@ -817,3 +817,15 @@ mod tests {
         assert!(generated.starts_with("q-7-"));
     }
 }
+
+#[macro_export]
+macro_rules! query_commands {
+    () => {
+        $crate::commands::query::execute_query,
+        $crate::commands::query::get_table_data,
+        $crate::commands::query::cancel_query,
+        $crate::commands::query::get_table_data_by_conn,
+        $crate::commands::query::execute_by_conn,
+        $crate::commands::query::list_sql_execution_logs,
+    };
+}
