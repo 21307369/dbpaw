@@ -1,4 +1,4 @@
-use super::{DatabaseDriver, DriverResult, strip_trailing_statement_terminator};
+use super::{strip_trailing_statement_terminator, DatabaseDriver, DriverResult};
 use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
@@ -8,7 +8,7 @@ use crate::models::{
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rust_decimal::Decimal;
-use sqlx::{Column, Executor, Row, TypeInfo as PgTypeInfo, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, Column, Executor, Row, TypeInfo as PgTypeInfo};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -32,14 +32,16 @@ pub struct PostgresDriver {
 
 fn write_temp_cert_file(prefix: &str, pem: &str) -> DriverResult<PathBuf> {
     let dir = std::env::temp_dir().join("dbpaw_certs");
-    fs::create_dir_all(&dir).map_err(|e| AppError::internal_with("Failed to create cert directory", e))?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| AppError::internal_with("Failed to create cert directory", e))?;
     let path = dir.join(format!("{prefix}_{}.pem", uuid::Uuid::new_v4()));
     fs::write(&path, pem).map_err(|e| AppError::internal_with("Failed to write cert file", e))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let perm = fs::Permissions::from_mode(0o600);
-        fs::set_permissions(&path, perm).map_err(|e| AppError::internal_with("Failed to set cert file permissions", e))?;
+        fs::set_permissions(&path, perm)
+            .map_err(|e| AppError::internal_with("Failed to set cert file permissions", e))?;
     }
     Ok(path)
 }
@@ -599,14 +601,11 @@ impl PostgresDriver {
         &self,
         schema: &str,
         table: &str,
-    ) -> Result<
-        (
-            Vec<PgKeyConstraint>,
-            Vec<ForeignKeyInfo>,
-            Vec<(String, String)>,
-        ),
-        String,
-    > {
+    ) -> DriverResult<(
+        Vec<PgKeyConstraint>,
+        Vec<ForeignKeyInfo>,
+        Vec<(String, String)>,
+    )> {
         let rows = sqlx::query(
             r#"
             SELECT
@@ -973,7 +972,11 @@ fn extract_pg_index_columns(full_def: &str) -> Option<Vec<String>> {
         .map(|c| c.trim().trim_matches('"').to_string())
         .filter(|c| !c.is_empty())
         .collect();
-    if cols.is_empty() { None } else { Some(cols) }
+    if cols.is_empty() {
+        None
+    } else {
+        Some(cols)
+    }
 }
 
 fn render_pg_create_table_ddl(
