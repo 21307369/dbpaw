@@ -1,4 +1,5 @@
-use super::{DatabaseDriver, DriverResult};
+use super::{conn_failed_error, DatabaseDriver, DriverResult};
+use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
     SchemaForeignKey, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata,
@@ -18,12 +19,12 @@ pub struct SqliteDriver {
 }
 
 impl SqliteDriver {
-    pub async fn connect(form: &ConnectionForm) -> Result<Self, String> {
+    pub async fn connect(form: &ConnectionForm) -> DriverResult<Self> {
         let file_path = form
             .file_path
             .as_deref()
             .filter(|v| !v.trim().is_empty())
-            .ok_or("[VALIDATION_ERROR] file_path cannot be empty")?;
+            .ok_or(AppError::validation("file_path cannot be empty"))?;
 
         let mut opts = SqliteConnectOptions::new()
             .filename(file_path)
@@ -40,21 +41,24 @@ impl SqliteDriver {
             .await
             .map_err(|e| {
                 if e.to_string().contains("not a database") {
-                    "[CONN_FAILED] Cannot open database: the file is encrypted or the key is incorrect. Please provide the correct SQLCipher passphrase.".to_string()
+                    AppError::conn_failed(
+                        "Cannot open database: the file is encrypted or the key is incorrect. Please provide the correct SQLCipher passphrase.",
+                        "Check that the file is a valid SQLite database or provide the correct SQLCipher passphrase",
+                    )
                 } else {
-                    format!("[CONN_FAILED] {e}")
+                    conn_failed_error(&e)
                 }
             })?;
 
         Ok(Self { pool })
     }
 
-    async fn describe_query_columns(&self, sql: &str) -> Result<Vec<QueryColumn>, String> {
+    async fn describe_query_columns(&self, sql: &str) -> DriverResult<Vec<QueryColumn>> {
         let describe = self
             .pool
             .describe(sql)
             .await
-            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+            .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
         Ok(describe
             .columns()
@@ -156,15 +160,15 @@ fn sqlite_cell_to_json(
     row: &sqlx::sqlite::SqliteRow,
     column_name: &str,
     declared_type: Option<&str>,
-) -> Result<serde_json::Value, String> {
+) -> DriverResult<serde_json::Value> {
     let temporal_kind = sqlite_temporal_decl_kind(declared_type);
     let declared_bool = sqlite_declared_bool(declared_type);
 
     let raw = row.try_get_raw(column_name).map_err(|e| {
-        format!(
-            "[QUERY_ERROR] Failed to read SQLite column '{}': {}",
+        AppError::query_failed(format!(
+            "Failed to read SQLite column '{}': {}",
             column_name, e
-        )
+        ))
     })?;
     if raw.is_null() {
         return Ok(serde_json::Value::Null);
@@ -174,10 +178,10 @@ fn sqlite_cell_to_json(
     Ok(match runtime_type.as_str() {
         "INTEGER" => {
             let v = row.try_get::<i64, _>(column_name).map_err(|e| {
-                format!(
-                    "[QUERY_ERROR] Failed to decode SQLite INTEGER column '{}': {}",
+                AppError::query_failed(format!(
+                    "Failed to decode SQLite INTEGER column '{}': {}",
                     column_name, e
-                )
+                ))
             })?;
             if declared_bool {
                 serde_json::Value::Bool(v != 0)
@@ -211,10 +215,10 @@ fn sqlite_cell_to_json(
         }
         "REAL" => {
             let v = row.try_get::<f64, _>(column_name).map_err(|e| {
-                format!(
-                    "[QUERY_ERROR] Failed to decode SQLite REAL column '{}': {}",
+                AppError::query_failed(format!(
+                    "Failed to decode SQLite REAL column '{}': {}",
                     column_name, e
-                )
+                ))
             })?;
             if let Some(kind) = temporal_kind {
                 match kind {
@@ -240,10 +244,10 @@ fn sqlite_cell_to_json(
         }
         "TEXT" => {
             let s = row.try_get::<String, _>(column_name).map_err(|e| {
-                format!(
-                    "[QUERY_ERROR] Failed to decode SQLite TEXT column '{}': {}",
+                AppError::query_failed(format!(
+                    "Failed to decode SQLite TEXT column '{}': {}",
                     column_name, e
-                )
+                ))
             })?;
             if let Some(kind) = temporal_kind {
                 sqlite_normalize_temporal_text(&s, kind)
@@ -255,10 +259,10 @@ fn sqlite_cell_to_json(
         }
         "BLOB" => {
             let x = row.try_get::<Vec<u8>, _>(column_name).map_err(|e| {
-                format!(
-                    "[QUERY_ERROR] Failed to decode SQLite BLOB column '{}': {}",
+                AppError::query_failed(format!(
+                    "Failed to decode SQLite BLOB column '{}': {}",
                     column_name, e
-                )
+                ))
             })?;
             serde_json::Value::String(String::from_utf8_lossy(&x).to_string())
         }
@@ -268,10 +272,10 @@ fn sqlite_cell_to_json(
             } else if let Ok(v) = row.try_get::<Vec<u8>, _>(column_name) {
                 serde_json::Value::String(String::from_utf8_lossy(&v).to_string())
             } else {
-                return Err(format!(
-                    "[QUERY_ERROR] Unsupported SQLite runtime type '{}' for column '{}'",
+                return Err(AppError::query_failed(format!(
+                    "Unsupported SQLite runtime type '{}' for column '{}'",
                     runtime_type, column_name
-                ));
+                )));
             }
         }
     })
@@ -282,12 +286,12 @@ impl SqliteDriver {
         &self,
         schema: &str,
         table: &str,
-    ) -> Result<HashMap<String, String>, String> {
+    ) -> DriverResult<HashMap<String, String>> {
         let sql = pragma_table_info_sql(schema, table);
         let rows = sqlx::query(&sql)
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| format!("[QUERY_ERROR] SQL: {} | {}", sql, e))?;
+            .map_err(|e| AppError::query_failed(format!("SQL: {} | {}", sql, e)))?;
         let mut map = HashMap::new();
         for row in rows {
             let name = row.try_get::<String, _>("name").unwrap_or_default();
@@ -302,7 +306,7 @@ impl SqliteDriver {
     async fn execute_single_statement(
         &self,
         sql: &str,
-    ) -> Result<(Vec<QueryColumn>, Vec<serde_json::Value>, i64), String> {
+    ) -> DriverResult<(Vec<QueryColumn>, Vec<serde_json::Value>, i64)> {
         let first_keyword = super::first_sql_keyword(sql);
         let sql_lower = sql.to_lowercase();
         let should_fetch_rows = matches!(
@@ -314,7 +318,7 @@ impl SqliteDriver {
             let rows = sqlx::query(sql)
                 .fetch_all(&self.pool)
                 .await
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
             let mut data = Vec::new();
             let columns = if let Some(first_row) = rows.first() {
@@ -345,7 +349,7 @@ impl SqliteDriver {
             let exec = sqlx::query(sql)
                 .execute(&self.pool)
                 .await
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             Ok((Vec::new(), Vec::new(), exec.rows_affected() as i64))
         }
     }
@@ -405,7 +409,7 @@ impl DatabaseDriver for SqliteDriver {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+        .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
         let mut foreign_keys = Vec::new();
         for table in tables {
@@ -415,7 +419,7 @@ impl DatabaseDriver for SqliteDriver {
             ))
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+            .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
             for row in rows {
                 let target_table: String = row.try_get(2).unwrap_or_default();
@@ -455,7 +459,7 @@ impl DatabaseDriver for SqliteDriver {
         sqlx::query("SELECT 1")
             .execute(&self.pool)
             .await
-            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+            .map_err(|e| AppError::query_failed(format!("{e}")))?;
         Ok(())
     }
 
@@ -476,7 +480,7 @@ impl DatabaseDriver for SqliteDriver {
         ))
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+        .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
         let mut tables = Vec::new();
         for row in rows {
@@ -503,7 +507,7 @@ impl DatabaseDriver for SqliteDriver {
         let rows = sqlx::query(&pragma_table_info_sql(&schema, &table))
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+            .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
         let mut columns = Vec::new();
         for row in rows {
@@ -542,7 +546,7 @@ impl DatabaseDriver for SqliteDriver {
         ))
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+        .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
         let mut indexes = Vec::new();
         for idx_row in idx_rows {
@@ -559,7 +563,7 @@ impl DatabaseDriver for SqliteDriver {
             ))
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+            .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
             let mut ordered: Vec<(i64, String)> = Vec::new();
             for r in info_rows {
@@ -587,7 +591,7 @@ impl DatabaseDriver for SqliteDriver {
         ))
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+        .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
         let mut foreign_keys = Vec::new();
         for row in fk_rows {
@@ -634,12 +638,13 @@ impl DatabaseDriver for SqliteDriver {
         .bind(&table)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+        .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
-        let row =
-            row.ok_or_else(|| format!("[QUERY_ERROR] Table or view '{}' not found", table))?;
+        let row = row.ok_or_else(|| {
+            AppError::query_failed(format!("Table or view '{}' not found", table))
+        })?;
         let sql: Option<String> = row.try_get("sql").unwrap_or(None);
-        sql.ok_or_else(|| format!("[QUERY_ERROR] Failed to read DDL for '{}'", table).into())
+        sql.ok_or_else(|| AppError::query_failed(format!("Failed to read DDL for '{}'", table)))
     }
 
     async fn get_table_data(
@@ -671,7 +676,7 @@ impl DatabaseDriver for SqliteDriver {
         let total: i64 = sqlx::query_scalar(&count_query)
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| format!("[QUERY_ERROR] SQL: {} | {}", count_query, e))?;
+            .map_err(|e| AppError::query_failed(format!("SQL: {} | {}", count_query, e)))?;
 
         let order_clause = if let Some(ref ob) = order_by {
             if !ob.trim().is_empty() {
@@ -681,7 +686,7 @@ impl DatabaseDriver for SqliteDriver {
             }
         } else if let Some(ref col) = sort_column {
             if !col.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string().into());
+                return Err(AppError::validation("Invalid sort column name"));
             }
             let dir = match sort_direction.as_deref() {
                 Some("desc") => "DESC",
@@ -701,7 +706,7 @@ impl DatabaseDriver for SqliteDriver {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| format!("[QUERY_ERROR] SQL: {} | {}", query, e))?;
+            .map_err(|e| AppError::query_failed(format!("SQL: {} | {}", query, e)))?;
         let declared_type_map = self.load_declared_type_map(&schema, &table).await?;
 
         let mut data = Vec::new();
@@ -757,7 +762,7 @@ impl DatabaseDriver for SqliteDriver {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
+            return Err(AppError::query_failed("Empty SQL statement"));
         }
 
         // Single statement: keep original behavior
@@ -792,7 +797,7 @@ impl DatabaseDriver for SqliteDriver {
                     });
                 }
                 Err(e) => {
-                    last_error = Some(e);
+                    last_error = Some(e.to_string());
                     break;
                 }
             }
@@ -891,7 +896,10 @@ mod tests {
         };
         let result = SqliteDriver::connect(&form).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("file_path cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("file_path cannot be empty"));
     }
 
     #[tokio::test]
