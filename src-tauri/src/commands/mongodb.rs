@@ -81,3 +81,13 @@ pub async fn mongodb_list_collections(
         .list_collections_info(&database)
         .await
 }
+
+#[macro_export]
+macro_rules! mongodb_commands {
+    () => {
+        $crate::commands::mongodb::mongodb_test_connection,
+        $crate::commands::mongodb::mongodb_test_connection_ephemeral,
+        $crate::commands::mongodb::mongodb_list_databases,
+        $crate::commands::mongodb::mongodb_list_collections,
+    };
+}
