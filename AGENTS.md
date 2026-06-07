@@ -8,6 +8,9 @@ it never happens again.
 
 - After modifying any `.rs` file, always run `cargo check` before declaring
   done. TypeScript compilation alone does not catch Rust errors.
+- In a dirty worktree, do not run broad `cargo fmt` for a narrow Rust change.
+  Format only the Rust files touched by the task so unrelated user WIP is not
+  rewritten.
 - Structured errors must cross the backend from the inside out. New or modified
   service/internal code should return `Result<T, AppError>` from
   `src-tauri/src/error.rs`; Tauri commands should convert to `String` only at
