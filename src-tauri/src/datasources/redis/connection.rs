@@ -1,3 +1,203 @@
+use crate::db::drivers::conn_failed_error;
+use crate::models::ConnectionForm;
+use redis::aio::{ConnectionLike, MultiplexedConnection};
+use redis::cluster::ClusterClient;
+use redis::cluster_async::ClusterConnection;
+use redis::cluster_routing::{
+    MultipleNodeRoutingInfo, ResponsePolicy, RoutingInfo, SingleNodeRoutingInfo,
+};
+use redis::sentinel::{Sentinel, SentinelNodeConnectionInfo};
+use redis::{
+    AsyncConnectionConfig, Cmd, ConnectionAddr, ConnectionInfo, FromRedisValue, ProtocolVersion,
+    RedisConnectionInfo, TlsMode,
+};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::Mutex as TokioMutex;
+
+const DEFAULT_REDIS_PORT: i64 = 6379;
+const DEFAULT_CONNECT_TIMEOUT_MS: i64 = 5000;
+
+/// Shareable Redis connection handle.
+/// Standalone uses MultiplexedConnection (Clone, shared underlying TCP).
+/// Cluster wraps ClusterConnection in Arc<Mutex> so it can be shared across commands.
+#[derive(Clone)]
+pub enum RedisConnection {
+    Standalone(MultiplexedConnection),
+    Cluster(Arc<TokioMutex<ClusterConnection>>),
+}
+
+pub struct RedisConnectionCache {
+    connections: HashMap<String, RedisConnection>,
+}
+
+impl RedisConnectionCache {
+    pub fn new() -> Self {
+        Self {
+            connections: HashMap::new(),
+        }
+    }
+
+    pub fn get(&self, key: &str) -> Option<RedisConnection> {
+        self.connections.get(key).cloned()
+    }
+
+    pub fn insert(&mut self, key: String, conn: RedisConnection) {
+        self.connections.insert(key, conn);
+    }
+
+    pub fn remove(&mut self, key: &str) {
+        self.connections.remove(key);
+    }
+
+    /// Remove all cached connections that belong to `connection_id`
+    /// (keys are formatted as `"{id}:{db}"` or `"{id}:cluster"`).
+    pub fn remove_by_connection_id(&mut self, connection_id: i64) {
+        let prefix = format!("{connection_id}:");
+        self.connections.retain(|k, _| !k.starts_with(&prefix));
+    }
+}
+
+impl RedisConnection {
+    pub fn is_cluster(&self) -> bool {
+        matches!(self, RedisConnection::Cluster(_))
+    }
+
+    pub async fn query<T: FromRedisValue>(&mut self, cmd: Cmd) -> error::RedisResult<T> {
+        match self {
+            RedisConnection::Standalone(inner) => query_on(inner, cmd).await,
+            RedisConnection::Cluster(arc) => {
+                let mut conn = arc.lock().await;
+                query_on(&mut *conn, cmd).await
+            }
+        }
+    }
+
+    pub async fn route_all_masters_combine_arrays<T: FromRedisValue>(
+        &mut self,
+        cmd: &Cmd,
+    ) -> error::RedisResult<T> {
+        let RedisConnection::Cluster(arc) = self else {
+            return Err(error::command("all-master routing requires Redis Cluster"));
+        };
+        let mut cluster = arc.lock().await;
+        let value = cluster
+            .route_command(
+                cmd,
+                RoutingInfo::MultiNode((
+                    MultipleNodeRoutingInfo::AllMasters,
+                    Some(ResponsePolicy::CombineArrays),
+                )),
+            )
+            .await
+            .map_err(|e| error::to_command_error(e))?;
+        from_redis_value(&value).map_err(|e| error::to_command_error(e))
+    }
+
+    pub async fn pipe_query<T: FromRedisValue>(
+        &mut self,
+        pipe: &mut redis::Pipeline,
+    ) -> error::RedisResult<T> {
+        match self {
+            RedisConnection::Standalone(inner) => pipe
+                .query_async(inner)
+                .await
+                .map_err(|e| error::to_command_error(e)),
+            RedisConnection::Cluster(arc) => {
+                let mut conn = arc.lock().await;
+                pipe.query_async(&mut *conn)
+                    .await
+                    .map_err(|e| error::to_command_error(e))
+            }
+        }
+    }
+
+    pub async fn query_on_node<T: FromRedisValue>(
+        &mut self,
+        host: &str,
+        port: u16,
+        cmd: Cmd,
+    ) -> error::RedisResult<T> {
+        let RedisConnection::Cluster(arc) = self else {
+            return self.query(cmd).await;
+        };
+        let mut cluster = arc.lock().await;
+        let routing = RoutingInfo::SingleNode(SingleNodeRoutingInfo::ByAddress {
+            host: host.to_string(),
+            port,
+        });
+        let value = cluster
+            .route_command(&cmd, routing)
+            .await
+            .map_err(|e| error::to_command_error(e))?;
+        from_redis_value(&value).map_err(|e| error::to_command_error(e))
+    }
+}
+
+fn parse_database(database: Option<&str>) -> error::RedisResult<i64> {
+    let Some(raw) = database else {
+        return Ok(0);
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(0);
+    }
+    let normalized = trimmed.strip_prefix("db").unwrap_or(trimmed);
+    let db = normalized
+        .parse::<i64>()
+        .map_err(|_| error::validation("Redis database must be a numeric index"))?;
+    if !(0..=255).contains(&db) {
+        return Err(error::validation(
+            "Redis database must be between 0 and 255",
+        ));
+    }
+    Ok(db)
+}
+
+fn selected_database(form: &ConnectionForm, database: Option<&str>) -> error::RedisResult<i64> {
+    match database {
+        Some(db) => parse_database(Some(db)),
+        None => parse_database(form.database.as_deref()),
+    }
+}
+
+fn redis_mode(form: &ConnectionForm) -> &str {
+    match form.mode.as_deref() {
+        Some("standalone") => "standalone",
+        Some("cluster") => "cluster",
+        Some("sentinel") => "sentinel",
+        _ if form
+            .host
+            .as_deref()
+            .map(|host| {
+                host.split(',')
+                    .filter(|part| !part.trim().is_empty())
+                    .count()
+                    > 1
+            })
+            .unwrap_or(false) =>
+        {
+            "cluster"
+        }
+        _ => "standalone",
+    }
+}
+
+fn is_cluster_form(form: &ConnectionForm) -> bool {
+    redis_mode(form) == "cluster"
+}
+
+fn is_sentinel_form(form: &ConnectionForm) -> bool {
+    redis_mode(form) == "sentinel"
+}
+
+fn connect_timeout(form: &ConnectionForm) -> Duration {
+    Duration::from_millis(
+        form.connect_timeout_ms
+            .unwrap_or(DEFAULT_CONNECT_TIMEOUT_MS) as u64,
+    )
+}
+
 fn parse_host_port(raw: &str, fallback_port: i64) -> error::RedisResult<(String, i64)> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
