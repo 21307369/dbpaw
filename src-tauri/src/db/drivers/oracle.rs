@@ -79,7 +79,7 @@ fn oracle_value_to_json(row: &oracle::Row, idx: usize) -> serde_json::Value {
 }
 
 impl OracleDriver {
-    pub async fn connect(form: &ConnectionForm) -> Result<Self, String> {
+    pub async fn connect(form: &ConnectionForm) -> DriverResult<Self> {
         let mut effective_form = form.clone();
         let mut ssh_tunnel = None;
 
@@ -95,10 +95,10 @@ impl OracleDriver {
             .clone()
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
-            .ok_or("[VALIDATION_ERROR] host cannot be empty")?;
+            .ok_or_else(|| AppError::validation("host cannot be empty"))?;
         let port = effective_form.port.unwrap_or(1521);
         if !(1..=65535).contains(&port) {
-            return Err("[VALIDATION_ERROR] port out of range".to_string().into());
+            return Err(AppError::validation("port out of range"));
         }
         let service_name = effective_form
             .database
@@ -111,7 +111,7 @@ impl OracleDriver {
             .clone()
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
-            .ok_or("[VALIDATION_ERROR] username cannot be empty")?;
+            .ok_or_else(|| AppError::validation("username cannot be empty"))?;
         let password = effective_form.password.clone().unwrap_or_default();
 
         let config = OracleConfig {
@@ -141,7 +141,7 @@ impl OracleDriver {
     /// the closure.
     async fn run_blocking<F, T>(&self, f: F) -> DriverResult<T>
     where
-        F: FnOnce(oracle::Connection) -> Result<T, String> + Send + 'static,
+        F: FnOnce(oracle::Connection) -> DriverResult<T> + Send + 'static,
         T: Send + 'static,
     {
         let cfg = self.config.clone();
@@ -153,7 +153,6 @@ impl OracleDriver {
         })
         .await
         .map_err(|e| AppError::query_failed(format!("Oracle blocking task failed: {e}")))?
-        .map_err(AppError::from)
     }
 }
 
@@ -187,11 +186,11 @@ impl DatabaseDriver for OracleDriver {
                      ORDER BY c.CONSTRAINT_NAME, cc.POSITION";
             let rows = conn
                 .query(sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
             let mut foreign_keys = Vec::new();
             for row_result in rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let fk_name: Option<String> = row.get(0).ok().flatten();
                 let src_schema: Option<String> = row.get(1).ok().flatten();
                 let src_table: Option<String> = row.get(2).ok().flatten();
@@ -233,10 +232,12 @@ impl DatabaseDriver for OracleDriver {
     async fn test_connection(&self) -> DriverResult<()> {
         self.run_blocking(|conn| {
             conn.query("SELECT 1 FROM DUAL", &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[CONN_FAILED] {e}"))?
+                .map_err(|e| conn_failed_error(&e))?
                 .next()
-                .ok_or("[CONN_FAILED] Empty response from DUAL")?
-                .map_err(|e| format!("[CONN_FAILED] {e}"))?;
+                .ok_or_else(|| {
+                    AppError::conn_failed("Empty response from DUAL", "Check connection settings")
+                })?
+                .map_err(|e| conn_failed_error(&e))?;
             Ok(())
         })
         .await
@@ -250,10 +251,10 @@ impl DatabaseDriver for OracleDriver {
                     "SELECT USERNAME FROM ALL_USERS ORDER BY USERNAME",
                     &[] as &[&dyn oracle::sql_type::ToSql],
                 )
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut result = Vec::new();
             for row_result in rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let name: Option<String> = row.get(0).ok().flatten();
                 if let Some(n) = name {
                     if !n.is_empty() {
@@ -293,10 +294,10 @@ impl DatabaseDriver for OracleDriver {
             };
             let rows = conn
                 .query(&sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut result = Vec::new();
             for row_result in rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let schema_name: Option<String> = row.get(0).ok().flatten();
                 let table_name: Option<String> = row.get(1).ok().flatten();
                 let table_type: Option<String> = row.get(2).ok().flatten();
@@ -334,10 +335,10 @@ impl DatabaseDriver for OracleDriver {
             };
             let rows = conn
                 .query(&sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut result = Vec::new();
             for row_result in rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let schema_name: Option<String> = row.get(0).ok().flatten();
                 let seq_name: Option<String> = row.get(1).ok().flatten();
                 let data_type: Option<String> = row.get(2).ok().flatten();
@@ -379,10 +380,10 @@ impl DatabaseDriver for OracleDriver {
             };
             let rows = conn
                 .query(&sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut result = Vec::new();
             for row_result in rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let schema_name: Option<String> = row.get(0).ok().flatten();
                 let type_name: Option<String> = row.get(1).ok().flatten();
                 let type_code: Option<String> = row.get(2).ok().flatten();
@@ -421,10 +422,10 @@ impl DatabaseDriver for OracleDriver {
             };
             let rows = conn
                 .query(&sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut result = Vec::new();
             for row_result in rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let schema_name: Option<String> = row.get(0).ok().flatten();
                 let pkg_name: Option<String> = row.get(1).ok().flatten();
                 let obj_type: Option<String> = row.get(2).ok().flatten();
@@ -463,10 +464,10 @@ impl DatabaseDriver for OracleDriver {
             );
             let pk_rows = conn
                 .query(&pk_sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut pk_set = std::collections::HashSet::<String>::new();
             for row_result in pk_rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let col: Option<String> = row.get(0).ok().flatten();
                 if let Some(c) = col {
                     pk_set.insert(c);
@@ -497,10 +498,10 @@ impl DatabaseDriver for OracleDriver {
             );
             let col_rows = conn
                 .query(&col_sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut columns = Vec::new();
             for row_result in col_rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let name: Option<String> = row.get(0).ok().flatten();
                 let col_type: Option<String> = row.get(1).ok().flatten();
                 let nullable: Option<String> = row.get(2).ok().flatten();
@@ -558,11 +559,11 @@ impl DatabaseDriver for OracleDriver {
                 );
                 let idx_rows = conn
                     .query(&idx_sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                    .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                    .map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let mut idx_map: HashMap<String, (bool, Option<String>, Vec<(i64, String)>)> =
                     HashMap::new();
                 for row_result in idx_rows {
-                    let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                    let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                     let idx_name: Option<String> = row.get(0).ok().flatten();
                     let is_unique: Option<i64> = row.get(1).ok().flatten();
                     let idx_type: Option<String> = row.get(2).ok().flatten();
@@ -624,10 +625,10 @@ impl DatabaseDriver for OracleDriver {
                 );
                 let fk_rows = conn
                     .query(&fk_sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                    .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                    .map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let mut foreign_keys = Vec::new();
                 for row_result in fk_rows {
-                    let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                    let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                     let fk_name: Option<String> = row.get(0).ok().flatten();
                     let col_name: Option<String> = row.get(1).ok().flatten();
                     let ref_schema: Option<String> = row.get(2).ok().flatten();
@@ -673,15 +674,17 @@ impl DatabaseDriver for OracleDriver {
             );
             let rows = conn
                 .query(&sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             for row_result in rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let ddl: Option<String> = row.get(0).ok().flatten();
                 if let Some(d) = ddl {
                     return Ok(d.trim().to_string());
                 }
             }
-            Err("[QUERY_ERROR] DBMS_METADATA.GET_DDL returned no result".to_string().into())
+            Err(AppError::query_failed(
+                "DBMS_METADATA.GET_DDL returned no result",
+            ))
         })
         .await
     }
@@ -739,10 +742,10 @@ impl DatabaseDriver for OracleDriver {
             let count_sql = format!("SELECT COUNT(*) FROM {}{}", table_ref, where_clause);
             let count_rows = conn
                 .query(&count_sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut total: i64 = 0;
             for row_result in count_rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 total = row.get::<_, Option<i64>>(0).ok().flatten().unwrap_or(0);
             }
 
@@ -753,7 +756,7 @@ impl DatabaseDriver for OracleDriver {
             );
             let rows = conn
                 .query(&data_sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
             // Collect column metadata before consuming rows
             let col_names: Vec<String> = rows
@@ -764,7 +767,7 @@ impl DatabaseDriver for OracleDriver {
 
             let mut data = Vec::new();
             for row_result in rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let mut map = serde_json::Map::new();
                 for (i, name) in col_names.iter().enumerate() {
                     map.insert(name.clone(), oracle_value_to_json(&row, i));
@@ -811,7 +814,7 @@ impl DatabaseDriver for OracleDriver {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
+            return Err(AppError::query_failed("Empty SQL statement"));
         }
 
         // Single statement: keep original behavior
@@ -829,7 +832,7 @@ impl DatabaseDriver for OracleDriver {
                     if is_read {
                         let rows = conn
                             .query(sql_clean, &[] as &[&dyn oracle::sql_type::ToSql])
-                            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                            .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
                         let col_info: Vec<(String, String)> = rows
                             .column_info()
@@ -846,7 +849,8 @@ impl DatabaseDriver for OracleDriver {
 
                         let mut data = Vec::new();
                         for row_result in rows {
-                            let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                            let row =
+                                row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                             let mut map = serde_json::Map::new();
                             for (i, (name, _)) in col_info.iter().enumerate() {
                                 map.insert(name.clone(), oracle_value_to_json(&row, i));
@@ -867,12 +871,12 @@ impl DatabaseDriver for OracleDriver {
                         let mut stmt = conn
                             .statement(sql_clean)
                             .build()
-                            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                            .map_err(|e| AppError::query_failed(format!("{e}")))?;
                         stmt.execute(&[] as &[&dyn oracle::sql_type::ToSql])
-                            .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                            .map_err(|e| AppError::query_failed(format!("{e}")))?;
                         let row_count = stmt.row_count().unwrap_or(0) as i64;
                         conn.commit()
-                            .map_err(|e| format!("[QUERY_ERROR] commit failed: {e}"))?;
+                            .map_err(|e| AppError::query_failed(format!("commit failed: {e}")))?;
                         Ok(QueryResult {
                             row_count,
                             data: vec![],
@@ -900,47 +904,49 @@ impl DatabaseDriver for OracleDriver {
                     Some("SELECT") | Some("WITH") | Some("SHOW")
                 );
 
-                let result = if is_read {
-                    let rows = conn
-                        .query(sql_clean, &[] as &[&dyn oracle::sql_type::ToSql])
-                        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let result: Result<(Vec<QueryColumn>, Vec<serde_json::Value>, i64), AppError> =
+                    if is_read {
+                        let rows = conn
+                            .query(sql_clean, &[] as &[&dyn oracle::sql_type::ToSql])
+                            .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
-                    let col_info: Vec<(String, String)> = rows
-                        .column_info()
-                        .iter()
-                        .map(|c| (c.name().to_string(), format!("{}", c.oracle_type())))
-                        .collect();
-                    let columns: Vec<QueryColumn> = col_info
-                        .iter()
-                        .map(|(name, ty)| QueryColumn {
-                            name: name.clone(),
-                            r#type: ty.clone(),
-                        })
-                        .collect();
+                        let col_info: Vec<(String, String)> = rows
+                            .column_info()
+                            .iter()
+                            .map(|c| (c.name().to_string(), format!("{}", c.oracle_type())))
+                            .collect();
+                        let columns: Vec<QueryColumn> = col_info
+                            .iter()
+                            .map(|(name, ty)| QueryColumn {
+                                name: name.clone(),
+                                r#type: ty.clone(),
+                            })
+                            .collect();
 
-                    let mut data = Vec::new();
-                    for row_result in rows {
-                        let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
-                        let mut map = serde_json::Map::new();
-                        for (i, (name, _)) in col_info.iter().enumerate() {
-                            map.insert(name.clone(), oracle_value_to_json(&row, i));
+                        let mut data = Vec::new();
+                        for row_result in rows {
+                            let row =
+                                row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
+                            let mut map = serde_json::Map::new();
+                            for (i, (name, _)) in col_info.iter().enumerate() {
+                                map.insert(name.clone(), oracle_value_to_json(&row, i));
+                            }
+                            data.push(serde_json::Value::Object(map));
                         }
-                        data.push(serde_json::Value::Object(map));
-                    }
-                    let row_count = data.len() as i64;
-                    Ok((columns, data, row_count))
-                } else {
-                    let mut stmt = conn
-                        .statement(sql_clean)
-                        .build()
-                        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
-                    stmt.execute(&[] as &[&dyn oracle::sql_type::ToSql])
-                        .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
-                    let row_count = stmt.row_count().unwrap_or(0) as i64;
-                    conn.commit()
-                        .map_err(|e| format!("[QUERY_ERROR] commit failed: {e}"))?;
-                    Ok((Vec::new(), Vec::new(), row_count))
-                };
+                        let row_count = data.len() as i64;
+                        Ok((columns, data, row_count))
+                    } else {
+                        let mut stmt = conn
+                            .statement(sql_clean)
+                            .build()
+                            .map_err(|e| AppError::query_failed(format!("{e}")))?;
+                        stmt.execute(&[] as &[&dyn oracle::sql_type::ToSql])
+                            .map_err(|e| AppError::query_failed(format!("{e}")))?;
+                        let row_count = stmt.row_count().unwrap_or(0) as i64;
+                        conn.commit()
+                            .map_err(|e| AppError::query_failed(format!("commit failed: {e}")))?;
+                        Ok((Vec::new(), Vec::new(), row_count))
+                    };
 
                 match result {
                     Ok((columns, data, row_count)) => {
@@ -953,7 +959,7 @@ impl DatabaseDriver for OracleDriver {
                         });
                     }
                     Err(e) => {
-                        last_error = Some(e);
+                        last_error = Some(e.to_string());
                         break;
                     }
                 }
@@ -1008,10 +1014,10 @@ impl DatabaseDriver for OracleDriver {
 
             let rows = conn
                 .query(&sql, &[] as &[&dyn oracle::sql_type::ToSql])
-                .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut table_map: HashMap<(String, String), Vec<ColumnSchema>> = HashMap::new();
             for row_result in rows {
-                let row = row_result.map_err(|e| format!("[QUERY_ERROR] {e}"))?;
+                let row = row_result.map_err(|e| AppError::query_failed(format!("{e}")))?;
                 let schema_name: Option<String> = row.get(0).ok().flatten();
                 let table_name: Option<String> = row.get(1).ok().flatten();
                 let col_name: Option<String> = row.get(2).ok().flatten();
