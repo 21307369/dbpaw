@@ -1106,3 +1106,13 @@ mod tests {
         let _ = fs::remove_file(path);
     }
 }
+
+#[macro_export]
+macro_rules! transfer_commands {
+    () => {
+        $crate::commands::transfer::export_table_data,
+        $crate::commands::transfer::export_database_sql,
+        $crate::commands::transfer::export_query_result,
+        $crate::commands::transfer::import_sql_file,
+    };
+}
