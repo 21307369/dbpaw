@@ -1,4 +1,4 @@
-use super::DatabaseDriver;
+use super::{DatabaseDriver, DriverResult};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
     RoutineInfo, SchemaForeignKey, SchemaOverview, SingleResultSet, SynonymInfo, TableDataResponse,
@@ -52,7 +52,7 @@ fn build_config(form: &ConnectionForm) -> Result<MssqlConfig, String> {
         let h = h.trim().to_string();
         let inst = inst.trim().to_string();
         if h.is_empty() || inst.is_empty() {
-            return Err("[VALIDATION_ERROR] invalid host\\instance format".to_string());
+            return Err("[VALIDATION_ERROR] invalid host\\instance format".to_string().into());
         }
         (h, Some(inst))
     } else {
@@ -61,7 +61,7 @@ fn build_config(form: &ConnectionForm) -> Result<MssqlConfig, String> {
 
     let port = form.port.unwrap_or(1433);
     if !(0..=65535).contains(&port) {
-        return Err("[VALIDATION_ERROR] port out of range".to_string());
+        return Err("[VALIDATION_ERROR] port out of range".to_string().into());
     }
     let database = form
         .database
@@ -257,10 +257,10 @@ fn map_pool_error(err: RunError<String>) -> String {
 fn quote_ident(ident: &str) -> Result<String, String> {
     let trimmed = ident.trim();
     if trimmed.is_empty() {
-        return Err("[VALIDATION_ERROR] identifier cannot be empty".to_string());
+        return Err("[VALIDATION_ERROR] identifier cannot be empty".to_string().into());
     }
     if trimmed.chars().any(|c| c == '\0') {
-        return Err("[VALIDATION_ERROR] identifier contains null byte".to_string());
+        return Err("[VALIDATION_ERROR] identifier contains null byte".to_string().into());
     }
     Ok(format!("[{}]", trimmed.replace(']', "]]")))
 }
@@ -820,7 +820,7 @@ impl MssqlDriver {
             serde_json::Value::Array(arr) => arr,
             serde_json::Value::Object(obj) => vec![serde_json::Value::Object(obj)],
             _ => {
-                return Err("[QUERY_ERROR] MSSQL FOR JSON result is not array/object".to_string());
+                return Err("[QUERY_ERROR] MSSQL FOR JSON result is not array/object".to_string().into());
             }
         };
         for row in &mut data {
@@ -1811,7 +1811,7 @@ impl DatabaseDriver for MssqlDriver {
     async fn get_schema_foreign_keys(
         &self,
         database: Option<&str>,
-    ) -> Result<Vec<SchemaForeignKey>, String> {
+    ) -> DriverResult<Vec<SchemaForeignKey>> {
         let schema_filter = database
             .filter(|s| !s.trim().is_empty())
             .map(|s| format!("AND ss.name = '{}'", escape_literal(s.trim())));
@@ -1847,8 +1847,16 @@ impl DatabaseDriver for MssqlDriver {
                 target_schema: Some(target_schema),
                 target_table: Self::parse_string(&row, 5),
                 target_column: Self::parse_string(&row, 6),
-                on_update: if on_update_raw.is_empty() { None } else { Some(on_update_raw) },
-                on_delete: if on_delete_raw.is_empty() { None } else { Some(on_delete_raw) },
+                on_update: if on_update_raw.is_empty() {
+                    None
+                } else {
+                    Some(on_update_raw)
+                },
+                on_delete: if on_delete_raw.is_empty() {
+                    None
+                } else {
+                    Some(on_delete_raw)
+                },
             });
         }
         Ok(foreign_keys)
@@ -1856,15 +1864,15 @@ impl DatabaseDriver for MssqlDriver {
 
     async fn close(&self) {}
 
-    async fn test_connection(&self) -> Result<(), String> {
+    async fn test_connection(&self) -> DriverResult<()> {
         let rows = self.fetch_rows("SELECT 1").await?;
         if rows.is_empty() {
-            return Err("[CONN_FAILED] Empty response".to_string());
+            return Err("[CONN_FAILED] Empty response".to_string().into());
         }
         Ok(())
     }
 
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         let rows = self
             .fetch_rows(
                 "SELECT name FROM sys.databases WHERE state = 0 AND name NOT IN ('tempdb') ORDER BY name",
@@ -1878,7 +1886,7 @@ impl DatabaseDriver for MssqlDriver {
             .collect())
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         let schema_filter = schema
             .filter(|s| !s.trim().is_empty())
             .map(|s| format!("AND s.name = '{}'", escape_literal(s.trim())));
@@ -1903,7 +1911,7 @@ impl DatabaseDriver for MssqlDriver {
             .collect())
     }
 
-    async fn list_routines(&self, schema: Option<String>) -> Result<Vec<RoutineInfo>, String> {
+    async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
         let schema_filter = schema
             .filter(|s| !s.trim().is_empty())
             .map(|s| format!("AND s.name = '{}'", escape_literal(s.trim())));
@@ -1930,7 +1938,7 @@ impl DatabaseDriver for MssqlDriver {
             .collect())
     }
 
-    async fn list_synonyms(&self, schema: Option<String>) -> Result<Vec<SynonymInfo>, String> {
+    async fn list_synonyms(&self, schema: Option<String>) -> DriverResult<Vec<SynonymInfo>> {
         let schema_filter = schema
             .filter(|s| !s.trim().is_empty())
             .map(|s| format!("AND s.name = '{}'", escape_literal(s.trim())));
@@ -1960,7 +1968,7 @@ impl DatabaseDriver for MssqlDriver {
         schema: String,
         name: String,
         routine_type: String,
-    ) -> Result<String, String> {
+    ) -> DriverResult<String> {
         let type_filter = routine_type_sql_filter(&routine_type)?;
 
         let sql = format!(
@@ -1986,7 +1994,7 @@ impl DatabaseDriver for MssqlDriver {
             return Err(format!(
                 "[NOT_FOUND] Routine '{}.{}' does not exist or its definition is not visible",
                 schema, name
-            ));
+            ).into());
         }
 
         Ok(ddl)
@@ -1996,7 +2004,7 @@ impl DatabaseDriver for MssqlDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         let pk_sql = format!(
             "SELECT kcu.COLUMN_NAME \
              FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc \
@@ -2037,7 +2045,7 @@ impl DatabaseDriver for MssqlDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let columns = self
             .get_table_structure(schema.clone(), table.clone())
             .await?
@@ -2056,7 +2064,7 @@ impl DatabaseDriver for MssqlDriver {
         })
     }
 
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         let columns = self.load_mssql_columns(&schema, &table).await?;
         let key_constraints = self.load_mssql_key_constraints(&schema, &table).await?;
         let check_constraints = self.load_mssql_check_constraints(&schema, &table).await?;
@@ -2084,7 +2092,7 @@ impl DatabaseDriver for MssqlDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         let start = std::time::Instant::now();
         let safe_page = if page < 1 { 1 } else { page };
         let safe_limit = if limit < 1 { 100 } else { limit };
@@ -2218,7 +2226,7 @@ impl DatabaseDriver for MssqlDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -2232,11 +2240,11 @@ impl DatabaseDriver for MssqlDriver {
         .await
     }
 
-    async fn execute_query(&self, sql: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string());
+            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
         }
 
         // Single statement: keep original behavior
@@ -2304,7 +2312,7 @@ impl DatabaseDriver for MssqlDriver {
         })
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         let sql = if let Some(schema_name) = schema.filter(|s| !s.trim().is_empty()) {
             format!(
                 "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE \

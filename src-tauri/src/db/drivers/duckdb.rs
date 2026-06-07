@@ -1,4 +1,5 @@
-use super::DatabaseDriver;
+use super::{DatabaseDriver, DriverResult};
+use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, QueryColumn, QueryResult, SchemaOverview,
     SingleResultSet, TableDataResponse, TableInfo, TableMetadata, TableSchema, TableStructure,
@@ -291,7 +292,7 @@ impl DuckdbDriver {
         Ok(Self { file_path })
     }
 
-    async fn run_blocking<T, F>(&self, f: F) -> Result<T, String>
+    async fn run_blocking<T, F>(&self, f: F) -> DriverResult<T>
     where
         T: Send + 'static,
         F: FnOnce(&Connection) -> Result<T, String> + Send + 'static,
@@ -302,7 +303,8 @@ impl DuckdbDriver {
             f(&conn)
         })
         .await
-        .map_err(|e| format!("[QUERY_ERROR] join error: {e}"))?
+        .map_err(|e| AppError::query_failed(format!("join error: {e}")))?
+        .map_err(AppError::from)
     }
 }
 
@@ -310,7 +312,7 @@ impl DuckdbDriver {
 impl DatabaseDriver for DuckdbDriver {
     async fn close(&self) {}
 
-    async fn test_connection(&self) -> Result<(), String> {
+    async fn test_connection(&self) -> DriverResult<()> {
         self.run_blocking(|conn| {
             conn.execute("SELECT 1", [])
                 .map_err(|e| format!("[QUERY_ERROR] {e}"))?;
@@ -319,7 +321,7 @@ impl DatabaseDriver for DuckdbDriver {
         .await
     }
 
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         self.run_blocking(|conn| {
             let mut out = Vec::new();
             if let Ok(mut stmt) = conn.prepare("SELECT database_name FROM duckdb_databases()") {
@@ -342,7 +344,7 @@ impl DatabaseDriver for DuckdbDriver {
         .await
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         self.run_blocking(move |conn| {
             let schema_filter = schema
                 .as_deref()
@@ -405,7 +407,7 @@ impl DatabaseDriver for DuckdbDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         self.run_blocking(move |conn| {
             let schema_name = duckdb_schema_name(&schema);
             let sql = format!(
@@ -480,7 +482,7 @@ impl DatabaseDriver for DuckdbDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let columns = self
             .get_table_structure(schema.clone(), table.clone())
             .await?
@@ -496,7 +498,7 @@ impl DatabaseDriver for DuckdbDriver {
         })
     }
 
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         self.run_blocking(move |conn| {
             let schema_name = duckdb_schema_name(&schema);
             let sql = format!(
@@ -532,7 +534,7 @@ impl DatabaseDriver for DuckdbDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.run_blocking(move |conn| {
             let start = std::time::Instant::now();
             let safe_page = if page < 1 { 1 } else { page };
@@ -561,7 +563,7 @@ impl DatabaseDriver for DuckdbDriver {
                 }
             } else if let Some(ref col) = sort_column {
                 if !col.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                    return Err("[VALIDATION_ERROR] Invalid sort column name".to_string());
+                    return Err("[VALIDATION_ERROR] Invalid sort column name".to_string().into());
                 }
                 let dir = match sort_direction.as_deref() {
                     Some("desc") => "DESC",
@@ -617,7 +619,7 @@ impl DatabaseDriver for DuckdbDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -631,12 +633,12 @@ impl DatabaseDriver for DuckdbDriver {
         .await
     }
 
-    async fn execute_query(&self, sql: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
         self.run_blocking(move |conn| {
             let start = std::time::Instant::now();
             let statements = super::split_sql_statements(&sql);
             if statements.is_empty() {
-                return Err("[QUERY_ERROR] Empty SQL statement".to_string());
+                return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
             }
 
             // Single statement: keep original behavior
@@ -847,7 +849,7 @@ impl DatabaseDriver for DuckdbDriver {
         .await
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         let target_schema = duckdb_schema_name(schema.as_deref().unwrap_or("main"));
         let tables = self.list_tables(Some(target_schema.clone())).await?;
         let mut map: HashMap<(String, String), Vec<ColumnSchema>> = HashMap::new();

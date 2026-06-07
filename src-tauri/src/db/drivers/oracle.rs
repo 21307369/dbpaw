@@ -1,4 +1,5 @@
-use super::{conn_failed_error, DatabaseDriver};
+use super::{conn_failed_error, DatabaseDriver, DriverResult};
+use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, PackageInfo, QueryColumn,
     QueryResult, SchemaForeignKey, SchemaOverview, SequenceInfo, SingleResultSet,
@@ -97,7 +98,7 @@ impl OracleDriver {
             .ok_or("[VALIDATION_ERROR] host cannot be empty")?;
         let port = effective_form.port.unwrap_or(1521);
         if !(1..=65535).contains(&port) {
-            return Err("[VALIDATION_ERROR] port out of range".to_string());
+            return Err("[VALIDATION_ERROR] port out of range".to_string().into());
         }
         let service_name = effective_form
             .database
@@ -138,7 +139,7 @@ impl OracleDriver {
     /// DML statements are followed by an explicit `conn.commit()` so that the
     /// work is persisted even though the connection is dropped at the end of
     /// the closure.
-    async fn run_blocking<F, T>(&self, f: F) -> Result<T, String>
+    async fn run_blocking<F, T>(&self, f: F) -> DriverResult<T>
     where
         F: FnOnce(oracle::Connection) -> Result<T, String> + Send + 'static,
         T: Send + 'static,
@@ -151,7 +152,8 @@ impl OracleDriver {
             f(conn)
         })
         .await
-        .map_err(|e| format!("[ORACLE_ERROR] {e}"))?
+        .map_err(|e| AppError::query_failed(format!("Oracle blocking task failed: {e}")))?
+        .map_err(AppError::from)
     }
 }
 
@@ -160,7 +162,7 @@ impl DatabaseDriver for OracleDriver {
     async fn get_schema_foreign_keys(
         &self,
         _database: Option<&str>,
-    ) -> Result<Vec<SchemaForeignKey>, String> {
+    ) -> DriverResult<Vec<SchemaForeignKey>> {
         self.run_blocking(move |conn| {
             let sql = "SELECT c.CONSTRAINT_NAME, \
                             c.OWNER AS SRC_SCHEMA, \
@@ -228,7 +230,7 @@ impl DatabaseDriver for OracleDriver {
         // No persistent connection to close.
     }
 
-    async fn test_connection(&self) -> Result<(), String> {
+    async fn test_connection(&self) -> DriverResult<()> {
         self.run_blocking(|conn| {
             conn.query("SELECT 1 FROM DUAL", &[] as &[&dyn oracle::sql_type::ToSql])
                 .map_err(|e| format!("[CONN_FAILED] {e}"))?
@@ -241,7 +243,7 @@ impl DatabaseDriver for OracleDriver {
     }
 
     /// In Oracle, "databases" map to schemas (users visible via ALL_USERS).
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         self.run_blocking(|conn| {
             let rows = conn
                 .query(
@@ -264,7 +266,7 @@ impl DatabaseDriver for OracleDriver {
         .await
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -311,7 +313,7 @@ impl DatabaseDriver for OracleDriver {
         .await
     }
 
-    async fn list_sequences(&self, schema: Option<String>) -> Result<Vec<SequenceInfo>, String> {
+    async fn list_sequences(&self, schema: Option<String>) -> DriverResult<Vec<SequenceInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -356,7 +358,7 @@ impl DatabaseDriver for OracleDriver {
         .await
     }
 
-    async fn list_types(&self, schema: Option<String>) -> Result<Vec<TypeInfo>, String> {
+    async fn list_types(&self, schema: Option<String>) -> DriverResult<Vec<TypeInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -397,7 +399,7 @@ impl DatabaseDriver for OracleDriver {
         .await
     }
 
-    async fn list_packages(&self, schema: Option<String>) -> Result<Vec<PackageInfo>, String> {
+    async fn list_packages(&self, schema: Option<String>) -> DriverResult<Vec<PackageInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -443,7 +445,7 @@ impl DatabaseDriver for OracleDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         self.run_blocking(move |conn| {
             // Primary keys
             let pk_sql = format!(
@@ -529,7 +531,7 @@ impl DatabaseDriver for OracleDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let columns = self
             .get_table_structure(schema.clone(), table.clone())
             .await?
@@ -662,7 +664,7 @@ impl DatabaseDriver for OracleDriver {
 
     /// Returns the table DDL using DBMS_METADATA.GET_DDL.
     /// Requires EXECUTE privilege on DBMS_METADATA (granted to public in most installs).
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         self.run_blocking(move |conn| {
             let sql = format!(
                 "SELECT DBMS_METADATA.GET_DDL('TABLE', '{}', '{}') AS DDL FROM DUAL",
@@ -679,7 +681,7 @@ impl DatabaseDriver for OracleDriver {
                     return Ok(d.trim().to_string());
                 }
             }
-            Err("[QUERY_ERROR] DBMS_METADATA.GET_DDL returned no result".to_string())
+            Err("[QUERY_ERROR] DBMS_METADATA.GET_DDL returned no result".to_string().into())
         })
         .await
     }
@@ -695,7 +697,7 @@ impl DatabaseDriver for OracleDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         let start = std::time::Instant::now();
         let safe_page = if page < 1 { 1 } else { page };
         let safe_limit = if limit < 1 { 100 } else { limit };
@@ -791,7 +793,7 @@ impl DatabaseDriver for OracleDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -805,11 +807,11 @@ impl DatabaseDriver for OracleDriver {
         .await
     }
 
-    async fn execute_query(&self, sql: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string());
+            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
         }
 
         // Single statement: keep original behavior
@@ -984,7 +986,7 @@ impl DatabaseDriver for OracleDriver {
         .await
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());

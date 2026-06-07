@@ -88,7 +88,7 @@ pub(super) async fn execute_sql_import(
                 failed_at: Some((idx + 1) as i64),
                 failed_batch: Some(unit.batch_index as i64),
                 failed_statement_preview: Some(unit.preview.clone()),
-                error: Some(truncate_error_message(&e)),
+                error: Some(truncate_error_message(&e.to_string())),
                 time_taken_ms: started_at.elapsed().as_millis() as i64,
                 rolled_back: prepared.use_outer_transaction,
             });
@@ -108,7 +108,7 @@ pub(super) async fn execute_sql_import(
                 failed_statement_preview: None,
                 error: Some(format!(
                     "[IMPORT_ERROR] failed to commit transaction: {}",
-                    truncate_error_message(&e)
+                    truncate_error_message(&e.to_string())
                 )),
                 time_taken_ms: started_at.elapsed().as_millis() as i64,
                 rolled_back: true,

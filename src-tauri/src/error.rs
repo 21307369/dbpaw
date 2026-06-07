@@ -95,6 +95,41 @@ impl From<AppError> for String {
     }
 }
 
+impl From<String> for AppError {
+    fn from(err: String) -> Self {
+        let trimmed = err.trim_start();
+        if let Some(message) = trimmed.strip_prefix("[VALIDATION_ERROR]") {
+            return AppError::validation(message.trim_start());
+        }
+        if let Some(message) = trimmed.strip_prefix("[UNSUPPORTED]") {
+            return AppError::unsupported(message.trim_start());
+        }
+        if let Some(message) = trimmed.strip_prefix("[REDIS_ERROR]") {
+            return AppError::query_failed(message.trim_start());
+        }
+        if let Some(message) = trimmed.strip_prefix("[QUERY_ERROR]") {
+            return AppError::query_failed(message.trim_start());
+        }
+        if let Some(message) = trimmed.strip_prefix("[CONN_FAILED]") {
+            return AppError::conn_failed(message.trim_start(), "Check connection settings");
+        }
+        if let Some(message) = trimmed.strip_prefix("[NOT_FOUND]") {
+            return AppError::Internal {
+                code: codes::NOT_FOUND,
+                message: message.trim_start().to_string(),
+                source: None,
+            };
+        }
+        AppError::internal(err)
+    }
+}
+
+impl From<&str> for AppError {
+    fn from(err: &str) -> Self {
+        AppError::from(err.to_string())
+    }
+}
+
 impl std::error::Error for AppError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -327,5 +362,23 @@ mod tests {
     fn test_internal_error() {
         let err = AppError::internal("unexpected state");
         assert_eq!(err.to_string(), "[ERR-5002] unexpected state");
+    }
+
+    #[test]
+    fn test_legacy_validation_label_converts_to_structured_error_code() {
+        let err = AppError::from("[VALIDATION_ERROR] host cannot be empty".to_string());
+        assert_eq!(err.to_string(), "[ERR-3001] host cannot be empty");
+    }
+
+    #[test]
+    fn test_legacy_unsupported_label_converts_to_structured_error_code() {
+        let err = AppError::from("[UNSUPPORTED] Routines are not supported".to_string());
+        assert_eq!(err.to_string(), "[ERR-5001] Routines are not supported");
+    }
+
+    #[test]
+    fn test_legacy_redis_label_converts_to_structured_error_code() {
+        let err = AppError::from("[REDIS_ERROR] MOVED 3999 127.0.0.1:7001".to_string());
+        assert_eq!(err.to_string(), "[ERR-2001] MOVED 3999 127.0.0.1:7001");
     }
 }

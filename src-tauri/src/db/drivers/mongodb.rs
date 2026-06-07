@@ -1,4 +1,4 @@
-use super::DatabaseDriver;
+use super::{DatabaseDriver, DriverResult};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, IndexInfo, QueryColumn, QueryResult, SchemaOverview,
     SingleResultSet, TableDataResponse, TableInfo, TableMetadata, TableSchema, TableStructure,
@@ -46,7 +46,7 @@ fn build_connection_uri(form: &ConnectionForm) -> Result<String, String> {
         .ok_or_else(|| "[VALIDATION_ERROR] host cannot be empty".to_string())?;
     let port = form.port.unwrap_or(DEFAULT_MONGODB_PORT);
     if !(1..=65535).contains(&port) {
-        return Err("[VALIDATION_ERROR] port must be between 1 and 65535".to_string());
+        return Err("[VALIDATION_ERROR] port must be between 1 and 65535".to_string().into());
     }
 
     let username = trim_to_option(form.username.as_ref());
@@ -449,7 +449,7 @@ impl DatabaseDriver for MongoDBDriver {
         // MongoDB client manages connections via its internal connection pool.
     }
 
-    async fn test_connection(&self) -> Result<(), String> {
+    async fn test_connection(&self) -> DriverResult<()> {
         let db = self.get_database("admin");
         db.run_command(doc! { "ping": 1 })
             .await
@@ -457,7 +457,7 @@ impl DatabaseDriver for MongoDBDriver {
         Ok(())
     }
 
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         let databases = self
             .client
             .list_databases()
@@ -466,7 +466,7 @@ impl DatabaseDriver for MongoDBDriver {
         Ok(databases.into_iter().map(|db| db.name).collect())
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         let db_name = schema
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| self.default_database.clone());
@@ -493,7 +493,7 @@ impl DatabaseDriver for MongoDBDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         let columns = self.infer_collection_schema(&schema, &table).await?;
         Ok(TableStructure { columns })
     }
@@ -502,7 +502,7 @@ impl DatabaseDriver for MongoDBDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let columns = self.infer_collection_schema(&schema, &table).await?;
 
         let db = self.get_database(&schema);
@@ -536,7 +536,7 @@ impl DatabaseDriver for MongoDBDriver {
         })
     }
 
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         let db = self.get_database(&schema);
         let mut cursor = db.list_collections().await.map_err(normalize_mongo_error)?;
 
@@ -546,11 +546,11 @@ impl DatabaseDriver for MongoDBDriver {
                 .map_err(normalize_mongo_error)?;
             if info.name == table {
                 return serde_json::to_string_pretty(&info)
-                    .map_err(|e| format!("[SERIALIZE_ERROR] {}", e));
+                    .map_err(|e| format!("[SERIALIZE_ERROR] {}", e).into());
             }
         }
 
-        Err(format!("[NOT_FOUND] Collection '{}' not found", table))
+        Err(format!("[NOT_FOUND] Collection '{}' not found", table).into())
     }
 
     async fn get_table_data(
@@ -563,7 +563,7 @@ impl DatabaseDriver for MongoDBDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         let start = Instant::now();
         let safe_page = page.max(1);
         let safe_limit = limit.clamp(1, 10_000);
@@ -620,7 +620,7 @@ impl DatabaseDriver for MongoDBDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -634,12 +634,12 @@ impl DatabaseDriver for MongoDBDriver {
         .await
     }
 
-    async fn execute_query(&self, query: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, query: String) -> DriverResult<QueryResult> {
         let start = Instant::now();
         let trimmed = query.trim();
 
         if trimmed.is_empty() {
-            return Err("[QUERY_ERROR] Empty query".to_string());
+            return Err("[QUERY_ERROR] Empty query".to_string().into());
         }
 
         let parsed: serde_json::Value = serde_json::from_str(trimmed)
@@ -676,7 +676,10 @@ impl DatabaseDriver for MongoDBDriver {
             }
 
             let cursor = builder.await.map_err(normalize_mongo_error)?;
-            return self.cursor_to_query_result(cursor, trimmed, start).await;
+            return self
+                .cursor_to_query_result(cursor, trimmed, start)
+                .await
+                .map_err(crate::error::AppError::from);
         }
 
         // --- aggregate command ---
@@ -702,13 +705,16 @@ impl DatabaseDriver for MongoDBDriver {
                 .aggregate(bson_pipeline)
                 .await
                 .map_err(normalize_mongo_error)?;
-            return self.cursor_to_query_result(cursor, trimmed, start).await;
+            return self
+                .cursor_to_query_result(cursor, trimmed, start)
+                .await
+                .map_err(crate::error::AppError::from);
         }
 
-        Err("[QUERY_ERROR] Unsupported query format. Use {\"find\": \"collection\", ...} or {\"aggregate\": \"collection\", \"pipeline\": [...]}" .to_string())
+        Err("[QUERY_ERROR] Unsupported query format. Use {\"find\": \"collection\", ...} or {\"aggregate\": \"collection\", \"pipeline\": [...]}" .to_string().into())
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         let db_name = schema
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| self.default_database.clone());

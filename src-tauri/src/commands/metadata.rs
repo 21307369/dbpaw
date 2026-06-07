@@ -47,8 +47,8 @@ pub async fn get_schema_overview_direct(
 
 #[tauri::command]
 pub async fn list_tables_by_conn(form: ConnectionForm) -> Result<Vec<TableInfo>, String> {
-    let driver = crate::db::drivers::connect(&form).await?;
-    driver.list_tables(form.schema).await
+    let driver = crate::db::drivers::connect(&form).await.map_err(String::from)?;
+    driver.list_tables(form.schema).await.map_err(String::from)
 }
 
 #[tauri::command]

@@ -16,7 +16,7 @@ use self::sql_writer::{quote_ident, quote_target, sql_value};
 use self::writer::{csv_escape, validate_output_path, ExportWriter};
 use self::writer::{extension_for_format, resolve_output_path};
 #[cfg(test)]
-use crate::db::drivers::DatabaseDriver;
+use crate::db::drivers::{DatabaseDriver, DriverResult};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
@@ -225,7 +225,7 @@ pub async fn export_query_result(
     file_path: Option<String>,
 ) -> Result<ExportResult, String> {
     if matches!(format, ExportFormat::SqlDdl) {
-        return Err("[EXPORT_ERROR] SqlDdl format is not supported for query exports".to_string());
+        return Err("[EXPORT_ERROR] SqlDdl format is not supported for query exports".to_string().into());
     }
     let output_path =
         resolve_output_path(file_path, "query_result", extension_for_format(&format))?;
@@ -250,7 +250,7 @@ pub async fn export_query_result_direct(
     file_path: Option<String>,
 ) -> Result<ExportResult, String> {
     if matches!(format, ExportFormat::SqlDdl) {
-        return Err("[EXPORT_ERROR] SqlDdl format is not supported for query exports".to_string());
+        return Err("[EXPORT_ERROR] SqlDdl format is not supported for query exports".to_string().into());
     }
     let output_path =
         resolve_output_path(file_path, "query_result", extension_for_format(&format))?;
@@ -326,15 +326,15 @@ mod tests {
 
     #[async_trait]
     impl DatabaseDriver for FakeExportDriver {
-        async fn test_connection(&self) -> Result<(), String> {
+        async fn test_connection(&self) -> DriverResult<()> {
             Ok(())
         }
 
-        async fn list_databases(&self) -> Result<Vec<String>, String> {
+        async fn list_databases(&self) -> DriverResult<Vec<String>> {
             Ok(vec!["db".to_string()])
         }
 
-        async fn list_tables(&self, _schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+        async fn list_tables(&self, _schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
             Ok(self.tables.clone())
         }
 
@@ -342,15 +342,15 @@ mod tests {
             &self,
             _schema: String,
             _table: String,
-        ) -> Result<TableStructure, String> {
-            Err("not used".to_string())
+        ) -> DriverResult<TableStructure> {
+            Err("not used".to_string().into())
         }
 
         async fn get_table_metadata(
             &self,
             schema: String,
             table: String,
-        ) -> Result<TableMetadata, String> {
+        ) -> DriverResult<TableMetadata> {
             let key = (schema, table);
             let has_rows = self.rows.contains_key(&key);
             let columns = if has_rows {
@@ -376,11 +376,11 @@ mod tests {
             })
         }
 
-        async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+        async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
             self.ddls
                 .get(&(schema, table))
                 .cloned()
-                .ok_or_else(|| "missing ddl".to_string())
+                .ok_or_else(|| crate::error::AppError::from("missing ddl"))
         }
 
         async fn get_table_data(
@@ -393,8 +393,8 @@ mod tests {
             _sort_direction: Option<String>,
             _filter: Option<String>,
             _order_by: Option<String>,
-        ) -> Result<TableDataResponse, String> {
-            Err("not used".to_string())
+        ) -> DriverResult<TableDataResponse> {
+            Err("not used".to_string().into())
         }
 
         async fn get_table_data_chunk(
@@ -407,7 +407,7 @@ mod tests {
             _sort_direction: Option<String>,
             _filter: Option<String>,
             _order_by: Option<String>,
-        ) -> Result<TableDataResponse, String> {
+        ) -> DriverResult<TableDataResponse> {
             let key = (schema, table);
             let all_rows = self.rows.get(&key).cloned().unwrap_or_default();
             let offset = ((page.max(1) - 1) * limit.max(1)) as usize;
@@ -429,15 +429,15 @@ mod tests {
             })
         }
 
-        async fn execute_query(&self, _sql: String) -> Result<QueryResult, String> {
-            Err("not used".to_string())
+        async fn execute_query(&self, _sql: String) -> DriverResult<QueryResult> {
+            Err("not used".to_string().into())
         }
 
         async fn get_schema_overview(
             &self,
             _schema: Option<String>,
-        ) -> Result<SchemaOverview, String> {
-            Err("not used".to_string())
+        ) -> DriverResult<SchemaOverview> {
+            Err("not used".to_string().into())
         }
 
         async fn close(&self) {}

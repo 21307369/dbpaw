@@ -1,4 +1,4 @@
-use super::{conn_failed_error, DatabaseDriver};
+use super::{conn_failed_error, DatabaseDriver, DriverResult};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
     RoutineInfo, SchemaForeignKey, SchemaOverview, SequenceInfo, SingleResultSet,
@@ -117,7 +117,7 @@ impl Db2Driver {
             .ok_or("[VALIDATION_ERROR] host cannot be empty")?;
         let port = effective_form.port.unwrap_or(50000);
         if !(1..=65535).contains(&port) {
-            return Err("[VALIDATION_ERROR] port out of range".to_string());
+            return Err("[VALIDATION_ERROR] port out of range".to_string().into());
         }
         let database = effective_form
             .database
@@ -169,7 +169,7 @@ impl Db2Driver {
 
 #[async_trait]
 impl DatabaseDriver for Db2Driver {
-    async fn test_connection(&self) -> Result<(), String> {
+    async fn test_connection(&self) -> DriverResult<()> {
         self.run_blocking(|conn| {
             let cursor = conn
                 .execute("SELECT 1 FROM SYSIBM.SYSDUMMY1", ())
@@ -184,7 +184,7 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         self.run_blocking(|conn| {
             let cursor = conn
                 .execute("SELECT CURRENT_SERVER FROM SYSIBM.SYSDUMMY1", ())
@@ -206,7 +206,7 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -254,7 +254,7 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn list_routines(&self, schema: Option<String>) -> Result<Vec<RoutineInfo>, String> {
+    async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -299,7 +299,7 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn list_sequences(&self, schema: Option<String>) -> Result<Vec<SequenceInfo>, String> {
+    async fn list_sequences(&self, schema: Option<String>) -> DriverResult<Vec<SequenceInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -353,7 +353,7 @@ impl DatabaseDriver for Db2Driver {
         schema: String,
         name: String,
         _routine_type: String,
-    ) -> Result<String, String> {
+    ) -> DriverResult<String> {
         self.run_blocking(move |conn| {
             let sql = format!(
                 "SELECT TEXT FROM SYSCAT.ROUTINES \
@@ -372,7 +372,7 @@ impl DatabaseDriver for Db2Driver {
                     }
                 }
             }
-            Err("[QUERY_ERROR] Routine not found".to_string())
+            Err("[QUERY_ERROR] Routine not found".to_string().into())
         })
         .await
     }
@@ -381,7 +381,7 @@ impl DatabaseDriver for Db2Driver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         self.run_blocking(move |conn| {
             // Primary keys
             let pk_sql = format!(
@@ -483,7 +483,7 @@ impl DatabaseDriver for Db2Driver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let columns = self
             .get_table_structure(schema.clone(), table.clone())
             .await?
@@ -619,7 +619,7 @@ impl DatabaseDriver for Db2Driver {
 
     // Db2 has no native GET_DDL; this generates minimal DDL (no indexes,
     // foreign keys, comments, or tablespaces).
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         let structure = self
             .get_table_structure(schema.clone(), table.clone())
             .await?;
@@ -667,7 +667,7 @@ impl DatabaseDriver for Db2Driver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         let start = std::time::Instant::now();
         let safe_page = if page < 1 { 1 } else { page };
         let safe_limit = if limit < 1 { 100 } else { limit };
@@ -749,7 +749,7 @@ impl DatabaseDriver for Db2Driver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -763,11 +763,11 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn execute_query(&self, sql: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string());
+            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
         }
 
         if statements.len() == 1 {
@@ -995,7 +995,7 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -1057,7 +1057,7 @@ impl DatabaseDriver for Db2Driver {
     async fn get_schema_foreign_keys(
         &self,
         _database: Option<&str>,
-    ) -> Result<Vec<SchemaForeignKey>, String> {
+    ) -> DriverResult<Vec<SchemaForeignKey>> {
         self.run_blocking(move |conn| {
             let sql = "SELECT fk.CONSTNAME, \
                      fk.TABSCHEMA, fk.TABNAME, fk.COLNAME, \

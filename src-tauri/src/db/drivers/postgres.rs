@@ -1,4 +1,4 @@
-use super::{strip_trailing_statement_terminator, DatabaseDriver};
+use super::{strip_trailing_statement_terminator, DatabaseDriver, DriverResult};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
     RoutineInfo, SchemaForeignKey, SchemaOverview, SequenceInfo, SingleResultSet,
@@ -1113,7 +1113,7 @@ impl DatabaseDriver for PostgresDriver {
     async fn get_schema_foreign_keys(
         &self,
         _database: Option<&str>,
-    ) -> Result<Vec<SchemaForeignKey>, String> {
+    ) -> DriverResult<Vec<SchemaForeignKey>> {
         let rows = sqlx::query(
             r#"
             SELECT
@@ -1189,7 +1189,7 @@ impl DatabaseDriver for PostgresDriver {
         self.cleanup_ca_file();
     }
 
-    async fn test_connection(&self) -> Result<(), String> {
+    async fn test_connection(&self) -> DriverResult<()> {
         sqlx::query("SELECT 1")
             .execute(&self.pool)
             .await
@@ -1197,7 +1197,7 @@ impl DatabaseDriver for PostgresDriver {
         Ok(())
     }
 
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         let rows: Vec<(String,)> = sqlx::query_as(
             "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname",
         )
@@ -1207,7 +1207,7 @@ impl DatabaseDriver for PostgresDriver {
         Ok(rows.into_iter().map(|r| r.0).collect())
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         let rows = if let Some(schema) = schema {
             sqlx::query(
                 "SELECT table_schema, table_name, table_type \
@@ -1244,7 +1244,7 @@ impl DatabaseDriver for PostgresDriver {
         Ok(res)
     }
 
-    async fn list_routines(&self, schema: Option<String>) -> Result<Vec<RoutineInfo>, String> {
+    async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
         let rows = if let Some(schema) = schema {
             sqlx::query(
                 "SELECT n.nspname AS schema_name, \
@@ -1293,7 +1293,7 @@ impl DatabaseDriver for PostgresDriver {
         schema: String,
         name: String,
         _routine_type: String,
-    ) -> Result<String, String> {
+    ) -> DriverResult<String> {
         let row: (String,) = sqlx::query_as(
             "SELECT pg_get_functiondef(p.oid) \
              FROM pg_proc p \
@@ -1312,7 +1312,7 @@ impl DatabaseDriver for PostgresDriver {
             return Err(format!(
                 "[NOT_FOUND] Routine '{}.{}' does not exist or its definition is not visible",
                 schema, name
-            ));
+            ).into());
         }
         Ok(ddl)
     }
@@ -1321,7 +1321,7 @@ impl DatabaseDriver for PostgresDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         let pk_rows: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT a.attname
@@ -1401,7 +1401,7 @@ impl DatabaseDriver for PostgresDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let pk_rows: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT a.attname
@@ -1592,7 +1592,7 @@ impl DatabaseDriver for PostgresDriver {
         })
     }
 
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         let columns = self.load_pg_columns(&schema, &table).await?;
         let (key_constraints, foreign_keys, check_constraints) =
             self.load_pg_constraints(&schema, &table).await?;
@@ -1622,7 +1622,7 @@ impl DatabaseDriver for PostgresDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         let start = std::time::Instant::now();
         let offset = (page - 1) * limit;
 
@@ -1654,7 +1654,7 @@ impl DatabaseDriver for PostgresDriver {
         } else if let Some(ref col) = sort_column {
             // Validate column name to prevent SQL injection
             if !col.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string());
+                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string().into());
             }
             let dir = match sort_direction.as_deref() {
                 Some("desc") => "DESC",
@@ -1698,7 +1698,7 @@ impl DatabaseDriver for PostgresDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -1712,11 +1712,11 @@ impl DatabaseDriver for PostgresDriver {
         .await
     }
 
-    async fn execute_query(&self, sql: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string());
+            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
         }
 
         // Single statement: keep original behavior
@@ -1784,7 +1784,7 @@ impl DatabaseDriver for PostgresDriver {
         })
     }
 
-    async fn list_sequences(&self, schema: Option<String>) -> Result<Vec<SequenceInfo>, String> {
+    async fn list_sequences(&self, schema: Option<String>) -> DriverResult<Vec<SequenceInfo>> {
         let target_schema = schema.unwrap_or_else(|| "public".to_string());
 
         let rows = sqlx::query(
@@ -1811,7 +1811,7 @@ impl DatabaseDriver for PostgresDriver {
         Ok(res)
     }
 
-    async fn list_types(&self, schema: Option<String>) -> Result<Vec<TypeInfo>, String> {
+    async fn list_types(&self, schema: Option<String>) -> DriverResult<Vec<TypeInfo>> {
         let target_schema = schema.unwrap_or_else(|| "public".to_string());
 
         let rows = sqlx::query(
@@ -1847,7 +1847,7 @@ impl DatabaseDriver for PostgresDriver {
         Ok(res)
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         // Note: Using a simpler approach for now since sqlx QueryBuilder needs specific DB type setup
         // and I don't want to overcomplicate.
 

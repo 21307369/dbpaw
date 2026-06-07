@@ -162,10 +162,11 @@ pub async fn get_table_data_by_conn(
     limit: i64,
 ) -> Result<TableDataResponse, String> {
     validate_page_limit(page, limit)?;
-    let driver = crate::db::drivers::connect(&form).await?;
+    let driver = crate::db::drivers::connect(&form).await.map_err(String::from)?;
     driver
         .get_table_data(schema, table, page, limit, None, None, None, None)
         .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -251,7 +252,7 @@ pub async fn execute_query(
             Some(id),
             database,
             false,
-            Some(err.clone()),
+            Some(err.to_string()),
         )
         .await;
     }
@@ -329,7 +330,7 @@ pub async fn execute_query_by_id_direct(
             Some(id),
             database,
             false,
-            Some(err.clone()),
+            Some(err.to_string()),
         )
         .await;
     }
@@ -342,8 +343,11 @@ pub async fn execute_by_conn_direct(
     sql: String,
 ) -> Result<QueryResult, String> {
     let guarded_sql = apply_default_limit(&sql, Some(&form.driver));
-    let driver = crate::db::drivers::connect(&form).await?;
-    driver.execute_query_with_id(guarded_sql, None).await
+    let driver = crate::db::drivers::connect(&form).await.map_err(String::from)?;
+    driver
+        .execute_query_with_id(guarded_sql, None)
+        .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -429,7 +433,7 @@ pub async fn execute_by_conn(
     let guarded_sql = apply_default_limit(&sql, Some(&form.driver));
 
     let database = form.database.clone();
-    let driver = crate::db::drivers::connect(&form).await?;
+    let driver = crate::db::drivers::connect(&form).await.map_err(String::from)?;
     let result = driver
         .execute_query_with_id(
             guarded_sql.clone(),
@@ -470,11 +474,11 @@ pub async fn execute_by_conn(
             None,
             database,
             false,
-            Some(err.clone()),
+            Some(err.to_string()),
         )
         .await;
     }
-    result
+    result.map_err(String::from)
 }
 
 fn clamp_sql_execution_logs_limit(limit: Option<i64>) -> i64 {

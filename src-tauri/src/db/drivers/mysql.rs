@@ -1,4 +1,4 @@
-use super::{strip_trailing_statement_terminator, DatabaseDriver};
+use super::{strip_trailing_statement_terminator, DatabaseDriver, DriverResult};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, EventInfo, ForeignKeyInfo, IndexInfo, QueryColumn,
     QueryResult, RoutineInfo, SchemaForeignKey, SchemaOverview, SingleResultSet,
@@ -102,7 +102,7 @@ fn normalize_mysql_host_and_port(
 ) -> Result<(String, u16), String> {
     let mut host = raw_host.trim().to_string();
     if host.is_empty() {
-        return Err("[VALIDATION_ERROR] host cannot be empty".to_string());
+        return Err("[VALIDATION_ERROR] host cannot be empty".to_string().into());
     }
 
     let mut port = raw_port.unwrap_or(i64::from(mysql_family_default_port(raw_driver)));
@@ -120,10 +120,10 @@ fn normalize_mysql_host_and_port(
     }
 
     if host.is_empty() {
-        return Err("[VALIDATION_ERROR] host cannot be empty".to_string());
+        return Err("[VALIDATION_ERROR] host cannot be empty".to_string().into());
     }
     if !(1..=65535).contains(&port) {
-        return Err("[VALIDATION_ERROR] port must be between 1 and 65535".to_string());
+        return Err("[VALIDATION_ERROR] port must be between 1 and 65535".to_string().into());
     }
 
     Ok((host, port as u16))
@@ -859,7 +859,7 @@ fn decode_mysql_json_cell(
         return serde_json::from_slice(&v)
             .map_err(|e| format!("[QUERY_ERROR] Failed to parse JSON bytes cell: {e}"));
     }
-    Err("[QUERY_ERROR] Failed to decode MySQL JSON cell".to_string())
+    Err("[QUERY_ERROR] Failed to decode MySQL JSON cell".to_string().into())
 }
 
 fn is_mysql_temporal_type(data_type: &str) -> bool {
@@ -1047,7 +1047,7 @@ impl DatabaseDriver for MysqlDriver {
     async fn get_schema_foreign_keys(
         &self,
         database: Option<&str>,
-    ) -> Result<Vec<SchemaForeignKey>, String> {
+    ) -> DriverResult<Vec<SchemaForeignKey>> {
         let target_db = if let Some(db) = database.filter(|d| !d.trim().is_empty()) {
             db.trim().to_string()
         } else {
@@ -1133,7 +1133,7 @@ impl DatabaseDriver for MysqlDriver {
         self.cleanup_ca_file();
     }
 
-    async fn test_connection(&self) -> Result<(), String> {
+    async fn test_connection(&self) -> DriverResult<()> {
         if self.is_compatibility_mode() {
             self.fetch_all_sql("SELECT 1").await?;
             return Ok(());
@@ -1147,20 +1147,20 @@ impl DatabaseDriver for MysqlDriver {
                     .await
                     .map_err(|raw_err| format!("[QUERY_ERROR] {raw_err}"))?;
             } else {
-                return Err(format!("[QUERY_ERROR] {e}"));
+                return Err(format!("[QUERY_ERROR] {e}").into());
             }
         }
         Ok(())
     }
 
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         let rows = self.fetch_all_sql("SHOW DATABASES").await?;
         rows.into_iter()
-            .map(|row| decode_mysql_text_cell(&row, 0))
+            .map(|row| decode_mysql_text_cell(&row, 0).map_err(crate::error::AppError::from))
             .collect()
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         // For MySQL, schema is usually the database name.
         // If schema is provided, use it. If not, use the current database (which might be in the DSN).
         // However, list_tables implementation used self.form.database to fallback.
@@ -1206,7 +1206,7 @@ impl DatabaseDriver for MysqlDriver {
         Ok(res)
     }
 
-    async fn list_routines(&self, schema: Option<String>) -> Result<Vec<RoutineInfo>, String> {
+    async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
         let target_schema = if let Some(s) = schema {
             s
         } else {
@@ -1239,7 +1239,7 @@ impl DatabaseDriver for MysqlDriver {
         Ok(res)
     }
 
-    async fn list_events(&self, schema: Option<String>) -> Result<Vec<EventInfo>, String> {
+    async fn list_events(&self, schema: Option<String>) -> DriverResult<Vec<EventInfo>> {
         let target_schema = if let Some(s) = schema {
             s
         } else {
@@ -1281,7 +1281,7 @@ impl DatabaseDriver for MysqlDriver {
         schema: String,
         name: String,
         routine_type: String,
-    ) -> Result<String, String> {
+    ) -> DriverResult<String> {
         let ddl_keyword = match routine_type.to_lowercase().as_str() {
             "procedure" => "PROCEDURE",
             "function" => "FUNCTION",
@@ -1289,7 +1289,7 @@ impl DatabaseDriver for MysqlDriver {
                 return Err(format!(
                     "[QUERY_ERROR] Unknown routine type '{}'. Expected 'procedure' or 'function'",
                     routine_type
-                ))
+                ).into())
             }
         };
 
@@ -1311,7 +1311,7 @@ impl DatabaseDriver for MysqlDriver {
             return Err(format!(
                 "[NOT_FOUND] Routine '{}.{}' does not exist or its definition is not visible",
                 schema, name
-            ));
+            ).into());
         }
         Ok(ddl)
     }
@@ -1320,7 +1320,7 @@ impl DatabaseDriver for MysqlDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         let pk_set = self.fetch_primary_key_columns(&schema, &table).await?;
 
         let rows = self
@@ -1353,7 +1353,7 @@ impl DatabaseDriver for MysqlDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let pk_set = self.fetch_primary_key_columns(&schema, &table).await?;
 
         let column_rows = self
@@ -1494,7 +1494,7 @@ impl DatabaseDriver for MysqlDriver {
         })
     }
 
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         let qualified = if schema.is_empty() {
             format!("`{}`", table)
         } else {
@@ -1502,7 +1502,7 @@ impl DatabaseDriver for MysqlDriver {
         };
         let query = format!("SHOW CREATE TABLE {}", qualified);
         let row = self.fetch_one_sql(&query).await?;
-        decode_mysql_text_cell(&row, 1)
+        decode_mysql_text_cell(&row, 1).map_err(crate::error::AppError::from)
     }
 
     async fn get_table_data(
@@ -1515,7 +1515,7 @@ impl DatabaseDriver for MysqlDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         let start = std::time::Instant::now();
         let offset = (page - 1) * limit;
         let qualified = mysql_qualified_table(&schema, &table);
@@ -1540,7 +1540,7 @@ impl DatabaseDriver for MysqlDriver {
         } else if let Some(ref col) = sort_column {
             // Validate column name to prevent SQL injection
             if !col.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string());
+                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string().into());
             }
             let dir = match sort_direction.as_deref() {
                 Some("desc") => "DESC",
@@ -1600,7 +1600,7 @@ impl DatabaseDriver for MysqlDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -1614,11 +1614,11 @@ impl DatabaseDriver for MysqlDriver {
         .await
     }
 
-    async fn execute_query(&self, sql: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string());
+            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
         }
 
         // Single statement: keep original behavior
@@ -1690,7 +1690,7 @@ impl DatabaseDriver for MysqlDriver {
         &self,
         sql: String,
         query_id: Option<&str>,
-    ) -> Result<QueryResult, String> {
+    ) -> DriverResult<QueryResult> {
         if query_id.is_none() {
             return self.execute_query(sql).await;
         }
@@ -1709,7 +1709,7 @@ impl DatabaseDriver for MysqlDriver {
         result
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         let sql = "SELECT table_schema, table_name, column_name, data_type \
              FROM information_schema.columns"
             .to_string();

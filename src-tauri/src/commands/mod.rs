@@ -12,6 +12,7 @@ pub mod system;
 pub mod transfer;
 
 use crate::db::drivers::DatabaseDriver;
+use crate::error::AppError;
 use crate::models::ConnectionForm;
 use crate::state::AppState;
 use std::sync::Arc;
@@ -57,7 +58,7 @@ pub async fn ensure_connection_with_db(
     state: &State<'_, AppState>,
     id: i64,
     database: Option<String>,
-) -> Result<Arc<dyn DatabaseDriver>, String> {
+) -> Result<Arc<dyn DatabaseDriver>, AppError> {
     ensure_connection_with_db_inner(state.inner(), id, database).await
 }
 
@@ -65,7 +66,7 @@ pub async fn ensure_connection_with_db_from_app_state(
     state: &AppState,
     id: i64,
     database: Option<String>,
-) -> Result<Arc<dyn DatabaseDriver>, String> {
+) -> Result<Arc<dyn DatabaseDriver>, AppError> {
     ensure_connection_with_db_inner(state, id, database).await
 }
 
@@ -73,7 +74,7 @@ async fn ensure_connection_with_db_inner(
     state: &AppState,
     id: i64,
     database: Option<String>,
-) -> Result<Arc<dyn DatabaseDriver>, String> {
+) -> Result<Arc<dyn DatabaseDriver>, AppError> {
     let key = connection_pool_key(id, &database);
 
     if let Some(driver) = state.pool_manager.get_connection(&key).await {
@@ -85,7 +86,10 @@ async fn ensure_connection_with_db_inner(
         if let Some(db) = local_db {
             if db.get_connection_by_id(id).await.is_err() {
                 state.pool_manager.remove_by_prefix(&id.to_string()).await;
-                return Err(format!("Connection with ID {} no longer exists", id));
+                return Err(AppError::internal(format!(
+                    "Connection with ID {} no longer exists",
+                    id
+                )));
             }
         }
         return Ok(driver);
@@ -96,8 +100,8 @@ async fn ensure_connection_with_db_inner(
         lock.clone()
     };
 
-    let db = local_db.ok_or("Local DB not initialized")?;
-    let mut form = db.get_connection_form_by_id(id).await?;
+    let db = local_db.ok_or_else(|| AppError::internal("Local DB not initialized"))?;
+    let mut form = db.get_connection_form_by_id(id).await.map_err(AppError::from)?;
 
     if let Some(db_name) = database {
         if !db_name.is_empty() {
@@ -108,40 +112,43 @@ async fn ensure_connection_with_db_inner(
     state.pool_manager.connect(&key, &form).await
 }
 
-async fn execute_with_retry_core<T, Ensure, EnsureFut, Remove, RemoveFut, Task, TaskFut>(
+async fn execute_with_retry_core<T, E, Ensure, EnsureFut, Remove, RemoveFut, Task, TaskFut>(
     mut ensure: Ensure,
     mut remove: Remove,
     task: Task,
 ) -> Result<T, String>
 where
     Ensure: FnMut() -> EnsureFut,
-    EnsureFut: std::future::Future<Output = Result<Arc<dyn DatabaseDriver>, String>>,
+    EnsureFut: std::future::Future<Output = Result<Arc<dyn DatabaseDriver>, AppError>>,
     Remove: FnMut() -> RemoveFut,
     RemoveFut: std::future::Future<Output = ()>,
     Task: Fn(Arc<dyn DatabaseDriver>) -> TaskFut,
-    TaskFut: std::future::Future<Output = Result<T, String>>,
+    TaskFut: std::future::Future<Output = Result<T, E>>,
+    E: Into<AppError>,
 {
-    let driver = ensure().await?;
+    let driver = ensure().await.map_err(String::from)?;
     match task(driver.clone()).await {
         Ok(res) => Ok(res),
         Err(e) => {
-            if is_connection_error(&e) {
+            let err = e.into();
+            if is_connection_error(&err.to_string()) {
                 println!("[Pool] Connection error detected, retrying...");
                 remove().await;
-                let driver = ensure().await?;
+                let driver = ensure().await.map_err(String::from)?;
                 task(driver).await.map_err(|e| {
-                    println!("[Pool] Retry failed: {}", e);
-                    e
+                    let err = e.into();
+                    println!("[Pool] Retry failed: {}", err);
+                    String::from(err)
                 })
             } else {
-                println!("[Pool] Operation failed: {}", e);
-                Err(e)
+                println!("[Pool] Operation failed: {}", err);
+                Err(String::from(err))
             }
         }
     }
 }
 
-pub async fn execute_with_retry<F, Fut, T>(
+pub async fn execute_with_retry<F, Fut, T, E>(
     state: &State<'_, AppState>,
     id: i64,
     database: Option<String>,
@@ -149,12 +156,13 @@ pub async fn execute_with_retry<F, Fut, T>(
 ) -> Result<T, String>
 where
     F: Fn(Arc<dyn DatabaseDriver>) -> Fut,
-    Fut: std::future::Future<Output = Result<T, String>>,
+    Fut: std::future::Future<Output = Result<T, E>>,
+    E: Into<AppError>,
 {
     execute_with_retry_inner(state.inner(), id, database, task).await
 }
 
-pub async fn execute_with_retry_from_app_state<F, Fut, T>(
+pub async fn execute_with_retry_from_app_state<F, Fut, T, E>(
     state: &AppState,
     id: i64,
     database: Option<String>,
@@ -162,12 +170,13 @@ pub async fn execute_with_retry_from_app_state<F, Fut, T>(
 ) -> Result<T, String>
 where
     F: Fn(Arc<dyn DatabaseDriver>) -> Fut,
-    Fut: std::future::Future<Output = Result<T, String>>,
+    Fut: std::future::Future<Output = Result<T, E>>,
+    E: Into<AppError>,
 {
     execute_with_retry_inner(state, id, database, task).await
 }
 
-async fn execute_with_retry_inner<F, Fut, T>(
+async fn execute_with_retry_inner<F, Fut, T, E>(
     state: &AppState,
     id: i64,
     database: Option<String>,
@@ -175,7 +184,8 @@ async fn execute_with_retry_inner<F, Fut, T>(
 ) -> Result<T, String>
 where
     F: Fn(Arc<dyn DatabaseDriver>) -> Fut,
-    Fut: std::future::Future<Output = Result<T, String>>,
+    Fut: std::future::Future<Output = Result<T, E>>,
+    E: Into<AppError>,
 {
     let key = connection_pool_key(id, &database);
     execute_with_retry_core(
@@ -200,7 +210,7 @@ fn is_connection_error(e: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{connection_pool_key, execute_with_retry_core, is_connection_error};
-    use crate::db::drivers::DatabaseDriver;
+    use crate::db::drivers::{DatabaseDriver, DriverResult};
     use crate::models::{
         QueryResult, SchemaOverview, TableDataResponse, TableInfo, TableMetadata, TableStructure,
     };
@@ -213,31 +223,31 @@ mod tests {
     #[async_trait]
     impl DatabaseDriver for MockDriver {
         async fn close(&self) {}
-        async fn test_connection(&self) -> Result<(), String> {
+        async fn test_connection(&self) -> DriverResult<()> {
             Ok(())
         }
-        async fn list_databases(&self) -> Result<Vec<String>, String> {
+        async fn list_databases(&self) -> DriverResult<Vec<String>> {
             Ok(vec![])
         }
-        async fn list_tables(&self, _schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+        async fn list_tables(&self, _schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
             Ok(vec![])
         }
         async fn get_table_structure(
             &self,
             _schema: String,
             _table: String,
-        ) -> Result<TableStructure, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<TableStructure> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_metadata(
             &self,
             _schema: String,
             _table: String,
-        ) -> Result<TableMetadata, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<TableMetadata> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
-        async fn get_table_ddl(&self, _schema: String, _table: String) -> Result<String, String> {
-            Err("Unimplemented".into())
+        async fn get_table_ddl(&self, _schema: String, _table: String) -> DriverResult<String> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_data(
             &self,
@@ -249,8 +259,8 @@ mod tests {
             _sort_direction: Option<String>,
             _filter: Option<String>,
             _order_by: Option<String>,
-        ) -> Result<TableDataResponse, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<TableDataResponse> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_data_chunk(
             &self,
@@ -262,17 +272,17 @@ mod tests {
             _sort_direction: Option<String>,
             _filter: Option<String>,
             _order_by: Option<String>,
-        ) -> Result<TableDataResponse, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<TableDataResponse> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
-        async fn execute_query(&self, _sql: String) -> Result<QueryResult, String> {
-            Err("Unimplemented".into())
+        async fn execute_query(&self, _sql: String) -> DriverResult<QueryResult> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_schema_overview(
             &self,
             _schema: Option<String>,
-        ) -> Result<SchemaOverview, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<SchemaOverview> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
     }
 
@@ -308,7 +318,9 @@ mod tests {
                 async move {
                     let n = task_calls_c.fetch_add(1, Ordering::SeqCst);
                     if n == 0 {
-                        Err("[QUERY_ERROR] connection reset by peer".to_string())
+                        Err(crate::error::AppError::from(
+                            "[QUERY_ERROR] connection reset by peer",
+                        ))
                     } else {
                         Ok("ok".to_string())
                     }
@@ -354,7 +366,9 @@ mod tests {
                 let task_calls_c = task_calls_c.clone();
                 async move {
                     task_calls_c.fetch_add(1, Ordering::SeqCst);
-                    Err("[QUERY_ERROR] pool closed".to_string())
+                    Err::<String, crate::error::AppError>(crate::error::AppError::from(
+                        "[QUERY_ERROR] pool closed",
+                    ))
                 }
             },
         )

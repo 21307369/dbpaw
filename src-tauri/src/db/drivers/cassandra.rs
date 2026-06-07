@@ -1,4 +1,4 @@
-use super::{conn_failed_error, DatabaseDriver};
+use super::{conn_failed_error, DatabaseDriver, DriverResult};
 use crate::models::{
     CassandraTableExtra, ColumnInfo, ColumnSchema, ConnectionForm, IndexInfo, QueryColumn,
     QueryResult, RoutineInfo, SchemaOverview, TableDataResponse, TableInfo, TableMetadata,
@@ -340,7 +340,7 @@ impl CassandraDriver {
 impl DatabaseDriver for CassandraDriver {
     async fn close(&self) {}
 
-    async fn test_connection(&self) -> Result<(), String> {
+    async fn test_connection(&self) -> DriverResult<()> {
         self.session
             .query_unpaged("SELECT now() FROM system.local", &[])
             .await
@@ -348,7 +348,7 @@ impl DatabaseDriver for CassandraDriver {
         Ok(())
     }
 
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         let result = self
             .session
             .query_unpaged("SELECT keyspace_name FROM system_schema.keyspaces", &[])
@@ -375,13 +375,13 @@ impl DatabaseDriver for CassandraDriver {
         Ok(keyspaces)
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         let keyspace = schema
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| self.default_keyspace.clone());
 
         if keyspace.is_empty() {
-            return Err("[VALIDATION_ERROR] keyspace is required".to_string());
+            return Err("[VALIDATION_ERROR] keyspace is required".to_string().into());
         }
 
         let result = self
@@ -423,7 +423,7 @@ impl DatabaseDriver for CassandraDriver {
         Ok(tables)
     }
 
-    async fn list_routines(&self, _schema: Option<String>) -> Result<Vec<RoutineInfo>, String> {
+    async fn list_routines(&self, _schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
         Ok(vec![])
     }
 
@@ -431,7 +431,7 @@ impl DatabaseDriver for CassandraDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         let result = self
             .session
             .query_unpaged(
@@ -485,7 +485,7 @@ impl DatabaseDriver for CassandraDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let columns = self
             .get_table_structure(schema.clone(), table.clone())
             .await?;
@@ -504,7 +504,7 @@ impl DatabaseDriver for CassandraDriver {
         })
     }
 
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         let columns_result = self
             .session
             .query_unpaged(
@@ -602,7 +602,7 @@ impl DatabaseDriver for CassandraDriver {
         sort_direction: Option<String>,
         _filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         let start = Instant::now();
         let safe_page = page.max(1);
         let safe_limit = limit.clamp(1, 10_000);
@@ -685,7 +685,7 @@ impl DatabaseDriver for CassandraDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -699,12 +699,12 @@ impl DatabaseDriver for CassandraDriver {
         .await
     }
 
-    async fn execute_query(&self, sql: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
         let start = Instant::now();
         let trimmed = sql.trim();
 
         if trimmed.is_empty() {
-            return Err("[QUERY_ERROR] Empty query".to_string());
+            return Err("[QUERY_ERROR] Empty query".to_string().into());
         }
 
         let result = self
@@ -773,13 +773,13 @@ impl DatabaseDriver for CassandraDriver {
         })
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         let keyspace = schema
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| self.default_keyspace.clone());
 
         if keyspace.is_empty() {
-            return Err("[VALIDATION_ERROR] keyspace is required".to_string());
+            return Err("[VALIDATION_ERROR] keyspace is required".to_string().into());
         }
 
         let tables = self.list_tables(Some(keyspace.clone())).await?;

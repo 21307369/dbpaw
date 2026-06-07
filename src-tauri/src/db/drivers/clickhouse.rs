@@ -1,4 +1,4 @@
-use super::DatabaseDriver;
+use super::{DatabaseDriver, DriverResult};
 use crate::models::{
     ClickHouseTableExtra, ColumnInfo, ColumnSchema, ConnectionForm, QueryColumn, QueryResult,
     SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata, TableSchema,
@@ -537,7 +537,7 @@ impl ClickHouseDriver {
     pub async fn kill_query(&self, query_id: &str) -> Result<(), String> {
         let qid = query_id.trim();
         if qid.is_empty() {
-            return Err("[VALIDATION_ERROR] query_id cannot be empty".to_string());
+            return Err("[VALIDATION_ERROR] query_id cannot be empty".to_string().into());
         }
         let sql = format!("KILL QUERY WHERE query_id = {} ASYNC", quote_literal(qid));
         self.execute_raw(&sql, None).await.map(|_| ())
@@ -550,11 +550,14 @@ impl DatabaseDriver for ClickHouseDriver {
         // reqwest::Client does not require explicit close.
     }
 
-    async fn test_connection(&self) -> Result<(), String> {
-        self.execute_raw("SELECT 1", None).await.map(|_| ())
+    async fn test_connection(&self) -> DriverResult<()> {
+        self.execute_raw("SELECT 1", None)
+            .await
+            .map(|_| ())
+            .map_err(crate::error::AppError::from)
     }
 
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         let resp = self
             .execute_json(
                 "SELECT name FROM system.databases ORDER BY name FORMAT JSON",
@@ -571,7 +574,7 @@ impl DatabaseDriver for ClickHouseDriver {
         Ok(out)
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         let target_schema = schema
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| self.database.clone());
@@ -616,7 +619,7 @@ impl DatabaseDriver for ClickHouseDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         let columns = self.get_table_metadata(schema, table).await?.columns;
         Ok(TableStructure { columns })
     }
@@ -625,7 +628,7 @@ impl DatabaseDriver for ClickHouseDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let target_schema = if schema.trim().is_empty() {
             self.database.clone()
         } else {
@@ -708,7 +711,7 @@ impl DatabaseDriver for ClickHouseDriver {
         })
     }
 
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         let target_schema = if schema.trim().is_empty() {
             self.database.clone()
         } else {
@@ -736,7 +739,7 @@ impl DatabaseDriver for ClickHouseDriver {
             }
         }
 
-        Err("[QUERY_ERROR] SHOW CREATE TABLE returned empty result".to_string())
+        Err("[QUERY_ERROR] SHOW CREATE TABLE returned empty result".to_string().into())
     }
 
     async fn get_table_data(
@@ -749,7 +752,7 @@ impl DatabaseDriver for ClickHouseDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         let start = std::time::Instant::now();
 
         let target_schema = if schema.trim().is_empty() {
@@ -799,7 +802,7 @@ impl DatabaseDriver for ClickHouseDriver {
             }
         } else if let Some(ref col) = sort_column {
             if !col.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string());
+                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string().into());
             }
             let dir = match sort_direction.as_deref() {
                 Some("desc") => "DESC",
@@ -848,7 +851,7 @@ impl DatabaseDriver for ClickHouseDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -862,7 +865,7 @@ impl DatabaseDriver for ClickHouseDriver {
         .await
     }
 
-    async fn execute_query(&self, sql: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
         self.execute_query_with_id(sql, None).await
     }
 
@@ -870,11 +873,11 @@ impl DatabaseDriver for ClickHouseDriver {
         &self,
         sql: String,
         query_id: Option<&str>,
-    ) -> Result<QueryResult, String> {
+    ) -> DriverResult<QueryResult> {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string());
+            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
         }
 
         // Single statement: keep original behavior
@@ -950,7 +953,7 @@ impl DatabaseDriver for ClickHouseDriver {
                 return Err(format!(
                     "[PARSE_ERROR] Unable to determine affected rows from ClickHouse response. body: {}",
                     snippet
-                ));
+                ).into());
             };
             let duration = start.elapsed();
             return Ok(QueryResult {
@@ -1059,7 +1062,7 @@ impl DatabaseDriver for ClickHouseDriver {
         })
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         let base = "SELECT database, table, name, type FROM system.columns";
         let sql = if let Some(s) = schema.filter(|s| !s.trim().is_empty()) {
             format!(

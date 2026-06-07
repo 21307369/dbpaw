@@ -1,4 +1,5 @@
 use crate::db::drivers::DatabaseDriver;
+use crate::error::AppError;
 use crate::models::{Connection, ConnectionForm, TestConnectionResult};
 use crate::state::AppState;
 use serde::Deserialize;
@@ -17,16 +18,16 @@ pub struct CreateDatabasePayload {
     pub lc_ctype: Option<String>,
 }
 
-fn validate_database_name(raw: &str) -> Result<String, String> {
+fn validate_database_name(raw: &str) -> Result<String, AppError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err("[VALIDATION_ERROR] Database name cannot be empty".to_string());
+        return Err(AppError::validation("Database name cannot be empty"));
     }
     if trimmed.contains('\0') {
-        return Err("[VALIDATION_ERROR] Database name contains null byte".to_string());
+        return Err(AppError::validation("Database name contains null byte"));
     }
     if trimmed.len() > 128 {
-        return Err("[VALIDATION_ERROR] Database name is too long (max 128)".to_string());
+        return Err(AppError::validation("Database name is too long (max 128)"));
     }
     Ok(trimmed.to_string())
 }
@@ -38,7 +39,7 @@ fn is_safe_option_token(raw: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '@'))
 }
 
-fn normalize_option_token(opt: &Option<String>, field: &str) -> Result<Option<String>, String> {
+fn normalize_option_token(opt: &Option<String>, field: &str) -> Result<Option<String>, AppError> {
     let Some(value) = opt else {
         return Ok(None);
     };
@@ -47,10 +48,10 @@ fn normalize_option_token(opt: &Option<String>, field: &str) -> Result<Option<St
         return Ok(None);
     }
     if !is_safe_option_token(trimmed) {
-        return Err(format!(
-            "[VALIDATION_ERROR] Invalid characters in {}",
+        return Err(AppError::validation(format!(
+            "Invalid characters in {}",
             field
-        ));
+        )));
     }
     Ok(Some(trimmed.to_string()))
 }
@@ -82,7 +83,7 @@ fn quote_nliteral(value: &str) -> String {
 fn build_mysql_create_database_sql(
     payload: &CreateDatabasePayload,
     db_name: &str,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let charset = normalize_option_token(&payload.charset, "charset")?;
     let collation = normalize_option_token(&payload.collation, "collation")?;
     let mut sql = String::from("CREATE DATABASE ");
@@ -104,7 +105,7 @@ fn build_mysql_create_database_sql(
 fn build_postgres_create_database_sql(
     payload: &CreateDatabasePayload,
     db_name: &str,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let encoding = normalize_option_token(&payload.encoding, "encoding")?;
     let lc_collate = normalize_option_token(&payload.lc_collate, "lc_collate")?;
     let lc_ctype = normalize_option_token(&payload.lc_ctype, "lc_ctype")?;
@@ -131,7 +132,7 @@ fn build_postgres_create_database_sql(
 fn build_mssql_create_database_sql(
     payload: &CreateDatabasePayload,
     db_name: &str,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let collation = normalize_option_token(&payload.collation, "collation")?;
     let mut create_sql = format!("CREATE DATABASE {}", quote_mssql_ident(db_name));
     if let Some(collation) = collation {
@@ -152,36 +153,36 @@ fn build_mssql_create_database_sql(
 fn build_clickhouse_create_database_sql(
     payload: &CreateDatabasePayload,
     db_name: &str,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     if let Some(v) = normalize_option_token(&payload.charset, "charset")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] ClickHouse create database does not support charset option: {}",
+        return Err(AppError::unsupported(format!(
+            "ClickHouse create database does not support charset option: {}",
             v
-        ));
+        )));
     }
     if let Some(v) = normalize_option_token(&payload.collation, "collation")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] ClickHouse create database does not support collation option: {}",
+        return Err(AppError::unsupported(format!(
+            "ClickHouse create database does not support collation option: {}",
             v
-        ));
+        )));
     }
     if let Some(v) = normalize_option_token(&payload.encoding, "encoding")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] ClickHouse create database does not support encoding option: {}",
+        return Err(AppError::unsupported(format!(
+            "ClickHouse create database does not support encoding option: {}",
             v
-        ));
+        )));
     }
     if let Some(v) = normalize_option_token(&payload.lc_collate, "lc_collate")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] ClickHouse create database does not support lc_collate option: {}",
+        return Err(AppError::unsupported(format!(
+            "ClickHouse create database does not support lc_collate option: {}",
             v
-        ));
+        )));
     }
     if let Some(v) = normalize_option_token(&payload.lc_ctype, "lc_ctype")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] ClickHouse create database does not support lc_ctype option: {}",
+        return Err(AppError::unsupported(format!(
+            "ClickHouse create database does not support lc_ctype option: {}",
             v
-        ));
+        )));
     }
 
     let mut sql = String::from("CREATE DATABASE ");
@@ -199,36 +200,36 @@ fn quote_cql_ident(ident: &str) -> String {
 fn build_cassandra_create_database_sql(
     payload: &CreateDatabasePayload,
     db_name: &str,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     if let Some(v) = normalize_option_token(&payload.charset, "charset")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] Cassandra create keyspace does not support charset option: {}",
+        return Err(AppError::unsupported(format!(
+            "Cassandra create keyspace does not support charset option: {}",
             v
-        ));
+        )));
     }
     if let Some(v) = normalize_option_token(&payload.collation, "collation")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] Cassandra create keyspace does not support collation option: {}",
+        return Err(AppError::unsupported(format!(
+            "Cassandra create keyspace does not support collation option: {}",
             v
-        ));
+        )));
     }
     if let Some(v) = normalize_option_token(&payload.encoding, "encoding")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] Cassandra create keyspace does not support encoding option: {}",
+        return Err(AppError::unsupported(format!(
+            "Cassandra create keyspace does not support encoding option: {}",
             v
-        ));
+        )));
     }
     if let Some(v) = normalize_option_token(&payload.lc_collate, "lc_collate")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] Cassandra create keyspace does not support lc_collate option: {}",
+        return Err(AppError::unsupported(format!(
+            "Cassandra create keyspace does not support lc_collate option: {}",
             v
-        ));
+        )));
     }
     if let Some(v) = normalize_option_token(&payload.lc_ctype, "lc_ctype")? {
-        return Err(format!(
-            "[VALIDATION_ERROR] Cassandra create keyspace does not support lc_ctype option: {}",
+        return Err(AppError::unsupported(format!(
+            "Cassandra create keyspace does not support lc_ctype option: {}",
             v
-        ));
+        )));
     }
 
     let mut sql = String::from("CREATE KEYSPACE ");
@@ -266,8 +267,8 @@ fn normalize_create_database_error(err: String, db_name: &str) -> String {
 #[tauri::command]
 pub async fn list_databases(form: ConnectionForm) -> Result<Vec<String>, String> {
     let form = crate::connection_input::normalize_connection_form(form)?;
-    let driver = crate::db::drivers::connect(&form).await?;
-    driver.list_databases().await
+    let driver = crate::db::drivers::connect(&form).await.map_err(String::from)?;
+    driver.list_databases().await.map_err(String::from)
 }
 
 #[tauri::command]
@@ -294,7 +295,7 @@ pub async fn create_database_by_id(
     id: i64,
     payload: CreateDatabasePayload,
 ) -> Result<(), String> {
-    let db_name = validate_database_name(&payload.name)?;
+    let db_name = validate_database_name(&payload.name).map_err(String::from)?;
     let if_not_exists = payload.if_not_exists.unwrap_or(true);
     let driver = {
         let local_db = {
@@ -309,15 +310,15 @@ pub async fn create_database_by_id(
     };
 
     if matches!(driver.as_str(), "sqlite" | "duckdb") {
-        return Err(format!(
-            "[UNSUPPORTED] Driver {} does not support creating databases in this flow",
+        return Err(String::from(AppError::unsupported(format!(
+            "Driver {} does not support creating databases in this flow",
             driver
-        ));
+        ))));
     }
 
     let exec_res = match driver.as_str() {
         driver if crate::db::drivers::is_mysql_family_driver(driver) => {
-            let sql = build_mysql_create_database_sql(&payload, &db_name)?;
+            let sql = build_mysql_create_database_sql(&payload, &db_name).map_err(String::from)?;
             super::execute_with_retry(&state, id, None, |driver| {
                 let sql_clone = sql.clone();
                 async move { driver.execute_query(sql_clone).await.map(|_| ()) }
@@ -325,7 +326,8 @@ pub async fn create_database_by_id(
             .await
         }
         "postgres" => {
-            let create_sql = build_postgres_create_database_sql(&payload, &db_name)?;
+            let create_sql =
+                build_postgres_create_database_sql(&payload, &db_name).map_err(String::from)?;
             let exists_check_sql = format!(
                 "SELECT 1 FROM pg_database WHERE datname = {} LIMIT 1",
                 quote_literal(&db_name)
@@ -346,7 +348,7 @@ pub async fn create_database_by_id(
             .await
         }
         "mssql" => {
-            let sql = build_mssql_create_database_sql(&payload, &db_name)?;
+            let sql = build_mssql_create_database_sql(&payload, &db_name).map_err(String::from)?;
             super::execute_with_retry(&state, id, None, |driver| {
                 let sql_clone = sql.clone();
                 async move { driver.execute_query(sql_clone).await.map(|_| ()) }
@@ -354,7 +356,8 @@ pub async fn create_database_by_id(
             .await
         }
         "clickhouse" => {
-            let sql = build_clickhouse_create_database_sql(&payload, &db_name)?;
+            let sql =
+                build_clickhouse_create_database_sql(&payload, &db_name).map_err(String::from)?;
             super::execute_with_retry(&state, id, None, |driver| {
                 let sql_clone = sql.clone();
                 async move { driver.execute_query(sql_clone).await.map(|_| ()) }
@@ -362,7 +365,8 @@ pub async fn create_database_by_id(
             .await
         }
         "cassandra" => {
-            let sql = build_cassandra_create_database_sql(&payload, &db_name)?;
+            let sql =
+                build_cassandra_create_database_sql(&payload, &db_name).map_err(String::from)?;
             super::execute_with_retry(&state, id, None, |driver| {
                 let sql_clone = sql.clone();
                 async move { driver.execute_query(sql_clone).await.map(|_| ()) }
@@ -383,7 +387,7 @@ pub async fn create_database_by_id_direct(
     id: i64,
     payload: CreateDatabasePayload,
 ) -> Result<(), String> {
-    let db_name = validate_database_name(&payload.name)?;
+    let db_name = validate_database_name(&payload.name).map_err(String::from)?;
     let if_not_exists = payload.if_not_exists.unwrap_or(true);
     let driver = {
         let local_db = {
@@ -398,15 +402,15 @@ pub async fn create_database_by_id_direct(
     };
 
     if matches!(driver.as_str(), "sqlite" | "duckdb") {
-        return Err(format!(
-            "[UNSUPPORTED] Driver {} does not support creating databases in this flow",
+        return Err(String::from(AppError::unsupported(format!(
+            "Driver {} does not support creating databases in this flow",
             driver
-        ));
+        ))));
     }
 
     let exec_res = match driver.as_str() {
         driver if crate::db::drivers::is_mysql_family_driver(driver) => {
-            let sql = build_mysql_create_database_sql(&payload, &db_name)?;
+            let sql = build_mysql_create_database_sql(&payload, &db_name).map_err(String::from)?;
             super::execute_with_retry_from_app_state(state, id, None, |driver| {
                 let sql_clone = sql.clone();
                 async move { driver.execute_query(sql_clone).await.map(|_| ()) }
@@ -414,7 +418,8 @@ pub async fn create_database_by_id_direct(
             .await
         }
         "postgres" => {
-            let create_sql = build_postgres_create_database_sql(&payload, &db_name)?;
+            let create_sql =
+                build_postgres_create_database_sql(&payload, &db_name).map_err(String::from)?;
             let exists_check_sql = format!(
                 "SELECT 1 FROM pg_database WHERE datname = {} LIMIT 1",
                 quote_literal(&db_name)
@@ -435,7 +440,7 @@ pub async fn create_database_by_id_direct(
             .await
         }
         "mssql" => {
-            let sql = build_mssql_create_database_sql(&payload, &db_name)?;
+            let sql = build_mssql_create_database_sql(&payload, &db_name).map_err(String::from)?;
             super::execute_with_retry_from_app_state(state, id, None, |driver| {
                 let sql_clone = sql.clone();
                 async move { driver.execute_query(sql_clone).await.map(|_| ()) }
@@ -443,7 +448,8 @@ pub async fn create_database_by_id_direct(
             .await
         }
         "clickhouse" => {
-            let sql = build_clickhouse_create_database_sql(&payload, &db_name)?;
+            let sql =
+                build_clickhouse_create_database_sql(&payload, &db_name).map_err(String::from)?;
             super::execute_with_retry_from_app_state(state, id, None, |driver| {
                 let sql_clone = sql.clone();
                 async move { driver.execute_query(sql_clone).await.map(|_| ()) }
@@ -451,7 +457,8 @@ pub async fn create_database_by_id_direct(
             .await
         }
         "cassandra" => {
-            let sql = build_cassandra_create_database_sql(&payload, &db_name)?;
+            let sql =
+                build_cassandra_create_database_sql(&payload, &db_name).map_err(String::from)?;
             super::execute_with_retry_from_app_state(state, id, None, |driver| {
                 let sql_clone = sql.clone();
                 async move { driver.execute_query(sql_clone).await.map(|_| ()) }
@@ -514,7 +521,7 @@ pub async fn get_mysql_charsets_by_id(
             })
             .collect();
         charsets.sort();
-        Ok(charsets)
+        Ok::<Vec<String>, AppError>(charsets)
     })
     .await
 }
@@ -548,7 +555,7 @@ pub async fn get_mysql_collations_by_id(
                 })
                 .collect();
             collations.sort();
-            Ok(collations)
+            Ok::<Vec<String>, AppError>(collations)
         }
     })
     .await
@@ -572,7 +579,7 @@ pub async fn get_mysql_charsets_by_id_direct(
             })
             .collect();
         charsets.sort();
-        Ok(charsets)
+        Ok::<Vec<String>, AppError>(charsets)
     })
     .await
 }
@@ -605,7 +612,7 @@ pub async fn get_mysql_collations_by_id_direct(
                 })
                 .collect();
             collations.sort();
-            Ok(collations)
+            Ok::<Vec<String>, AppError>(collations)
         }
     })
     .await
@@ -743,8 +750,14 @@ mod tests {
 
     #[test]
     fn validate_database_name_rejects_empty_and_null() {
-        assert!(validate_database_name("  ").is_err());
-        assert!(validate_database_name("ab\0cd").is_err());
+        assert_eq!(
+            validate_database_name("  ").unwrap_err().to_string(),
+            "[ERR-3001] Database name cannot be empty"
+        );
+        assert_eq!(
+            validate_database_name("ab\0cd").unwrap_err().to_string(),
+            "[ERR-3001] Database name contains null byte"
+        );
     }
 
     #[test]
@@ -752,7 +765,10 @@ mod tests {
         let name_128 = "a".repeat(128);
         let name_129 = "a".repeat(129);
         assert_eq!(validate_database_name(&name_128).unwrap(), name_128);
-        assert!(validate_database_name(&name_129).is_err());
+        assert_eq!(
+            validate_database_name(&name_129).unwrap_err().to_string(),
+            "[ERR-3001] Database name is too long (max 128)"
+        );
     }
 
     #[test]
@@ -766,10 +782,10 @@ mod tests {
         assert!(empty.is_none());
 
         let err = normalize_option_token(&Some("utf8 mb4".into()), "charset").unwrap_err();
-        assert!(err.contains("Invalid characters"));
+        assert_eq!(err.to_string(), "[ERR-3001] Invalid characters in charset");
 
         let err = normalize_option_token(&Some("utf8;drop".into()), "charset").unwrap_err();
-        assert!(err.contains("Invalid characters"));
+        assert_eq!(err.to_string(), "[ERR-3001] Invalid characters in charset");
     }
 
     #[test]
@@ -914,7 +930,10 @@ mod tests {
             "analytics",
         )
         .unwrap_err();
-        assert!(err.contains("does not support charset option"));
+        assert_eq!(
+            err.to_string(),
+            "[ERR-5001] ClickHouse create database does not support charset option: utf8mb4"
+        );
     }
 
     #[test]
@@ -1022,7 +1041,10 @@ mod tests {
             "my_app",
         )
         .unwrap_err();
-        assert!(err.contains("does not support charset option"));
+        assert_eq!(
+            err.to_string(),
+            "[ERR-5001] Cassandra create keyspace does not support charset option: utf8mb4"
+        );
     }
 }
 

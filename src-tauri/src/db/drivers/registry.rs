@@ -14,13 +14,14 @@ use super::oracle::OracleDriver;
 use super::postgres::PostgresDriver;
 use super::sqlite::SqliteDriver;
 use super::DatabaseDriver;
+use crate::error::AppError;
 use crate::models::ConnectionForm;
 
 pub fn is_mysql_family_driver(driver: &str) -> bool {
     matches!(driver, "mysql" | "mariadb" | "tidb" | "starrocks" | "doris")
 }
 
-pub async fn connect(form: &ConnectionForm) -> Result<Box<dyn DatabaseDriver>, String> {
+pub async fn connect(form: &ConnectionForm) -> Result<Box<dyn DatabaseDriver>, AppError> {
     match form.driver.as_str() {
         "postgres" => {
             let driver = PostgresDriver::connect(form).await?;
@@ -67,10 +68,10 @@ pub async fn connect(form: &ConnectionForm) -> Result<Box<dyn DatabaseDriver>, S
             let driver = CassandraDriver::connect(form).await?;
             Ok(Box::new(driver) as Box<dyn DatabaseDriver>)
         }
-        _ => Err(format!(
-            "[UNSUPPORTED] Driver {} not supported",
+        _ => Err(AppError::unsupported(format!(
+            "Driver {} not supported",
             form.driver
-        )),
+        ))),
     }
 }
 

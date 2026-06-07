@@ -1,4 +1,5 @@
 use crate::db::drivers::{self, DatabaseDriver};
+use crate::error::AppError;
 use crate::models::ConnectionForm;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64};
@@ -80,7 +81,7 @@ impl PoolManager {
         &self,
         id: &str,
         form: &ConnectionForm,
-    ) -> Result<Arc<dyn DatabaseDriver>, String> {
+    ) -> Result<Arc<dyn DatabaseDriver>, AppError> {
         // 1. Fast path check
         if let Some(driver) = self.get_connection(id).await {
             return Ok(driver);
@@ -90,9 +91,12 @@ impl PoolManager {
         {
             let pools = self.pools.read().await;
             if pools.len() >= self.config.max_connections {
-                return Err(format!(
-                    "[POOL_ERROR] Maximum connection limit reached ({})",
-                    self.config.max_connections
+                return Err(AppError::conn_failed(
+                    format!(
+                        "Maximum connection limit reached ({})",
+                        self.config.max_connections
+                    ),
+                    "Close unused connections and try again",
                 ));
             }
         }
@@ -120,12 +124,12 @@ impl PoolManager {
         )
         .await
         .map_err(|_| {
-            format!(
-                "[POOL_ERROR] Connection timeout after {} seconds",
+            AppError::conn_timeout(format!(
+                "Connection timeout after {} seconds",
                 self.config.connection_timeout_secs
-            )
+            ))
         })?
-        .map_err(|e| format!("[POOL_CONNECT_ERROR] {}", e))?;
+        ?;
 
         let driver: Arc<dyn DatabaseDriver> = Arc::from(driver_box);
 
@@ -331,7 +335,7 @@ impl PoolManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::drivers::DatabaseDriver;
+    use crate::db::drivers::{DatabaseDriver, DriverResult};
     use async_trait::async_trait;
 
     struct MockDriver;
@@ -339,34 +343,34 @@ mod tests {
     #[async_trait]
     impl DatabaseDriver for MockDriver {
         async fn close(&self) {}
-        async fn test_connection(&self) -> Result<(), String> {
+        async fn test_connection(&self) -> DriverResult<()> {
             Ok(())
         }
-        async fn list_databases(&self) -> Result<Vec<String>, String> {
+        async fn list_databases(&self) -> DriverResult<Vec<String>> {
             Ok(vec![])
         }
         async fn list_tables(
             &self,
             _schema: Option<String>,
-        ) -> Result<Vec<crate::models::TableInfo>, String> {
+        ) -> DriverResult<Vec<crate::models::TableInfo>> {
             Ok(vec![])
         }
         async fn get_table_structure(
             &self,
             _schema: String,
             _table: String,
-        ) -> Result<crate::models::TableStructure, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::TableStructure> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_metadata(
             &self,
             _schema: String,
             _table: String,
-        ) -> Result<crate::models::TableMetadata, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::TableMetadata> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
-        async fn get_table_ddl(&self, _schema: String, _table: String) -> Result<String, String> {
-            Err("Unimplemented".into())
+        async fn get_table_ddl(&self, _schema: String, _table: String) -> DriverResult<String> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_data(
             &self,
@@ -378,8 +382,8 @@ mod tests {
             _sort_direction: Option<String>,
             _filter: Option<String>,
             _order_by: Option<String>,
-        ) -> Result<crate::models::TableDataResponse, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::TableDataResponse> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_data_chunk(
             &self,
@@ -391,17 +395,17 @@ mod tests {
             _sort_direction: Option<String>,
             _filter: Option<String>,
             _order_by: Option<String>,
-        ) -> Result<crate::models::TableDataResponse, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::TableDataResponse> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
-        async fn execute_query(&self, _sql: String) -> Result<crate::models::QueryResult, String> {
-            Err("Unimplemented".into())
+        async fn execute_query(&self, _sql: String) -> DriverResult<crate::models::QueryResult> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_schema_overview(
             &self,
             _schema: Option<String>,
-        ) -> Result<crate::models::SchemaOverview, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::SchemaOverview> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
     }
 
@@ -539,34 +543,34 @@ mod tests {
     #[async_trait]
     impl DatabaseDriver for UnhealthyMockDriver {
         async fn close(&self) {}
-        async fn test_connection(&self) -> Result<(), String> {
-            Err("Connection failed".into())
+        async fn test_connection(&self) -> DriverResult<()> {
+            Err(crate::error::AppError::from("Connection failed"))
         }
-        async fn list_databases(&self) -> Result<Vec<String>, String> {
-            Err("Unimplemented".into())
+        async fn list_databases(&self) -> DriverResult<Vec<String>> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn list_tables(
             &self,
             _schema: Option<String>,
-        ) -> Result<Vec<crate::models::TableInfo>, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<Vec<crate::models::TableInfo>> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_structure(
             &self,
             _schema: String,
             _table: String,
-        ) -> Result<crate::models::TableStructure, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::TableStructure> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_metadata(
             &self,
             _schema: String,
             _table: String,
-        ) -> Result<crate::models::TableMetadata, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::TableMetadata> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
-        async fn get_table_ddl(&self, _schema: String, _table: String) -> Result<String, String> {
-            Err("Unimplemented".into())
+        async fn get_table_ddl(&self, _schema: String, _table: String) -> DriverResult<String> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_data(
             &self,
@@ -578,8 +582,8 @@ mod tests {
             _sort_direction: Option<String>,
             _filter: Option<String>,
             _order_by: Option<String>,
-        ) -> Result<crate::models::TableDataResponse, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::TableDataResponse> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_table_data_chunk(
             &self,
@@ -591,17 +595,17 @@ mod tests {
             _sort_direction: Option<String>,
             _filter: Option<String>,
             _order_by: Option<String>,
-        ) -> Result<crate::models::TableDataResponse, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::TableDataResponse> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
-        async fn execute_query(&self, _sql: String) -> Result<crate::models::QueryResult, String> {
-            Err("Unimplemented".into())
+        async fn execute_query(&self, _sql: String) -> DriverResult<crate::models::QueryResult> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
         async fn get_schema_overview(
             &self,
             _schema: Option<String>,
-        ) -> Result<crate::models::SchemaOverview, String> {
-            Err("Unimplemented".into())
+        ) -> DriverResult<crate::models::SchemaOverview> {
+            Err(crate::error::AppError::from("Unimplemented"))
         }
     }
 
@@ -723,7 +727,7 @@ mod tests {
         let result = manager.connect("conn3", &form).await;
         match result {
             Ok(_) => panic!("Expected error but got Ok"),
-            Err(e) => assert!(e.contains("Maximum connection limit reached")),
+            Err(e) => assert!(e.to_string().contains("Maximum connection limit reached")),
         }
     }
 

@@ -105,9 +105,15 @@ async fn with_redis_conn<T, F>(
 where
     F: for<'a> FnOnce(&'a ConnectionForm, &'a mut RedisConnection) -> RedisCommandFuture<'a, T>,
 {
-    let form = super::get_connection_form_by_id_with_driver_check(state, id, "redis").await?;
-    let mut conn = acquire(state, id, &form, database).await?;
-    operation(&form, &mut conn).await
+    let form = super::get_connection_form_by_id_with_driver_check(state, id, "redis")
+        .await
+        .map_err(|e| String::from(crate::error::AppError::from(e)))?;
+    let mut conn = acquire(state, id, &form, database)
+        .await
+        .map_err(|e| String::from(crate::error::AppError::from(e)))?;
+    operation(&form, &mut conn)
+        .await
+        .map_err(|e| String::from(crate::error::AppError::from(e)))
 }
 
 async fn with_redis_retry<T, F>(
@@ -119,7 +125,9 @@ async fn with_redis_retry<T, F>(
 where
     F: for<'a> Fn(&'a ConnectionForm, &'a mut RedisConnection) -> RedisCommandFuture<'a, T>,
 {
-    let form = super::get_connection_form_by_id_with_driver_check(state, id, "redis").await?;
+    let form = super::get_connection_form_by_id_with_driver_check(state, id, "redis")
+        .await
+        .map_err(|e| String::from(crate::error::AppError::from(e)))?;
     let operation = &operation;
 
     retry_once_on_redis_io_error(
@@ -138,4 +146,5 @@ where
         },
     )
     .await
+    .map_err(|e| String::from(crate::error::AppError::from(e)))
 }

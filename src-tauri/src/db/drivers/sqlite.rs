@@ -1,4 +1,4 @@
-use super::DatabaseDriver;
+use super::{DatabaseDriver, DriverResult};
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
     SchemaForeignKey, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata,
@@ -399,7 +399,7 @@ impl DatabaseDriver for SqliteDriver {
     async fn get_schema_foreign_keys(
         &self,
         _database: Option<&str>,
-    ) -> Result<Vec<SchemaForeignKey>, String> {
+    ) -> DriverResult<Vec<SchemaForeignKey>> {
         let tables: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
         )
@@ -451,7 +451,7 @@ impl DatabaseDriver for SqliteDriver {
         self.pool.close().await;
     }
 
-    async fn test_connection(&self) -> Result<(), String> {
+    async fn test_connection(&self) -> DriverResult<()> {
         sqlx::query("SELECT 1")
             .execute(&self.pool)
             .await
@@ -459,11 +459,11 @@ impl DatabaseDriver for SqliteDriver {
         Ok(())
     }
 
-    async fn list_databases(&self) -> Result<Vec<String>, String> {
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
         Ok(vec!["main".to_string()])
     }
 
-    async fn list_tables(&self, _schema: Option<String>) -> Result<Vec<TableInfo>, String> {
+    async fn list_tables(&self, _schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         let schema = _schema.unwrap_or_else(|| "main".to_string());
         let master_ref = sqlite_master_ref(&schema);
         let rows = sqlx::query(&format!(
@@ -499,7 +499,7 @@ impl DatabaseDriver for SqliteDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableStructure, String> {
+    ) -> DriverResult<TableStructure> {
         let rows = sqlx::query(&pragma_table_info_sql(&schema, &table))
             .fetch_all(&self.pool)
             .await
@@ -529,7 +529,7 @@ impl DatabaseDriver for SqliteDriver {
         &self,
         schema: String,
         table: String,
-    ) -> Result<TableMetadata, String> {
+    ) -> DriverResult<TableMetadata> {
         let columns = self
             .get_table_structure(schema.clone(), table.clone())
             .await?
@@ -623,7 +623,7 @@ impl DatabaseDriver for SqliteDriver {
         })
     }
 
-    async fn get_table_ddl(&self, schema: String, table: String) -> Result<String, String> {
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         let row = sqlx::query(&format!(
             "SELECT sql \
              FROM {} \
@@ -639,7 +639,7 @@ impl DatabaseDriver for SqliteDriver {
         let row =
             row.ok_or_else(|| format!("[QUERY_ERROR] Table or view '{}' not found", table))?;
         let sql: Option<String> = row.try_get("sql").unwrap_or(None);
-        sql.ok_or_else(|| format!("[QUERY_ERROR] Failed to read DDL for '{}'", table))
+        sql.ok_or_else(|| format!("[QUERY_ERROR] Failed to read DDL for '{}'", table).into())
     }
 
     async fn get_table_data(
@@ -652,7 +652,7 @@ impl DatabaseDriver for SqliteDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         let start = std::time::Instant::now();
         let safe_page = if page < 1 { 1 } else { page };
         let safe_limit = if limit < 1 { 100 } else { limit };
@@ -681,7 +681,7 @@ impl DatabaseDriver for SqliteDriver {
             }
         } else if let Some(ref col) = sort_column {
             if !col.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string());
+                return Err("[VALIDATION_ERROR] Invalid sort column name".to_string().into());
             }
             let dir = match sort_direction.as_deref() {
                 Some("desc") => "DESC",
@@ -739,7 +739,7 @@ impl DatabaseDriver for SqliteDriver {
         sort_direction: Option<String>,
         filter: Option<String>,
         order_by: Option<String>,
-    ) -> Result<TableDataResponse, String> {
+    ) -> DriverResult<TableDataResponse> {
         self.get_table_data(
             schema,
             table,
@@ -753,11 +753,11 @@ impl DatabaseDriver for SqliteDriver {
         .await
     }
 
-    async fn execute_query(&self, sql: String) -> Result<QueryResult, String> {
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
         let start = std::time::Instant::now();
         let statements = super::split_sql_statements(&sql);
         if statements.is_empty() {
-            return Err("[QUERY_ERROR] Empty SQL statement".to_string());
+            return Err("[QUERY_ERROR] Empty SQL statement".to_string().into());
         }
 
         // Single statement: keep original behavior
@@ -825,7 +825,7 @@ impl DatabaseDriver for SqliteDriver {
         })
     }
 
-    async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, String> {
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
         let target_schema = sqlite_schema_name(schema.as_deref().unwrap_or("main"));
         let tables = self.list_tables(Some(target_schema.clone())).await?;
         let mut map: HashMap<(String, String), Vec<ColumnSchema>> = HashMap::new();
