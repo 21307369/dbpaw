@@ -417,7 +417,7 @@ pub async fn ping(conn: &mut RedisConnection) -> error::RedisResult<()> {
     conn.query::<String>(redis::cmd("PING"))
         .await
         .map(|_| ())
-        .map_err(|e| crate::error::AppError::from(conn_failed_error(&e)))
+        .map_err(|e| conn_failed_error(&e))
 }
 
 pub fn list_databases(
