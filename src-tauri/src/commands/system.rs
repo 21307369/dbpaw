@@ -14,3 +14,10 @@ pub async fn list_system_fonts() -> Result<Vec<String>, String> {
     });
     Ok(families.clone())
 }
+
+#[macro_export]
+macro_rules! system_commands {
+    () => {
+        $crate::commands::system::list_system_fonts,
+    };
+}
