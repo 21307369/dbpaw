@@ -2008,11 +2008,10 @@ impl DatabaseDriver for MssqlDriver {
             .unwrap_or_default();
 
         if ddl.trim().is_empty() {
-            return Err(format!(
-                "[NOT_FOUND] Routine '{}.{}' does not exist or its definition is not visible",
+            return Err(AppError::not_found(format!(
+                "Routine '{}.{}' does not exist or its definition is not visible",
                 schema, name
-            )
-            .into());
+            )));
         }
 
         Ok(ddl)

@@ -63,6 +63,12 @@ pub enum AppError {
         message: String,
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
+    /// Resource not found
+    NotFound {
+        code: u16,
+        message: String,
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 }
 
 impl fmt::Display for AppError {
@@ -85,6 +91,7 @@ impl fmt::Display for AppError {
             AppError::Ai { code, message, .. } => write!(f, "[ERR-{code}] {message}"),
             AppError::Unsupported { code, message } => write!(f, "[ERR-{code}] {message}"),
             AppError::Internal { code, message, .. } => write!(f, "[ERR-{code}] {message}"),
+            AppError::NotFound { code, message, .. } => write!(f, "[ERR-{code}] {message}"),
         }
     }
 }
@@ -114,11 +121,7 @@ impl From<String> for AppError {
             return AppError::conn_failed(message.trim_start(), "Check connection settings");
         }
         if let Some(message) = trimmed.strip_prefix("[NOT_FOUND]") {
-            return AppError::Internal {
-                code: codes::NOT_FOUND,
-                message: message.trim_start().to_string(),
-                source: None,
-            };
+            return AppError::not_found(message.trim_start());
         }
         AppError::internal(err)
     }
@@ -143,6 +146,9 @@ impl std::error::Error for AppError {
                 .as_ref()
                 .map(|e| e.as_ref() as &(dyn std::error::Error + 'static)),
             AppError::Internal { source, .. } => source
+                .as_ref()
+                .map(|e| e.as_ref() as &(dyn std::error::Error + 'static)),
+            AppError::NotFound { source, .. } => source
                 .as_ref()
                 .map(|e| e.as_ref() as &(dyn std::error::Error + 'static)),
             _ => None,
@@ -279,6 +285,25 @@ impl AppError {
     ) -> Self {
         AppError::Internal {
             code: codes::INTERNAL,
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        AppError::NotFound {
+            code: codes::NOT_FOUND,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    pub fn not_found_with(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        AppError::NotFound {
+            code: codes::NOT_FOUND,
             message: message.into(),
             source: Some(Box::new(source)),
         }

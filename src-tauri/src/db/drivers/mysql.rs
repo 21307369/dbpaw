@@ -67,14 +67,14 @@ pub struct MysqlDriver {
 
 fn write_temp_cert_file(prefix: &str, pem: &str) -> DriverResult<PathBuf> {
     let dir = std::env::temp_dir().join("dbpaw_certs");
-    fs::create_dir_all(&dir).map_err(|e| format!("[SSL_CA_WRITE_ERROR] {e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| AppError::internal_with("Failed to create cert directory", e))?;
     let path = dir.join(format!("{prefix}_{}.pem", uuid::Uuid::new_v4()));
-    fs::write(&path, pem).map_err(|e| format!("[SSL_CA_WRITE_ERROR] {e}"))?;
+    fs::write(&path, pem).map_err(|e| AppError::internal_with("Failed to write cert file", e))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let perm = fs::Permissions::from_mode(0o600);
-        fs::set_permissions(&path, perm).map_err(|e| format!("[SSL_CA_WRITE_ERROR] {e}"))?;
+        fs::set_permissions(&path, perm).map_err(|e| AppError::internal_with("Failed to set cert file permissions", e))?;
     }
     Ok(path)
 }
@@ -1314,11 +1314,10 @@ impl DatabaseDriver for MysqlDriver {
         let ddl = decode_mysql_text_cell(&row, 2).map_err(|e| query_error(e.to_string()))?;
 
         if ddl.trim().is_empty() {
-            return Err(format!(
-                "[NOT_FOUND] Routine '{}.{}' does not exist or its definition is not visible",
+            return Err(AppError::not_found(format!(
+                "Routine '{}.{}' does not exist or its definition is not visible",
                 schema, name
-            )
-            .into());
+            )));
         }
         Ok(ddl)
     }
