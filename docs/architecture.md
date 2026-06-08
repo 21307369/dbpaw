@@ -98,5 +98,5 @@ async fn execute_query(
 ## Translation/i18n
 - Framework: i18next + react-i18next
 - Locale files: `src/lib/i18n/locales/*.ts` (TypeScript, not JSON)
-- Supported: English (en), Chinese (zh), Japanese (ja)
+- Supported: English (en), Chinese (zh)
 - To add language: Create locale file and register in `src/lib/i18n/index.ts`

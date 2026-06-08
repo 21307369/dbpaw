@@ -80,8 +80,8 @@ runtime-resolved bindings.
     `<ShortcutRecorder />` component used inside the settings row.
   - `src/contexts/ShortcutsContext.tsx` — provider, `useShortcuts`,
     `useShortcutBinding(id)`, with optimistic update + store sync.
-- **i18n**: three new string blocks under `settings.shortcuts.*` in
-  `en.ts`, `zh.ts`, `ja.ts`.
+- **i18n**: two new string blocks under `settings.shortcuts.*` in
+  `en.ts`, `zh.ts`.
 - **Tests**
   - `match.unit.test.ts` — `matchShortcut` truth table for modifiers,
     key variants (`BracketRight` ↔ `]`), and the `Mod` alias.

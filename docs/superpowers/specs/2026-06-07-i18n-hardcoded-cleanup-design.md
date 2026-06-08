@@ -1,7 +1,7 @@
 # i18n Hardcoded String Cleanup (4 Files)
 
 **Date:** 2026-06-07
-**Scope:** Replace hardcoded English strings in 4 frontend files with i18n keys, and add translations to en.ts, zh.ts, ja.ts.
+**Scope:** Replace hardcoded English strings in 4 frontend files with i18n keys, and add translations to en.ts, zh.ts.
 
 ## Background
 
@@ -135,7 +135,6 @@ All new keys must be added to all 3 files:
 
 1. `src/lib/i18n/locales/en.ts` — English values (from the hardcoded strings)
 2. `src/lib/i18n/locales/zh.ts` — Chinese translations
-3. `src/lib/i18n/locales/ja.ts` — Japanese translations
 
 ### Section additions
 
@@ -244,12 +243,11 @@ footerHint: "Scores are geohash values. Click \"lookup\" to fetch real coordinat
 
 ## Validation
 
-- `pnpm run typecheck` must pass (TypeScript types from en.ts propagate to zh.ts and ja.ts)
+- `pnpm run typecheck` must pass (TypeScript types from en.ts propagate to zh.ts)
 - `pnpm run lint` must pass
 - Manual spot-check: open ComplexValueViewer dialog, Redis Geo view, right-click context menu in DataGrid — verify strings render correctly in English
 
 ## Out of Scope
 
-- Wiring `ja` locale into `src/lib/i18n/index.ts` (separate task)
 - Scanning other files for hardcoded strings (only the 4 specified files)
 - Technical labels like "JSON", "Tree", "Table", "#" (kept as-is)

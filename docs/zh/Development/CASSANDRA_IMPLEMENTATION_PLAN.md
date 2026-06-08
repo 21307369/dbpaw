@@ -163,7 +163,7 @@ export type DriverKind = "sql" | "kv" | "document" | "search" | "widecolumn";
 
 #### 3.4 国际化
 
-**文件**: `src/lib/i18n/locales/en.ts`, `zh.ts`, `ja.ts`
+**文件**: `src/lib/i18n/locales/en.ts`, `zh.ts`
 
 ```typescript
 cassandra: {

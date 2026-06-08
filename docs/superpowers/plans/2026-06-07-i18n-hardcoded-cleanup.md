@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace hardcoded English strings in 4 frontend components with i18n keys, adding translations to en.ts, zh.ts, ja.ts.
+**Goal:** Replace hardcoded English strings in 4 frontend components with i18n keys, adding translations to en.ts, zh.ts.
 
-**Architecture:** Add new keys under existing module namespaces (`datagrid.viewer.*`, `tableView.contextMenu.*`, `redis.browser.*`, `redis.geo.*`). Locale files are TypeScript; `en.ts` is the source of truth, `zh.ts` and `ja.ts` import its `Translations` type for type-safety.
+**Architecture:** Add new keys under existing module namespaces (`datagrid.viewer.*`, `tableView.contextMenu.*`, `redis.browser.*`, `redis.geo.*`). Locale files are TypeScript; `en.ts` is the source of truth, `zh.ts` imports its `Translations` type for type-safety.
 
 **Tech Stack:** TypeScript, react-i18next, i18next
 
@@ -252,118 +252,7 @@ Add after `nearbyFailed`:
 
 ---
 
-### Task 5: Add all new keys to ja.ts
-
-**Files:**
-- Modify: `src/lib/i18n/locales/ja.ts`
-
-- [ ] **Step 1: Add `datagrid` section to ja.ts**
-
-Insert after `settings` section:
-
-```ts
-  datagrid: {
-    viewer: {
-      copied: "コピーしました",
-      copyJson: "JSON をコピー",
-      typeArray: "配列",
-      typeObject: "オブジェクト",
-    },
-  },
-```
-
-- [ ] **Step 2: Add `contextMenu` to `tableView` in ja.ts**
-
-Inside `tableView: { ... }`, add after `deleteRows`:
-
-```ts
-    contextMenu: {
-      copySelection: "選択範囲をコピー",
-      copyCell: "セルをコピー",
-      copySelectionAs: "選択範囲をコピー:",
-      selectionCopiedAsCsv: "選択範囲を CSV としてコピーしました",
-      selectionCopiedAsInsertSql: "選択範囲を Insert SQL としてコピーしました",
-      selectionCopiedAsUpdateSql: "選択範囲を Update SQL としてコピーしました",
-      copiedRows: "{{count}} 行をコピーしました",
-      rowCopied: "行をコピーしました",
-      copySelectedRows: "選択した行をコピー",
-      copyRow: "行をコピー",
-      undoThisCell: "このセルを元に戻す",
-      copyAs: "コピー形式:",
-      copiedAsCsv: "CSV としてコピーしました",
-      rowCopiedAsCsv: "行を CSV としてコピーしました",
-      copySelectedAsCsv: "選択行を CSV としてコピー",
-      copyAsCsv: "CSV としてコピー",
-      copiedAsInsertSql: "Insert SQL としてコピーしました",
-      rowCopiedAsInsertSql: "行を Insert SQL としてコピーしました",
-      copySelectedAsInsertSql: "選択行を Insert SQL としてコピー",
-      copyAsInsertSql: "Insert SQL としてコピー",
-      copiedAsUpdateSql: "Update SQL としてコピーしました",
-      rowCopiedAsUpdateSql: "行を Update SQL としてコピーしました",
-      copySelectedAsUpdateSql: "選択行を Update SQL としてコピー",
-      copyAsUpdateSql: "Update SQL としてコピー",
-    },
-```
-
-- [ ] **Step 3: Add keys to `redis.browser` in ja.ts**
-
-Add after `exportFailed`:
-
-```ts
-      mgetExport: "MGET エクスポート",
-      mgetDescription: "選択した {{count}} キーの値",
-      copiedToClipboard: "クリップボードにコピーしました",
-      copy: "コピー",
-      exportedSuccessfully: "エクスポートしました",
-      saveToFile: "ファイルに保存",
-      msetImport: "MSET インポート",
-      msetDescription: "キーバリューペアをインポート（JSON オブジェクトまたは key:value 形式）",
-      importFile: "ファイルをインポート",
-      import: "インポート",
-```
-
-- [ ] **Step 4: Add keys to `redis.geo` in ja.ts**
-
-Add after `nearbyFailed`:
-
-```ts
-      title: "Geo",
-      noCoordinates: "このメンバーの座標が見つかりません",
-      memberNameRequired: "メンバー名は必須です",
-      longitudeRange: "経度は -180 から 180 の間でなければなりません",
-      latitudeRange: "緯度は -85.05 から 85.05 の間でなければなりません",
-      locationAdded: "場所 \"{{member}}\" を追加しました",
-      distanceCalculated: "距離を計算しました",
-      nearbyFound: "近くに {{count}} 件の場所が見つかりました",
-      locationCount: "{{count}} 件の場所",
-      distance: "距離",
-      nearby: "近く",
-      score: "スコア",
-      add: "追加",
-      distDescription: "GEODIST — 2 つのメンバー間の距離を計算",
-      member1: "メンバー 1",
-      member2: "メンバー 2",
-      calculate: "計算",
-      searchDescription: "GEOSEARCH — メンバーの近くの場所を検索",
-      centerMember: "中心メンバー",
-      radius: "半径",
-      search: "検索",
-      searchResultsFound: "{{count}} 件の結果が見つかりました",
-      addDescription: "GEOADD — 新しい場所を追加",
-      memberNamePlaceholder: "メンバー名",
-      longitude: "経度",
-      latitude: "緯度",
-      adding: "追加中...",
-      colMember: "メンバー",
-      colGeohash: "Geohash",
-      emptyLocations: "場所がありません",
-      lookup: "ルックアップ",
-      footerHint: "スコアは geohash 値です。「ルックアップ」をクリックして GEOPOS で実際の座標を取得。「距離」と「近く」ツールで空間クエリを実行できます。",
-```
-
----
-
-### Task 6: Update ComplexValueViewer.tsx
+### Task 5: Update ComplexValueViewer.tsx
 
 **Files:**
 - Modify: `src/components/business/DataGrid/ComplexValueViewer.tsx`
@@ -400,7 +289,7 @@ Replace line 256:
 
 ---
 
-### Task 7: Update TableContextMenuContent.tsx
+### Task 6: Update TableContextMenuContent.tsx
 
 **Files:**
 - Modify: `src/components/business/DataGrid/tableView/TableContextMenuContent.tsx`
@@ -504,7 +393,7 @@ t("tableView.contextMenu.copyAsCsv")
 
 ---
 
-### Task 8: Update RedisBrowserView.tsx
+### Task 7: Update RedisBrowserView.tsx
 
 **Files:**
 - Modify: `src/components/business/Redis/RedisBrowserView.tsx`
@@ -603,7 +492,7 @@ Import
 
 ---
 
-### Task 9: Update RedisGeoViewer.tsx
+### Task 8: Update RedisGeoViewer.tsx
 
 **Files:**
 - Modify: `src/components/business/Redis/value-viewer/RedisGeoViewer.tsx`
@@ -903,7 +792,7 @@ GEOPOS. Use "Distance" and "Nearby" tools for spatial queries.
 
 ---
 
-### Task 10: Verify — typecheck and lint
+### Task 9: Verify — typecheck and lint
 
 - [ ] **Step 1: Run typecheck**
 

@@ -394,15 +394,13 @@ Follow the pattern of `src-tauri/tests/mysql_command_integration.rs`. Key points
 
 ### Step 8 — Update i18n (file-based drivers only)
 
-**Only if `IS_FILE_BASED == true`**, update all three locale files:
+**Only if `IS_FILE_BASED == true`**, update the locale files:
 - `src/lib/i18n/locales/en.ts`
 - `src/lib/i18n/locales/zh.ts`
-- `src/lib/i18n/locales/ja.ts`
 
 Look for the `sqliteFilePath` / `duckdbFilePath` section and add analogous entries:
 - `en.ts`: `{DRIVER_ID}FilePath: "{DB_NAME} File"`, `{DRIVER_ID}Path: "/path/to/db.{DRIVER_ID}"`
 - `zh.ts`: appropriate Chinese translation
-- `ja.ts`: appropriate Japanese translation
 
 ---
 

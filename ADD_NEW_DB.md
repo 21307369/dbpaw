@@ -248,9 +248,9 @@ const DRIVER_IDS = [
 
 ## Step 8：i18n（仅 file 型 driver）
 
-**文件：** `src/lib/i18n/locales/en.ts`、`zh.ts`、`ja.ts`
+**文件：** `src/lib/i18n/locales/en.ts`、`zh.ts`
 
-file 型 driver 需要在三个 locale 文件里加"文件路径"标签和占位符。
+file 型 driver 需要在两个 locale 文件里加"文件路径"标签和占位符。
 
 在 `en.ts` 中搜索 `duckdbFilePath`（约第 221 行）附近加入：
 
@@ -259,7 +259,7 @@ file 型 driver 需要在三个 locale 文件里加"文件路径"标签和占位
 {driver}Path: "/path/to/db.{driver}",
 ```
 
-zh.ts 和 ja.ts 同理加入对应翻译。
+zh.ts 同理加入对应翻译。
 
 ---
 
@@ -357,7 +357,6 @@ bun run test:smoke   # typecheck + lint + unit tests
 | `src/lib/driver-registry.tsx`                     | 改   | 必须（前端唯一入口）    |
 | `src/lib/i18n/locales/en.ts`                      | 改   | file 型                 |
 | `src/lib/i18n/locales/zh.ts`                      | 改   | file 型                 |
-| `src/lib/i18n/locales/ja.ts`                      | 改   | file 型                 |
 | `src-tauri/tests/common/{driver}_context.rs`      | 新建 | 集成测试                |
 | `src-tauri/tests/{driver}_integration.rs`         | 新建 | 集成测试                |
 | `src-tauri/tests/{driver}_command_integration.rs` | 新建 | 集成测试                |

@@ -130,8 +130,8 @@
       `errorNoModifier`, `conflictPrompt` (with `{{other}}`
       interpolation), `confirmReplace`. Keep alphabetical ordering
       to match the existing locale style.
-- [x] 6.2 Mirror the same keys in `zh.ts` and `ja.ts`. No new locale
-      files are required (only the existing three locales are
+- [x] 6.2 Mirror the same keys in `zh.ts`. No new locale
+      files are required (only the existing two locales are
       registered in `src/lib/i18n/index.ts`).
 - [x] 6.3 Replace the now-obsolete `settings.shortcuts.readonlyHint`
       entry in all three locales (the editable surface no longer

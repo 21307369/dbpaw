@@ -121,7 +121,7 @@ Add `db2` entry:
 
 ### i18n
 
-Add Db2 strings to `src/lib/i18n/locales/en.ts`, `zh.ts`, `ja.ts`.
+Add Db2 strings to `src/lib/i18n/locales/en.ts`, `zh.ts`.
 
 ### API Layer
 
