@@ -4,10 +4,10 @@ set -euo pipefail
 files=()
 while IFS= read -r file; do
   files+=("$file")
-done < <(find src -type f -name "*.unit.test.ts" | sort)
+done < <(find src -type f \( -name "*.unit.test.ts" -o -name "*.unit.test.tsx" \) | sort)
 
 if [[ ${#files[@]} -eq 0 ]]; then
-  echo "[skip] no unit test files found (*.unit.test.ts)"
+  echo "[skip] no unit test files found (*.unit.test.ts / *.unit.test.tsx)"
   exit 0
 fi
 
