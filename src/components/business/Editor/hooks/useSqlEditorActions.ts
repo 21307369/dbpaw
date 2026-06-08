@@ -43,7 +43,7 @@ export function useSqlEditorActions(props: {
 
   const editorViewRef = useRef<EditorView | null>(null);
 
-  const executeFromEditorRef = useRef<(view: EditorView) => void>();
+  const executeFromEditorRef = useRef<((view: EditorView) => void) | null>(null);
   const handleFormatRef = useRef(handleFormat);
   handleFormatRef.current = handleFormat;
   const triggerSaveRef = useRef(triggerSave);
