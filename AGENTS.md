@@ -39,14 +39,15 @@ it never happens again.
 
 ## Frontend / TypeScript
 
-- `src/services/api.ts` is the **only** file that calls `invoke()`. Never call
-  `@tauri-apps/api/core` invoke directly from components or other services.
+- `src/services/api/core.ts` is the **only** file that calls `invoke()`. Never
+  call `@tauri-apps/api/core` invoke directly from components or other services.
+  Domain wrappers live in `src/services/api/{query,metadata,redis,...}.ts`.
 - When a Tauri command's parameter types change, update **both**:
   - The Rust `#[tauri::command]` signature
-  - The corresponding TypeScript wrapper in `src/services/api.ts`
+  - The corresponding TypeScript wrapper in `src/services/api/`
 - Mock mode (`VITE_USE_MOCK=true`) is for rapid UI iteration. The mock
-  implementations live in `src/services/mocks.ts`. When adding a new API
-  method to `api.ts`, always add a corresponding mock entry.
+  implementations live in `src/services/mocks/`. When adding a new API
+  method to `api/`, always add a corresponding mock entry.
 - i18n locale files are TypeScript, not JSON. After adding a new locale file
   in `src/lib/i18n/locales/`, register it in `src/lib/i18n/index.ts`.
 - The keyboard-shortcut registry lives in `src/lib/shortcuts/defaults.ts`.
