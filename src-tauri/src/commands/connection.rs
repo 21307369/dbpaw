@@ -241,25 +241,22 @@ fn build_cassandra_create_database_sql(
     Ok(sql)
 }
 
-fn normalize_create_database_error(err: String, db_name: &str) -> String {
-    let lower = err.to_lowercase();
+fn normalize_create_database_error(err: AppError, db_name: &str) -> AppError {
+    let lower = err.to_string().to_lowercase();
     if lower.contains("already exists")
         || lower.contains("duplicate database")
         || lower.contains("database exists")
         || lower.contains("42p04")
         || lower.contains("2714")
     {
-        return format!(
-            "[ALREADY_EXISTS] Database '{}' already exists. {}",
-            db_name, err
-        );
+        return AppError::already_exists(format!("Database '{}' already exists. {}", db_name, err));
     }
     if lower.contains("permission denied")
         || lower.contains("access denied")
         || lower.contains("not authorized")
         || lower.contains("insufficient privilege")
     {
-        return format!("[PERMISSION_DENIED] {}", err);
+        return AppError::permission_denied(format!("{}", err));
     }
     err
 }
@@ -381,7 +378,7 @@ pub async fn create_database_by_id(
         )).to_string()),
     };
 
-    exec_res.map_err(|e| normalize_create_database_error(e.to_string(), &db_name))
+    exec_res.map_err(|e| normalize_create_database_error(e, &db_name)).map_err(String::from)
 }
 
 pub async fn create_database_by_id_direct(
@@ -473,7 +470,7 @@ pub async fn create_database_by_id_direct(
         )).to_string()),
     };
 
-    exec_res.map_err(|e| normalize_create_database_error(e.to_string(), &db_name))
+    exec_res.map_err(|e| normalize_create_database_error(e, &db_name)).map_err(String::from)
 }
 
 #[tauri::command]
@@ -797,20 +794,20 @@ mod tests {
     #[test]
     fn normalize_create_database_error_classifies_known_errors() {
         let already = normalize_create_database_error(
-            "ERROR 1007 (HY000): Can't create database; database exists".to_string(),
+            AppError::internal("ERROR 1007 (HY000): Can't create database; database exists"),
             "app",
         );
-        assert!(already.contains("[ALREADY_EXISTS]"));
+        assert!(already.to_string().contains("[ERR-3004]"));
 
         let postgres =
-            normalize_create_database_error("ERROR: 42P04 duplicate_database".to_string(), "app");
-        assert!(postgres.contains("[ALREADY_EXISTS]"));
+            normalize_create_database_error(AppError::internal("ERROR: 42P04 duplicate_database"), "app");
+        assert!(postgres.to_string().contains("[ERR-3004]"));
 
         let perm = normalize_create_database_error(
-            "ERROR: permission denied for database app".to_string(),
+            AppError::internal("ERROR: permission denied for database app"),
             "app",
         );
-        assert!(perm.contains("[PERMISSION_DENIED]"));
+        assert!(perm.to_string().contains("[ERR-3005]"));
     }
 
     #[test]
