@@ -1,4 +1,4 @@
-use super::{conn_failed_error, DatabaseDriver, DriverResult};
+use super::{conn_failed_error, DatabaseDriver, DriverCapabilities, DriverResult, ForeignKeyDriver, RoutineDriver, SequenceDriver};
 use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
@@ -170,6 +170,12 @@ impl Db2Driver {
 
 #[async_trait]
 impl DatabaseDriver for Db2Driver {
+    fn capabilities(&self) -> DriverCapabilities {
+        DriverCapabilities::ROUTINES
+            | DriverCapabilities::SEQUENCES
+            | DriverCapabilities::FOREIGN_KEYS
+    }
+
     async fn test_connection(&self) -> DriverResult<()> {
         self.run_blocking(|conn| {
             let cursor = conn
@@ -251,129 +257,6 @@ impl DatabaseDriver for Db2Driver {
                 }
             }
             Ok(result)
-        })
-        .await
-    }
-
-    async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
-        let schema_upper = schema
-            .map(|s| s.trim().to_uppercase())
-            .filter(|s| !s.is_empty());
-        self.run_blocking(move |conn| {
-            let sql = if let Some(ref s) = schema_upper {
-                format!(
-                    "SELECT ROUTINESCHEMA, ROUTINENAME, ROUTINETYPE \
-                     FROM SYSCAT.ROUTINES \
-                     WHERE ROUTINESCHEMA = '{}' \
-                     ORDER BY ROUTINESCHEMA, ROUTINENAME",
-                    escape_literal(s)
-                )
-            } else {
-                "SELECT ROUTINESCHEMA, ROUTINENAME, ROUTINETYPE \
-                 FROM SYSCAT.ROUTINES \
-                 ORDER BY ROUTINESCHEMA, ROUTINENAME"
-                    .to_string()
-            };
-            let cursor = conn
-                .execute(&sql, ())
-                .map_err(|e| AppError::query_failed(e.to_string()))?;
-            let mut result = Vec::new();
-            if let Some(c) = cursor {
-                let (_, rows) = collect_cursor_data(c)?;
-                for row in &rows {
-                    if let Some(arr) = row.as_array() {
-                        let schema_name = arr.first().and_then(|v| v.as_str()).unwrap_or("");
-                        let routine_name = arr.get(1).and_then(|v| v.as_str()).unwrap_or("");
-                        let routine_type = arr.get(2).and_then(|v| v.as_str()).unwrap_or("");
-                        if !schema_name.is_empty() && !routine_name.is_empty() {
-                            result.push(RoutineInfo {
-                                schema: schema_name.to_string(),
-                                name: routine_name.to_string(),
-                                r#type: routine_type.to_string(),
-                            });
-                        }
-                    }
-                }
-            }
-            Ok(result)
-        })
-        .await
-    }
-
-    async fn list_sequences(&self, schema: Option<String>) -> DriverResult<Vec<SequenceInfo>> {
-        let schema_upper = schema
-            .map(|s| s.trim().to_uppercase())
-            .filter(|s| !s.is_empty());
-        self.run_blocking(move |conn| {
-            let sql = if let Some(ref s) = schema_upper {
-                format!(
-                    "SELECT SEQSCHEMA, SEQNAME, DATA_TYPE, CAST(START AS VARCHAR(64)), CAST(INCREMENT AS VARCHAR(64)) \
-                     FROM SYSCAT.SEQUENCES \
-                     WHERE SEQSCHEMA = '{}' \
-                     ORDER BY SEQSCHEMA, SEQNAME",
-                    escape_literal(s)
-                )
-            } else {
-                "SELECT SEQSCHEMA, SEQNAME, DATA_TYPE, CAST(START AS VARCHAR(64)), CAST(INCREMENT AS VARCHAR(64)) \
-                 FROM SYSCAT.SEQUENCES \
-                 ORDER BY SEQSCHEMA, SEQNAME"
-                    .to_string()
-            };
-            let cursor = conn
-                .execute(&sql, ())
-                .map_err(|e| AppError::query_failed(e.to_string()))?;
-            let mut result = Vec::new();
-            if let Some(c) = cursor {
-                let (_, rows) = collect_cursor_data(c)?;
-                for row in &rows {
-                    if let Some(arr) = row.as_array() {
-                        let schema_name = arr.first().and_then(|v| v.as_str()).unwrap_or("");
-                        let seq_name = arr.get(1).and_then(|v| v.as_str()).unwrap_or("");
-                        let data_type = arr.get(2).and_then(|v| v.as_str()).unwrap_or("");
-                        let start_value = arr.get(3).and_then(|v| v.as_str()).unwrap_or("");
-                        let increment = arr.get(4).and_then(|v| v.as_str()).unwrap_or("");
-                        if !schema_name.is_empty() && !seq_name.is_empty() {
-                            result.push(SequenceInfo {
-                                schema: schema_name.to_string(),
-                                name: seq_name.to_string(),
-                                data_type: data_type.to_string(),
-                                start_value: Some(start_value.to_string()),
-                                increment: Some(increment.to_string()),
-                            });
-                        }
-                    }
-                }
-            }
-            Ok(result)
-        })
-        .await
-    }
-
-    async fn get_routine_ddl(
-        &self,
-        schema: String,
-        name: String,
-        _routine_type: String,
-    ) -> DriverResult<String> {
-        self.run_blocking(move |conn| {
-            let sql = format!(
-                "SELECT TEXT FROM SYSCAT.ROUTINES \
-                 WHERE ROUTINESCHEMA = '{}' AND ROUTINENAME = '{}'",
-                escape_literal(&schema),
-                escape_literal(&name)
-            );
-            let cursor = conn
-                .execute(&sql, ())
-                .map_err(|e| AppError::query_failed(e.to_string()))?;
-            if let Some(c) = cursor {
-                let (_, rows) = collect_cursor_data(c)?;
-                if let Some(row) = rows.first() {
-                    if let Some(text) = row.as_str() {
-                        return Ok(text.trim().to_string());
-                    }
-                }
-            }
-            Err(AppError::query_failed("Routine not found"))
         })
         .await
     }
@@ -1059,6 +942,140 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
+    async fn close(&self) {}
+}
+
+#[async_trait]
+impl RoutineDriver for Db2Driver {
+    async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
+        let schema_upper = schema
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty());
+        self.run_blocking(move |conn| {
+            let sql = if let Some(ref s) = schema_upper {
+                format!(
+                    "SELECT ROUTINESCHEMA, ROUTINENAME, ROUTINETYPE \
+                     FROM SYSCAT.ROUTINES \
+                     WHERE ROUTINESCHEMA = '{}' \
+                     ORDER BY ROUTINESCHEMA, ROUTINENAME",
+                    escape_literal(s)
+                )
+            } else {
+                "SELECT ROUTINESCHEMA, ROUTINENAME, ROUTINETYPE \
+                 FROM SYSCAT.ROUTINES \
+                 ORDER BY ROUTINESCHEMA, ROUTINENAME"
+                    .to_string()
+            };
+            let cursor = conn
+                .execute(&sql, ())
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
+            let mut result = Vec::new();
+            if let Some(c) = cursor {
+                let (_, rows) = collect_cursor_data(c)?;
+                for row in &rows {
+                    if let Some(arr) = row.as_array() {
+                        let schema_name = arr.first().and_then(|v| v.as_str()).unwrap_or("");
+                        let routine_name = arr.get(1).and_then(|v| v.as_str()).unwrap_or("");
+                        let routine_type = arr.get(2).and_then(|v| v.as_str()).unwrap_or("");
+                        if !schema_name.is_empty() && !routine_name.is_empty() {
+                            result.push(RoutineInfo {
+                                schema: schema_name.to_string(),
+                                name: routine_name.to_string(),
+                                r#type: routine_type.to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+            Ok(result)
+        })
+        .await
+    }
+
+    async fn get_routine_ddl(
+        &self,
+        schema: String,
+        name: String,
+        _routine_type: String,
+    ) -> DriverResult<String> {
+        self.run_blocking(move |conn| {
+            let sql = format!(
+                "SELECT TEXT FROM SYSCAT.ROUTINES \
+                 WHERE ROUTINESCHEMA = '{}' AND ROUTINENAME = '{}'",
+                escape_literal(&schema),
+                escape_literal(&name)
+            );
+            let cursor = conn
+                .execute(&sql, ())
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
+            if let Some(c) = cursor {
+                let (_, rows) = collect_cursor_data(c)?;
+                if let Some(row) = rows.first() {
+                    if let Some(text) = row.as_str() {
+                        return Ok(text.trim().to_string());
+                    }
+                }
+            }
+            Err(AppError::query_failed("Routine not found"))
+        })
+        .await
+    }
+}
+
+#[async_trait]
+impl SequenceDriver for Db2Driver {
+    async fn list_sequences(&self, schema: Option<String>) -> DriverResult<Vec<SequenceInfo>> {
+        let schema_upper = schema
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty());
+        self.run_blocking(move |conn| {
+            let sql = if let Some(ref s) = schema_upper {
+                format!(
+                    "SELECT SEQSCHEMA, SEQNAME, DATA_TYPE, CAST(START AS VARCHAR(64)), CAST(INCREMENT AS VARCHAR(64)) \
+                     FROM SYSCAT.SEQUENCES \
+                     WHERE SEQSCHEMA = '{}' \
+                     ORDER BY SEQSCHEMA, SEQNAME",
+                    escape_literal(s)
+                )
+            } else {
+                "SELECT SEQSCHEMA, SEQNAME, DATA_TYPE, CAST(START AS VARCHAR(64)), CAST(INCREMENT AS VARCHAR(64)) \
+                 FROM SYSCAT.SEQUENCES \
+                 ORDER BY SEQSCHEMA, SEQNAME"
+                    .to_string()
+            };
+            let cursor = conn
+                .execute(&sql, ())
+                .map_err(|e| AppError::query_failed(e.to_string()))?;
+            let mut result = Vec::new();
+            if let Some(c) = cursor {
+                let (_, rows) = collect_cursor_data(c)?;
+                for row in &rows {
+                    if let Some(arr) = row.as_array() {
+                        let schema_name = arr.first().and_then(|v| v.as_str()).unwrap_or("");
+                        let seq_name = arr.get(1).and_then(|v| v.as_str()).unwrap_or("");
+                        let data_type = arr.get(2).and_then(|v| v.as_str()).unwrap_or("");
+                        let start_value = arr.get(3).and_then(|v| v.as_str()).unwrap_or("");
+                        let increment = arr.get(4).and_then(|v| v.as_str()).unwrap_or("");
+                        if !schema_name.is_empty() && !seq_name.is_empty() {
+                            result.push(SequenceInfo {
+                                schema: schema_name.to_string(),
+                                name: seq_name.to_string(),
+                                data_type: data_type.to_string(),
+                                start_value: Some(start_value.to_string()),
+                                increment: Some(increment.to_string()),
+                            });
+                        }
+                    }
+                }
+            }
+            Ok(result)
+        })
+        .await
+    }
+}
+
+#[async_trait]
+impl ForeignKeyDriver for Db2Driver {
     async fn get_schema_foreign_keys(
         &self,
         _database: Option<&str>,
@@ -1114,8 +1131,6 @@ impl DatabaseDriver for Db2Driver {
         })
         .await
     }
-
-    async fn close(&self) {}
 }
 
 fn format_db2_type(type_name: &str, length: i64, scale: i64) -> String {
