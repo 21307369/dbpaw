@@ -1,4 +1,7 @@
-use super::{DatabaseDriver, DriverResult, strip_trailing_statement_terminator};
+use super::{
+    DatabaseDriver, DriverCapabilities, DriverResult, EventDriver, ForeignKeyDriver, RoutineDriver,
+    strip_trailing_statement_terminator,
+};
 use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, EventInfo, ForeignKeyInfo, IndexInfo, QueryColumn,
@@ -1056,88 +1059,11 @@ impl MysqlDriver {
 
 #[async_trait]
 impl DatabaseDriver for MysqlDriver {
-    async fn get_schema_foreign_keys(
-        &self,
-        database: Option<&str>,
-    ) -> DriverResult<Vec<SchemaForeignKey>> {
-        let target_db = if let Some(db) = database.filter(|d| !d.trim().is_empty()) {
-            db.trim().to_string()
-        } else {
-            self.current_database()
-                .await
-                .map_err(|e| query_error(format!("Failed to get current database: {e}")))?
-                .unwrap_or_default()
-        };
-
-        let rows = if target_db.is_empty() {
-            sqlx::query(
-                r#"
-                SELECT
-                  kcu.CONSTRAINT_NAME,
-                  kcu.TABLE_SCHEMA,
-                  kcu.TABLE_NAME,
-                  kcu.COLUMN_NAME,
-                  kcu.REFERENCED_TABLE_SCHEMA,
-                  kcu.REFERENCED_TABLE_NAME,
-                  kcu.REFERENCED_COLUMN_NAME,
-                  rc.UPDATE_RULE,
-                  rc.DELETE_RULE
-                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-                JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
-                  ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
-                  AND kcu.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
-                WHERE kcu.REFERENCED_TABLE_NAME IS NOT NULL
-                ORDER BY kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
-                "#,
-            )
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| query_error(e.to_string()))?
-        } else {
-            sqlx::query(
-                r#"
-                SELECT
-                  kcu.CONSTRAINT_NAME,
-                  kcu.TABLE_SCHEMA,
-                  kcu.TABLE_NAME,
-                  kcu.COLUMN_NAME,
-                  kcu.REFERENCED_TABLE_SCHEMA,
-                  kcu.REFERENCED_TABLE_NAME,
-                  kcu.REFERENCED_COLUMN_NAME,
-                  rc.UPDATE_RULE,
-                  rc.DELETE_RULE
-                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-                JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
-                  ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
-                  AND kcu.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
-                WHERE kcu.REFERENCED_TABLE_NAME IS NOT NULL
-                  AND kcu.TABLE_SCHEMA = ?
-                ORDER BY kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
-                "#,
-            )
-            .bind(&target_db)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| query_error(e.to_string()))?
-        };
-
-        let mut foreign_keys = Vec::new();
-        for row in rows {
-            let source_schema = decode_mysql_text_cell(&row, 1).unwrap_or_default();
-            let target_schema = decode_mysql_text_cell(&row, 4).unwrap_or_default();
-            foreign_keys.push(SchemaForeignKey {
-                name: decode_mysql_text_cell(&row, 0).unwrap_or_default(),
-                source_schema: Some(source_schema),
-                source_table: decode_mysql_text_cell(&row, 2).unwrap_or_default(),
-                source_column: decode_mysql_text_cell(&row, 3).unwrap_or_default(),
-                target_schema: Some(target_schema),
-                target_table: decode_mysql_text_cell(&row, 5).unwrap_or_default(),
-                target_column: decode_mysql_text_cell(&row, 6).unwrap_or_default(),
-                on_update: decode_mysql_optional_text_cell(&row, 7).unwrap_or(None),
-                on_delete: decode_mysql_optional_text_cell(&row, 8).unwrap_or(None),
-            });
-        }
-        Ok(foreign_keys)
+    fn capabilities(&self) -> DriverCapabilities {
+        DriverCapabilities::ROUTINES
+            | DriverCapabilities::EVENTS
+            | DriverCapabilities::FOREIGN_KEYS
+            | DriverCapabilities::QUERY_WITH_ID
     }
 
     async fn close(&self) {
@@ -1216,110 +1142,6 @@ impl DatabaseDriver for MysqlDriver {
             });
         }
         Ok(res)
-    }
-
-    async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
-        let target_schema = if let Some(s) = schema {
-            s
-        } else {
-            self.current_database()
-                .await
-                .map_err(|e| query_error(format!("Failed to get current database: {e}")))?
-                .ok_or_else(|| query_error("No database selected and no schema provided"))?
-        };
-
-        let rows = self
-            .fetch_all_with_str_params(
-                "SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE \
-                 FROM information_schema.ROUTINES \
-                 WHERE ROUTINE_SCHEMA = ? \
-                 ORDER BY ROUTINE_TYPE, ROUTINE_NAME",
-                &[&target_schema],
-            )
-            .await?;
-
-        let mut res = Vec::new();
-        for row in rows {
-            res.push(RoutineInfo {
-                schema: decode_mysql_text_cell(&row, 0).unwrap_or_default(),
-                name: decode_mysql_text_cell(&row, 1).unwrap_or_default(),
-                r#type: decode_mysql_text_cell(&row, 2)
-                    .unwrap_or_default()
-                    .to_lowercase(),
-            });
-        }
-        Ok(res)
-    }
-
-    async fn list_events(&self, schema: Option<String>) -> DriverResult<Vec<EventInfo>> {
-        let target_schema = if let Some(s) = schema {
-            s
-        } else {
-            self.current_database()
-                .await
-                .map_err(|e| query_error(format!("Failed to get current database: {e}")))?
-                .ok_or_else(|| query_error("No database selected and no schema provided"))?
-        };
-
-        let rows = self
-            .fetch_all_with_str_params(
-                "SELECT EVENT_SCHEMA, EVENT_NAME, STATUS, EVENT_TYPE, \
-                 EXECUTE_AT, INTERVAL_VALUE, LAST_EXECUTED, EVENT_DEFINITION \
-                 FROM information_schema.EVENTS \
-                 WHERE EVENT_SCHEMA = ? \
-                 ORDER BY EVENT_NAME",
-                &[&target_schema],
-            )
-            .await?;
-
-        let mut res = Vec::new();
-        for row in rows {
-            res.push(EventInfo {
-                schema: decode_mysql_text_cell(&row, 0)?,
-                name: decode_mysql_text_cell(&row, 1)?,
-                status: decode_mysql_text_cell(&row, 2)?,
-                event_type: decode_mysql_text_cell(&row, 3)?,
-                execute_at: decode_mysql_optional_text_cell(&row, 4)?,
-                interval_value: decode_mysql_optional_text_cell(&row, 5)?,
-                last_executed: decode_mysql_optional_text_cell(&row, 6)?,
-                definition: decode_mysql_optional_text_cell(&row, 7)?,
-            });
-        }
-        Ok(res)
-    }
-
-    async fn get_routine_ddl(
-        &self,
-        schema: String,
-        name: String,
-        routine_type: String,
-    ) -> DriverResult<String> {
-        let ddl_keyword = match routine_type.to_lowercase().as_str() {
-            "procedure" => "PROCEDURE",
-            "function" => "FUNCTION",
-            _ => {
-                return Err(query_error(format!(
-                    "Unknown routine type '{}'. Expected 'procedure' or 'function'",
-                    routine_type
-                )));
-            }
-        };
-
-        let sql = format!("SHOW CREATE {} `{}`.`{}`", ddl_keyword, schema, name);
-        let row = self.fetch_one_sql(&sql).await?;
-
-        // SHOW CREATE PROCEDURE/FUNCTION returns columns:
-        // Procedure/Function, sql_mode, Create Procedure/Function, character_set_client, collation_connection, Database Collation
-        // The DDL is in column index 2
-        let ddl = decode_mysql_text_cell(&row, 2).map_err(|e| query_error(e.to_string()))?;
-
-        if ddl.trim().is_empty() {
-            return Err(AppError::not_found(format!(
-                "Routine '{}.{}' does not exist or its definition is not visible",
-                schema, name
-            )));
-        }
-        Ok(ddl)
     }
 
     async fn get_table_structure(
@@ -1795,6 +1617,200 @@ impl DatabaseDriver for MysqlDriver {
         tables.sort_by(|a, b| a.schema.cmp(&b.schema).then(a.name.cmp(&b.name)));
 
         Ok(SchemaOverview { tables })
+    }
+}
+
+#[async_trait]
+impl RoutineDriver for MysqlDriver {
+    async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
+        let target_schema = if let Some(s) = schema {
+            s
+        } else {
+            self.current_database()
+                .await
+                .map_err(|e| query_error(format!("Failed to get current database: {e}")))?
+                .ok_or_else(|| query_error("No database selected and no schema provided"))?
+        };
+
+        let rows = self
+            .fetch_all_with_str_params(
+                "SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE \
+                 FROM information_schema.ROUTINES \
+                 WHERE ROUTINE_SCHEMA = ? \
+                 ORDER BY ROUTINE_TYPE, ROUTINE_NAME",
+                &[&target_schema],
+            )
+            .await?;
+
+        let mut res = Vec::new();
+        for row in rows {
+            res.push(RoutineInfo {
+                schema: decode_mysql_text_cell(&row, 0).unwrap_or_default(),
+                name: decode_mysql_text_cell(&row, 1).unwrap_or_default(),
+                r#type: decode_mysql_text_cell(&row, 2)
+                    .unwrap_or_default()
+                    .to_lowercase(),
+            });
+        }
+        Ok(res)
+    }
+
+    async fn get_routine_ddl(
+        &self,
+        schema: String,
+        name: String,
+        routine_type: String,
+    ) -> DriverResult<String> {
+        let ddl_keyword = match routine_type.to_lowercase().as_str() {
+            "procedure" => "PROCEDURE",
+            "function" => "FUNCTION",
+            _ => {
+                return Err(query_error(format!(
+                    "Unknown routine type '{}'. Expected 'procedure' or 'function'",
+                    routine_type
+                )));
+            }
+        };
+
+        let sql = format!("SHOW CREATE {} `{}`.`{}`", ddl_keyword, schema, name);
+        let row = self.fetch_one_sql(&sql).await?;
+
+        let ddl = decode_mysql_text_cell(&row, 2).map_err(|e| query_error(e.to_string()))?;
+
+        if ddl.trim().is_empty() {
+            return Err(AppError::not_found(format!(
+                "Routine '{}.{}' does not exist or its definition is not visible",
+                schema, name
+            )));
+        }
+        Ok(ddl)
+    }
+}
+
+#[async_trait]
+impl EventDriver for MysqlDriver {
+    async fn list_events(&self, schema: Option<String>) -> DriverResult<Vec<EventInfo>> {
+        let target_schema = if let Some(s) = schema {
+            s
+        } else {
+            self.current_database()
+                .await
+                .map_err(|e| query_error(format!("Failed to get current database: {e}")))?
+                .ok_or_else(|| query_error("No database selected and no schema provided"))?
+        };
+
+        let rows = self
+            .fetch_all_with_str_params(
+                "SELECT EVENT_SCHEMA, EVENT_NAME, STATUS, EVENT_TYPE, \
+                 EXECUTE_AT, INTERVAL_VALUE, LAST_EXECUTED, EVENT_DEFINITION \
+                 FROM information_schema.EVENTS \
+                 WHERE EVENT_SCHEMA = ? \
+                 ORDER BY EVENT_NAME",
+                &[&target_schema],
+            )
+            .await?;
+
+        let mut res = Vec::new();
+        for row in rows {
+            res.push(EventInfo {
+                schema: decode_mysql_text_cell(&row, 0)?,
+                name: decode_mysql_text_cell(&row, 1)?,
+                status: decode_mysql_text_cell(&row, 2)?,
+                event_type: decode_mysql_text_cell(&row, 3)?,
+                execute_at: decode_mysql_optional_text_cell(&row, 4)?,
+                interval_value: decode_mysql_optional_text_cell(&row, 5)?,
+                last_executed: decode_mysql_optional_text_cell(&row, 6)?,
+                definition: decode_mysql_optional_text_cell(&row, 7)?,
+            });
+        }
+        Ok(res)
+    }
+}
+
+#[async_trait]
+impl ForeignKeyDriver for MysqlDriver {
+    async fn get_schema_foreign_keys(
+        &self,
+        database: Option<&str>,
+    ) -> DriverResult<Vec<SchemaForeignKey>> {
+        let target_db = if let Some(db) = database.filter(|d| !d.trim().is_empty()) {
+            db.trim().to_string()
+        } else {
+            self.current_database()
+                .await
+                .map_err(|e| query_error(format!("Failed to get current database: {e}")))?
+                .unwrap_or_default()
+        };
+
+        let rows = if target_db.is_empty() {
+            sqlx::query(
+                r#"
+                SELECT
+                  kcu.CONSTRAINT_NAME,
+                  kcu.TABLE_SCHEMA,
+                  kcu.TABLE_NAME,
+                  kcu.COLUMN_NAME,
+                  kcu.REFERENCED_TABLE_SCHEMA,
+                  kcu.REFERENCED_TABLE_NAME,
+                  kcu.REFERENCED_COLUMN_NAME,
+                  rc.UPDATE_RULE,
+                  rc.DELETE_RULE
+                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+                  ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+                  AND kcu.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
+                WHERE kcu.REFERENCED_TABLE_NAME IS NOT NULL
+                ORDER BY kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
+                "#,
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| query_error(e.to_string()))?
+        } else {
+            sqlx::query(
+                r#"
+                SELECT
+                  kcu.CONSTRAINT_NAME,
+                  kcu.TABLE_SCHEMA,
+                  kcu.TABLE_NAME,
+                  kcu.COLUMN_NAME,
+                  kcu.REFERENCED_TABLE_SCHEMA,
+                  kcu.REFERENCED_TABLE_NAME,
+                  kcu.REFERENCED_COLUMN_NAME,
+                  rc.UPDATE_RULE,
+                  rc.DELETE_RULE
+                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+                  ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+                  AND kcu.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
+                WHERE kcu.REFERENCED_TABLE_NAME IS NOT NULL
+                  AND kcu.TABLE_SCHEMA = ?
+                ORDER BY kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
+                "#,
+            )
+            .bind(&target_db)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| query_error(e.to_string()))?
+        };
+
+        let mut foreign_keys = Vec::new();
+        for row in rows {
+            let source_schema = decode_mysql_text_cell(&row, 1).unwrap_or_default();
+            let target_schema = decode_mysql_text_cell(&row, 4).unwrap_or_default();
+            foreign_keys.push(SchemaForeignKey {
+                name: decode_mysql_text_cell(&row, 0).unwrap_or_default(),
+                source_schema: Some(source_schema),
+                source_table: decode_mysql_text_cell(&row, 2).unwrap_or_default(),
+                source_column: decode_mysql_text_cell(&row, 3).unwrap_or_default(),
+                target_schema: Some(target_schema),
+                target_table: decode_mysql_text_cell(&row, 5).unwrap_or_default(),
+                target_column: decode_mysql_text_cell(&row, 6).unwrap_or_default(),
+                on_update: decode_mysql_optional_text_cell(&row, 7).unwrap_or(None),
+                on_delete: decode_mysql_optional_text_cell(&row, 8).unwrap_or(None),
+            });
+        }
+        Ok(foreign_keys)
     }
 }
 
