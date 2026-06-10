@@ -3,8 +3,7 @@ use crate::models::{
     ColumnInfo, ColumnSchema, ForeignKeyInfo, IndexInfo, RoutineInfo, SchemaForeignKey,
     SchemaOverview, SequenceInfo, TableInfo, TableMetadata, TableSchema, TableStructure, TypeInfo,
 };
-use async_trait::async_trait;
-use sqlx::{Column, Executor, Row, TypeInfo as PgTypeInfo};
+use sqlx::Row;
 use std::collections::{HashMap, HashSet};
 
 fn query_error(message: impl Into<String>) -> AppError {

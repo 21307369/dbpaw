@@ -7,9 +7,8 @@ use super::{
     DatabaseDriver, DriverCapabilities, DriverResult, ForeignKeyDriver, RoutineDriver,
     SequenceDriver, TypeDriver,
 };
-use crate::error::AppError;
 use crate::models::{
-    ConnectionForm, ForeignKeyInfo, QueryResult, RoutineInfo, SchemaForeignKey, SchemaOverview,
+    ConnectionForm, QueryResult, RoutineInfo, SchemaForeignKey, SchemaOverview,
     SequenceInfo, TableDataResponse, TableInfo, TableMetadata, TableStructure, TypeInfo,
 };
 use async_trait::async_trait;

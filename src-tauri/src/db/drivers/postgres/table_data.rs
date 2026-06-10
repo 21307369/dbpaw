@@ -1,7 +1,8 @@
-use super::metadata::{pg_qualified_table, pg_quote_ident, PostgresMetadata};
+use super::metadata::{pg_qualified_table, pg_quote_ident};
 use super::query::normalize_postgres_row_json;
 use crate::error::AppError;
 use crate::models::TableDataResponse;
+use sqlx::Row;
 use std::collections::HashSet;
 
 fn validation_error(message: impl Into<String>) -> AppError {
