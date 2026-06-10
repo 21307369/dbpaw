@@ -1,4 +1,4 @@
-use super::{conn_failed_error, DatabaseDriver, DriverResult};
+use super::{conn_failed_error, DatabaseDriver, DriverCapabilities, DriverResult};
 use crate::error::AppError;
 use crate::models::{
     CassandraTableExtra, ColumnInfo, ColumnSchema, ConnectionForm, IndexInfo, QueryColumn,
@@ -339,6 +339,10 @@ impl CassandraDriver {
 
 #[async_trait]
 impl DatabaseDriver for CassandraDriver {
+    fn capabilities(&self) -> DriverCapabilities {
+        DriverCapabilities::empty()
+    }
+
     async fn close(&self) {}
 
     async fn test_connection(&self) -> DriverResult<()> {
@@ -422,10 +426,6 @@ impl DatabaseDriver for CassandraDriver {
 
         tables.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(tables)
-    }
-
-    async fn list_routines(&self, _schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
-        Ok(vec![])
     }
 
     async fn get_table_structure(

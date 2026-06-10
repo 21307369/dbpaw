@@ -1,4 +1,4 @@
-use super::{conn_failed_error, DatabaseDriver, DriverResult};
+use super::{conn_failed_error, DatabaseDriver, DriverCapabilities, DriverResult};
 use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, QueryColumn, QueryResult, SchemaOverview,
@@ -309,6 +309,10 @@ impl DuckdbDriver {
 
 #[async_trait]
 impl DatabaseDriver for DuckdbDriver {
+    fn capabilities(&self) -> DriverCapabilities {
+        DriverCapabilities::empty()
+    }
+
     async fn close(&self) {}
 
     async fn test_connection(&self) -> DriverResult<()> {

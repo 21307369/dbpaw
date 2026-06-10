@@ -1,4 +1,4 @@
-use super::{DatabaseDriver, DriverResult};
+use super::{DatabaseDriver, DriverCapabilities, DriverResult};
 use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, IndexInfo, QueryColumn, QueryResult, SchemaOverview,
@@ -447,6 +447,10 @@ impl MongoDBDriver {
 
 #[async_trait]
 impl DatabaseDriver for MongoDBDriver {
+    fn capabilities(&self) -> DriverCapabilities {
+        DriverCapabilities::empty()
+    }
+
     async fn close(&self) {
         // MongoDB client manages connections via its internal connection pool.
     }

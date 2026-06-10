@@ -1,4 +1,4 @@
-use super::{conn_failed_error, DatabaseDriver, DriverResult};
+use super::{conn_failed_error, DatabaseDriver, DriverCapabilities, DriverResult};
 use crate::error::AppError;
 use crate::models::{
     ClickHouseTableExtra, ColumnInfo, ColumnSchema, ConnectionForm, QueryColumn, QueryResult,
@@ -547,6 +547,10 @@ impl ClickHouseDriver {
 
 #[async_trait]
 impl DatabaseDriver for ClickHouseDriver {
+    fn capabilities(&self) -> DriverCapabilities {
+        DriverCapabilities::QUERY_WITH_ID
+    }
+
     async fn close(&self) {
         // reqwest::Client does not require explicit close.
     }
