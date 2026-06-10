@@ -42,7 +42,7 @@ pub(super) fn import_transaction_sql<'a>(
         "starrocks" | "doris" => Err(AppError::unsupported(format!(
             "Driver {} does not support transactional SQL import in this flow",
             original_driver
-        )).to_string()),
+        ))),
         "postgres" | "sqlite" | "duckdb" => Ok(("BEGIN", "COMMIT", "ROLLBACK")),
         "mssql" => Ok((
             "BEGIN TRANSACTION",
@@ -52,12 +52,12 @@ pub(super) fn import_transaction_sql<'a>(
         "oracle" => Ok(("SELECT 1 FROM DUAL", "COMMIT", "ROLLBACK")),
         "db2" => Ok(("BEGIN", "COMMIT", "ROLLBACK")),
         "clickhouse" => {
-            Err(AppError::unsupported("Driver clickhouse is read-only in this import flow").to_string())
+            Err(AppError::unsupported("Driver clickhouse is read-only in this import flow"))
         }
         _ => Err(AppError::unsupported(format!(
             "Driver {} is not supported for SQL import",
             original_driver
-        )).to_string()),
+        ))),
     }
 }
 
@@ -72,7 +72,7 @@ pub(super) fn normalize_driver_name(driver: &str) -> String {
 pub(super) fn prepare_import_plan(
     sql: &str,
     normalized_driver: &str,
-) -> Result<PreparedImportPlan, String> {
+) -> Result<PreparedImportPlan, AppError> {
     let units = if normalized_driver == "mssql" {
         let batches = parse_mssql_batches(sql)?;
         batches
@@ -291,7 +291,7 @@ fn update_mssql_line_state(state: &mut SqlScanState, line: &str) {
     }
 }
 
-pub(super) fn parse_mssql_batches(sql: &str) -> Result<Vec<String>, String> {
+pub(super) fn parse_mssql_batches(sql: &str) -> Result<Vec<String>, AppError> {
     let mut out = Vec::new();
     let mut current = String::new();
     let mut state = SqlScanState::Normal;
@@ -303,7 +303,7 @@ pub(super) fn parse_mssql_batches(sql: &str) -> Result<Vec<String>, String> {
                 let statement = current.trim();
                 if !statement.is_empty() {
                     for _ in 0..go_count {
-                        out.push(statement.to_string());
+                        out.push(statement);
                     }
                 }
                 current.clear();
@@ -318,19 +318,19 @@ pub(super) fn parse_mssql_batches(sql: &str) -> Result<Vec<String>, String> {
     match state {
         SqlScanState::Normal | SqlScanState::LineComment => {}
         SqlScanState::BlockComment => {
-            return Err(AppError::internal("Unterminated block comment in SQL file").to_string());
+            return Err(AppError::internal("Unterminated block comment in SQL file"));
         }
         SqlScanState::SingleQuoted
         | SqlScanState::DoubleQuoted
         | SqlScanState::BacktickQuoted
         | SqlScanState::DollarQuoted(_) => {
-            return Err(AppError::internal("Unterminated string literal in SQL file").to_string());
+            return Err(AppError::internal("Unterminated string literal in SQL file"));
         }
     }
 
     let tail = current.trim();
     if !tail.is_empty() {
-        out.push(tail.to_string());
+        out.push(tail);
     }
     Ok(out)
 }
@@ -794,7 +794,7 @@ fn parse_oracle_slash_terminator(chars: &[char], idx: usize) -> Option<usize> {
     Some(next_idx)
 }
 
-pub(super) fn parse_sql_statements(sql: &str, driver: &str) -> Result<Vec<String>, String> {
+pub(super) fn parse_sql_statements(sql: &str, driver: &str) -> Result<Vec<String>, AppError> {
     let mysql_style_hash_comment = matches!(driver, "mysql" | "mariadb" | "tidb");
     let mysql_style_delimiter = mysql_style_hash_comment;
     let sqlite_style_trigger = driver == "sqlite";
@@ -826,7 +826,7 @@ pub(super) fn parse_sql_statements(sql: &str, driver: &str) -> Result<Vec<String
                         if is_block && ready_to_terminate {
                             let statement = current.trim();
                             if !statement.is_empty() {
-                                out.push(statement.to_string());
+                                out.push(statement);
                             }
                             current.clear();
                             i = next_idx;
@@ -857,7 +857,7 @@ pub(super) fn parse_sql_statements(sql: &str, driver: &str) -> Result<Vec<String
                     }
                     let statement = current.trim();
                     if !statement.is_empty() {
-                        out.push(statement.to_string());
+                        out.push(statement);
                     }
                     current.clear();
                     i += delimiter_chars.len();
@@ -985,19 +985,19 @@ pub(super) fn parse_sql_statements(sql: &str, driver: &str) -> Result<Vec<String
     match state {
         SqlScanState::Normal | SqlScanState::LineComment => {}
         SqlScanState::BlockComment => {
-            return Err(AppError::internal("Unterminated block comment in SQL file").to_string());
+            return Err(AppError::internal("Unterminated block comment in SQL file"));
         }
         SqlScanState::SingleQuoted
         | SqlScanState::DoubleQuoted
         | SqlScanState::BacktickQuoted
         | SqlScanState::DollarQuoted(_) => {
-            return Err(AppError::internal("Unterminated string literal in SQL file").to_string());
+            return Err(AppError::internal("Unterminated string literal in SQL file"));
         }
     }
 
     let tail = current.trim();
     if !tail.is_empty() {
-        out.push(tail.to_string());
+        out.push(tail);
     }
     Ok(out)
 }

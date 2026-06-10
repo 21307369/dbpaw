@@ -22,7 +22,7 @@ async fn write_table_export(
     page: Option<i64>,
     limit: Option<i64>,
     chunk: i64,
-) -> Result<i64, String> {
+) -> Result<i64, AppError> {
     let mut exported = 0i64;
 
     if matches!(format, ExportFormat::SqlDdl | ExportFormat::SqlFull) {
@@ -113,7 +113,7 @@ pub(super) async fn do_table_export(
     page: Option<i64>,
     limit: Option<i64>,
     chunk: i64,
-) -> Result<ExportResult, String> {
+) -> Result<ExportResult, AppError> {
     let mut writer = ExportWriter::new(output_path.clone(), format.clone())?;
     let exported = write_table_export(
         db_driver,
@@ -146,7 +146,7 @@ pub(super) async fn do_database_export(
     driver: String,
     format: ExportFormat,
     chunk: i64,
-) -> Result<ExportResult, String> {
+) -> Result<ExportResult, AppError> {
     let mut tables = db_driver.list_tables(None).await?;
     tables.sort_by(|a, b| a.schema.cmp(&b.schema).then(a.name.cmp(&b.name)));
 
@@ -185,9 +185,9 @@ pub(super) async fn do_query_export(
     sql: String,
     driver: String,
     format: ExportFormat,
-) -> Result<ExportResult, String> {
+) -> Result<ExportResult, AppError> {
     if matches!(format, ExportFormat::SqlDdl) {
-        return Err(AppError::unsupported("SqlDdl format is not supported for query exports").to_string());
+        return Err(AppError::unsupported("SqlDdl format is not supported for query exports"));
     }
 
     let result = db_driver.execute_query(sql).await?;
