@@ -283,6 +283,29 @@ impl AppError {
             source: Some(Box::new(source)),
         }
     }
+
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            AppError::ConnectionFailed { code, .. } => {
+                matches!(
+                    *code,
+                    codes::CONN_FAILED | codes::CONN_TIMEOUT | codes::CONN_POOL_ERROR
+                )
+            }
+            AppError::Query { code, message, .. } => {
+                if *code == codes::QUERY_FAILED {
+                    let lower = message.to_lowercase();
+                    lower.contains("pool closed")
+                        || lower.contains("connection reset")
+                        || lower.contains("broken pipe")
+                        || lower.contains("eof")
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -362,5 +385,53 @@ mod tests {
     fn test_internal_error() {
         let err = AppError::internal("unexpected state");
         assert_eq!(err.to_string(), "[ERR-5002] unexpected state");
+    }
+
+    #[test]
+    fn is_retryable_conn_failed() {
+        let err = AppError::conn_failed("connection refused", "check host");
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn is_retryable_conn_timeout() {
+        let err = AppError::conn_timeout("timed out");
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn is_retryable_query_with_pool_message() {
+        let err = AppError::query_failed("pool closed");
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn is_retryable_query_with_connection_reset() {
+        let err = AppError::query_failed("connection reset by peer");
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn is_not_retryable_query_syntax() {
+        let err = AppError::query_syntax("syntax error near SELECT");
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn is_not_retryable_validation() {
+        let err = AppError::validation("host cannot be empty");
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn is_not_retryable_unsupported() {
+        let err = AppError::unsupported("not supported");
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn is_not_retryable_internal() {
+        let err = AppError::internal("unexpected");
+        assert!(!err.is_retryable());
     }
 }
