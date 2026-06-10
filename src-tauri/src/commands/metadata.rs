@@ -311,7 +311,7 @@ pub async fn get_driver_capabilities(
     id: i64,
 ) -> Result<u32, String> {
     super::execute_with_retry(&state, id, None, |driver| {
-        async move { Ok(driver.capabilities().bits()) }
+        async move { Ok::<u32, AppError>(driver.capabilities().bits()) }
     })
     .await
     .map_err(String::from)
