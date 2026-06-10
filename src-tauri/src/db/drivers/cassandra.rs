@@ -2,7 +2,7 @@ use super::{conn_failed_error, DatabaseDriver, DriverCapabilities, DriverResult}
 use crate::error::AppError;
 use crate::models::{
     CassandraTableExtra, ColumnInfo, ColumnSchema, ConnectionForm, IndexInfo, QueryColumn,
-    QueryResult, RoutineInfo, SchemaOverview, TableDataResponse, TableInfo, TableMetadata,
+    QueryResult, SchemaOverview, TableDataResponse, TableInfo, TableMetadata,
     TableSchema, TableStructure,
 };
 use async_trait::async_trait;
