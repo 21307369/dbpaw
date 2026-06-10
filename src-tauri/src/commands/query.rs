@@ -39,6 +39,17 @@ async fn resolve_driver(state: &State<'_, AppState>, id: i64) -> Option<String> 
         .map(|f| f.driver)
 }
 
+async fn resolve_driver_from_app_state(state: &AppState, id: i64) -> Option<String> {
+    let db = {
+        let lock = state.local_db.lock().await;
+        lock.clone()
+    }?;
+    db.get_connection_form_by_id(id)
+        .await
+        .ok()
+        .map(|f| f.driver)
+}
+
 fn supports_query_cancellation(driver: &str) -> bool {
     let d = driver.to_ascii_lowercase();
     d == "clickhouse" || crate::db::drivers::is_mysql_family_driver(&d)
@@ -207,7 +218,7 @@ async fn execute_query_core(
         unregister_running_query(id, &query_id).await;
     }
 
-    if let Ok(res) = &result {
+    if result.is_ok() {
         append_sql_execution_log_core(
             state,
             guarded_query.clone(),
@@ -315,151 +326,6 @@ pub async fn execute_query_by_id_direct(
     .await
     .map_err(String::from)
 }
-    let cancellation_supported = driver
-        .as_deref()
-        .map(supports_query_cancellation)
-        .unwrap_or(false);
-    let guarded_query = apply_default_limit(&query, driver.as_deref());
-    if cancellation_supported {
-        register_running_query(id, &query_id).await;
-    }
-
-    let result = super::execute_with_retry(&state, id, database.clone(), |driver| {
-        let query_clone = guarded_query.clone();
-        let query_id_clone = query_id.clone();
-        async move {
-            driver
-                .execute_query_with_id(
-                    query_clone,
-                    if cancellation_supported {
-                        Some(query_id_clone.as_str())
-                    } else {
-                        None
-                    },
-                )
-                .await
-        }
-    })
-    .await;
-    if cancellation_supported {
-        unregister_running_query(id, &query_id).await;
-    }
-
-    if let Ok(res) = &result {
-        // Stream first chunk for UX (simulated)
-        if !res.data.is_empty() {
-            let _ = app_handle.emit(
-                "query.chunk",
-                serde_json::json!({
-                    "queryId": query_id,
-                    "rows": res.data.iter().take(50).collect::<Vec<_>>()
-                }),
-            );
-        }
-
-        append_sql_execution_log(
-            &state,
-            guarded_query.clone(),
-            source,
-            Some(id),
-            database,
-            true,
-            None,
-        )
-        .await;
-    } else if let Err(err) = &result {
-        append_sql_execution_log(
-            &state,
-            guarded_query.clone(),
-            source,
-            Some(id),
-            database,
-            false,
-            Some(err.to_string()),
-        )
-        .await;
-    }
-
-    result
-}
-
-async fn resolve_driver_from_app_state(state: &AppState, id: i64) -> Option<String> {
-    let db = {
-        let lock = state.local_db.lock().await;
-        lock.clone()
-    }?;
-    db.get_connection_form_by_id(id)
-        .await
-        .ok()
-        .map(|f| f.driver)
-}
-
-pub async fn execute_query_by_id_direct(
-    state: &AppState,
-    id: i64,
-    query: String,
-    database: Option<String>,
-    source: Option<String>,
-    query_id: Option<String>,
-) -> Result<QueryResult, String> {
-    let query_id = make_query_id(id, query_id);
-    let driver = resolve_driver_from_app_state(state, id).await;
-    let cancellation_supported = driver
-        .as_deref()
-        .map(supports_query_cancellation)
-        .unwrap_or(false);
-    let guarded_query = apply_default_limit(&query, driver.as_deref());
-    if cancellation_supported {
-        register_running_query(id, &query_id).await;
-    }
-
-    let result = super::execute_with_retry_from_app_state(state, id, database.clone(), |driver| {
-        let query_clone = guarded_query.clone();
-        let query_id_clone = query_id.clone();
-        async move {
-            driver
-                .execute_query_with_id(
-                    query_clone,
-                    if cancellation_supported {
-                        Some(query_id_clone.as_str())
-                    } else {
-                        None
-                    },
-                )
-                .await
-        }
-    })
-    .await;
-    if cancellation_supported {
-        unregister_running_query(id, &query_id).await;
-    }
-
-    if result.is_ok() {
-        append_sql_execution_log_direct(
-            state,
-            guarded_query.clone(),
-            source,
-            Some(id),
-            database,
-            true,
-            None,
-        )
-        .await;
-    } else if let Err(err) = &result {
-        append_sql_execution_log_direct(
-            state,
-            guarded_query.clone(),
-            source,
-            Some(id),
-            database,
-            false,
-            Some(err.to_string()),
-        )
-        .await;
-    }
-
-    result
-}
 
 pub async fn execute_by_conn_direct(
     form: ConnectionForm,
@@ -561,19 +427,6 @@ pub async fn cancel_query_direct(
     cancel_query_core(state, uuid, query_id)
         .await
         .map_err(String::from)
-}
-    if !is_running_query(connection_id, &query_id).await {
-        return Ok(false);
-    }
-
-    let local_db = {
-        let lock = state.local_db.lock().await;
-        lock.clone()
-    };
-    let db = local_db.ok_or("Local DB not initialized".to_string())?;
-    let form = db.get_connection_form_by_id(connection_id).await?;
-
-    execute_cancel_query(connection_id, &query_id, &form).await
 }
 
 #[tauri::command]
@@ -677,33 +530,6 @@ pub async fn list_sql_execution_logs_direct(
     list_sql_execution_logs_core(state, limit)
         .await
         .map_err(String::from)
-}
-
-pub async fn cancel_query_direct(
-    state: &AppState,
-    uuid: String,
-    query_id: String,
-) -> Result<bool, String> {
-    let connection_id = uuid
-        .trim()
-        .parse::<i64>()
-        .map_err(|_| AppError::validation("Invalid connection id for cancellation").to_string())?;
-    let query_id = query_id.trim().to_string();
-    if query_id.is_empty() {
-        return Err(AppError::validation("query_id cannot be empty").to_string());
-    }
-    if !is_running_query(connection_id, &query_id).await {
-        return Ok(false);
-    }
-
-    let local_db = {
-        let lock = state.local_db.lock().await;
-        lock.clone()
-    };
-    let db = local_db.ok_or("Local DB not initialized".to_string())?;
-    let form = db.get_connection_form_by_id(connection_id).await?;
-
-    execute_cancel_query(connection_id, &query_id, &form).await
 }
 
 #[cfg(test)]

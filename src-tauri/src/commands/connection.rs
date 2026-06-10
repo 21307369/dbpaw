@@ -383,7 +383,7 @@ async fn create_database_core(
     };
 
     exec_res
-        .map_err(|e| normalize_create_database_error(&e, &db_name))
+        .map_err(|e| normalize_create_database_error(e, &db_name))
         .map_err(AppError::internal)
 }
 
@@ -530,87 +530,6 @@ pub async fn get_mysql_collations_by_id_direct(
     get_mysql_collations_core(state, id, charset)
         .await
         .map_err(String::from)
-}
-        Some(cs) => {
-            return Err(AppError::validation(format!("Invalid charset: {}", cs)).to_string());
-        }
-        None => "SHOW COLLATION".to_string(),
-    };
-    super::execute_with_retry(&state, id, None, |driver| {
-        let sql = sql.clone();
-        async move {
-            let result = driver.execute_query(sql).await?;
-            let mut collations: Vec<String> = result
-                .data
-                .iter()
-                .filter_map(|row| {
-                    row.get("Collation")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string())
-                })
-                .collect();
-            collations.sort();
-            Ok::<Vec<String>, AppError>(collations)
-        }
-    })
-    .await
-}
-
-pub async fn get_mysql_charsets_by_id_direct(
-    state: &AppState,
-    id: i64,
-) -> Result<Vec<String>, String> {
-    super::execute_with_retry_from_app_state(state, id, None, |driver| async move {
-        let result = driver
-            .execute_query("SHOW CHARACTER SET".to_string())
-            .await?;
-        let mut charsets: Vec<String> = result
-            .data
-            .iter()
-            .filter_map(|row| {
-                row.get("Charset")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-            })
-            .collect();
-        charsets.sort();
-        Ok::<Vec<String>, AppError>(charsets)
-    })
-    .await
-}
-
-pub async fn get_mysql_collations_by_id_direct(
-    state: &AppState,
-    id: i64,
-    charset: Option<String>,
-) -> Result<Vec<String>, String> {
-    let sql = match &charset {
-        Some(cs) if is_safe_option_token(cs) => {
-            format!("SHOW COLLATION WHERE Charset = '{}'", cs)
-        }
-        Some(cs) => {
-            return Err(AppError::validation(format!("Invalid charset: {}", cs)).to_string());
-        }
-        None => "SHOW COLLATION".to_string(),
-    };
-    super::execute_with_retry_from_app_state(state, id, None, |driver| {
-        let sql = sql.clone();
-        async move {
-            let result = driver.execute_query(sql).await?;
-            let mut collations: Vec<String> = result
-                .data
-                .iter()
-                .filter_map(|row| {
-                    row.get("Collation")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string())
-                })
-                .collect();
-            collations.sort();
-            Ok::<Vec<String>, AppError>(collations)
-        }
-    })
-    .await
 }
 
 async fn get_connections_core(state: &AppState) -> Result<Vec<Connection>, AppError> {
