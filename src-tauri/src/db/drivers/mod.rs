@@ -27,4 +27,7 @@ pub(crate) use crate::db::sql::splitter::{
     split_sql_statements, strip_trailing_statement_terminator,
 };
 pub use registry::{connect, is_mysql_family_driver};
-pub use traits::{DatabaseDriver, DriverResult};
+pub use traits::{
+    DatabaseDriver, DriverCapabilities, DriverResult, EventDriver, ForeignKeyDriver,
+    PackageDriver, RoutineDriver, SequenceDriver, SynonymDriver, TypeDriver,
+};
