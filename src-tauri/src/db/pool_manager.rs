@@ -60,6 +60,10 @@ impl PoolManager {
         }
     }
 
+    pub fn config(&self) -> &PoolConfig {
+        &self.config
+    }
+
     /// Get existing connection, update last_used time if it exists
     pub async fn get_connection(&self, id: &str) -> Option<Arc<dyn DatabaseDriver>> {
         let pools = self.pools.read().await;

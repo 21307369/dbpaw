@@ -113,6 +113,7 @@ async fn ensure_connection_with_db_inner(
 }
 
 async fn execute_with_retry_core<T, E, Ensure, EnsureFut, Remove, RemoveFut, Task, TaskFut>(
+    max_retries: u32,
     mut ensure: Ensure,
     mut remove: Remove,
     task: Task,
@@ -126,26 +127,29 @@ where
     TaskFut: std::future::Future<Output = Result<T, E>>,
     E: Into<AppError>,
 {
-    let driver = ensure().await.map_err(String::from)?;
-    match task(driver.clone()).await {
-        Ok(res) => Ok(res),
-        Err(e) => {
-            let err = e.into();
-            if is_connection_error(&err.to_string()) {
-                println!("[Pool] Connection error detected, retrying...");
-                remove().await;
-                let driver = ensure().await.map_err(String::from)?;
-                task(driver).await.map_err(|e| {
-                    let err = e.into();
-                    println!("[Pool] Retry failed: {}", err);
-                    String::from(err)
-                })
-            } else {
-                println!("[Pool] Operation failed: {}", err);
-                Err(String::from(err))
+    let mut last_err = None;
+    for attempt in 0..=max_retries {
+        let driver = ensure().await.map_err(String::from)?;
+        match task(driver.clone()).await {
+            Ok(res) => return Ok(res),
+            Err(e) => {
+                let err: AppError = e.into();
+                if err.is_retryable() && attempt < max_retries {
+                    println!(
+                        "[Pool] Retryable error on attempt {}/{}, retrying: {}",
+                        attempt + 1,
+                        max_retries,
+                        err
+                    );
+                    remove().await;
+                    last_err = Some(err);
+                } else {
+                    return Err(String::from(err));
+                }
             }
         }
     }
+    Err(String::from(last_err.unwrap()))
 }
 
 pub async fn execute_with_retry<F, Fut, T, E>(
@@ -189,6 +193,7 @@ where
 {
     let key = connection_pool_key(id, &database);
     execute_with_retry_core(
+        state.pool_manager.config().max_retries,
         || ensure_connection_with_db_from_app_state(state, id, database.clone()),
         || state.pool_manager.remove(&key),
         task,
@@ -196,20 +201,9 @@ where
     .await
 }
 
-fn is_connection_error(e: &str) -> bool {
-    let lower = e.to_lowercase();
-    lower.contains("pool closed")
-        || lower.contains("connection reset")
-        || lower.contains("broken pipe")
-        || lower.contains("timeout")
-        || lower.contains("network unreachable")
-        || lower.contains("closed")
-        || lower.contains("eof")
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{connection_pool_key, execute_with_retry_core, is_connection_error};
+    use super::{connection_pool_key, execute_with_retry_core};
     use crate::db::drivers::{DatabaseDriver, DriverResult};
     use crate::models::{
         QueryResult, SchemaOverview, TableDataResponse, TableInfo, TableMetadata, TableStructure,
@@ -287,37 +281,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn execute_with_retry_retries_once_on_connection_error_and_succeeds() {
-        let ensure_calls = Arc::new(AtomicUsize::new(0));
-        let remove_calls = Arc::new(AtomicUsize::new(0));
+    async fn execute_with_retry_retries_up_to_max_on_connection_error() {
         let task_calls = Arc::new(AtomicUsize::new(0));
-        let driver: Arc<dyn DatabaseDriver> = Arc::new(MockDriver);
-
-        let ensure_calls_c = ensure_calls.clone();
-        let ensure_driver = driver.clone();
-        let remove_calls_c = remove_calls.clone();
         let task_calls_c = task_calls.clone();
 
         let result: Result<String, String> = execute_with_retry_core(
-            move || {
-                let ensure_calls_c = ensure_calls_c.clone();
-                let ensure_driver = ensure_driver.clone();
-                async move {
-                    ensure_calls_c.fetch_add(1, Ordering::SeqCst);
-                    Ok(ensure_driver)
-                }
-            },
-            move || {
-                let remove_calls_c = remove_calls_c.clone();
-                async move {
-                    remove_calls_c.fetch_add(1, Ordering::SeqCst);
-                }
-            },
+            3,
+            || async { Ok(Arc::new(MockDriver) as Arc<dyn DatabaseDriver>) },
+            || async {},
             move |_driver| {
                 let task_calls_c = task_calls_c.clone();
                 async move {
                     let n = task_calls_c.fetch_add(1, Ordering::SeqCst);
-                    if n == 0 {
+                    if n < 2 {
                         Err(crate::error::AppError::query_failed(
                             "connection reset by peer",
                         ))
@@ -330,38 +306,18 @@ mod tests {
         .await;
 
         assert_eq!(result.unwrap(), "ok");
-        assert_eq!(task_calls.load(Ordering::SeqCst), 2);
-        assert_eq!(ensure_calls.load(Ordering::SeqCst), 2);
-        assert_eq!(remove_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(task_calls.load(Ordering::SeqCst), 3);
     }
 
     #[tokio::test]
-    async fn execute_with_retry_returns_retry_error_when_second_attempt_fails() {
-        let ensure_calls = Arc::new(AtomicUsize::new(0));
-        let remove_calls = Arc::new(AtomicUsize::new(0));
+    async fn execute_with_retry_returns_last_error_after_max_retries() {
         let task_calls = Arc::new(AtomicUsize::new(0));
-        let driver: Arc<dyn DatabaseDriver> = Arc::new(MockDriver);
-
-        let ensure_calls_c = ensure_calls.clone();
-        let ensure_driver = driver.clone();
-        let remove_calls_c = remove_calls.clone();
         let task_calls_c = task_calls.clone();
 
         let result: Result<String, String> = execute_with_retry_core(
-            move || {
-                let ensure_calls_c = ensure_calls_c.clone();
-                let ensure_driver = ensure_driver.clone();
-                async move {
-                    ensure_calls_c.fetch_add(1, Ordering::SeqCst);
-                    Ok(ensure_driver)
-                }
-            },
-            move || {
-                let remove_calls_c = remove_calls_c.clone();
-                async move {
-                    remove_calls_c.fetch_add(1, Ordering::SeqCst);
-                }
-            },
+            2,
+            || async { Ok(Arc::new(MockDriver) as Arc<dyn DatabaseDriver>) },
+            || async {},
             move |_driver| {
                 let task_calls_c = task_calls_c.clone();
                 async move {
@@ -375,9 +331,32 @@ mod tests {
         .await;
 
         assert_eq!(result.unwrap_err(), "[ERR-2001] pool closed");
-        assert_eq!(task_calls.load(Ordering::SeqCst), 2);
-        assert_eq!(ensure_calls.load(Ordering::SeqCst), 2);
-        assert_eq!(remove_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(task_calls.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn execute_with_retry_no_retry_on_non_retryable_error() {
+        let task_calls = Arc::new(AtomicUsize::new(0));
+        let task_calls_c = task_calls.clone();
+
+        let result: Result<String, String> = execute_with_retry_core(
+            3,
+            || async { Ok(Arc::new(MockDriver) as Arc<dyn DatabaseDriver>) },
+            || async {},
+            move |_driver| {
+                let task_calls_c = task_calls_c.clone();
+                async move {
+                    task_calls_c.fetch_add(1, Ordering::SeqCst);
+                    Err::<String, crate::error::AppError>(crate::error::AppError::query_syntax(
+                        "syntax error near SELECT",
+                    ))
+                }
+            },
+        )
+        .await;
+
+        assert!(result.unwrap_err().contains("syntax error"));
+        assert_eq!(task_calls.load(Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -385,14 +364,5 @@ mod tests {
         assert_eq!(connection_pool_key(1, &None), "1");
         assert_eq!(connection_pool_key(1, &Some("".to_string())), "1");
         assert_eq!(connection_pool_key(1, &Some("app".to_string())), "1:app");
-    }
-
-    #[test]
-    fn is_connection_error_matches_common_messages() {
-        assert!(is_connection_error("connection reset by peer"));
-        assert!(is_connection_error("broken pipe"));
-        assert!(is_connection_error("timeout while waiting"));
-        assert!(is_connection_error("EOF while reading"));
-        assert!(!is_connection_error("syntax error at or near"));
     }
 }
