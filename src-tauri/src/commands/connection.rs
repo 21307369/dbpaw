@@ -280,6 +280,7 @@ pub async fn list_databases_by_id(
         driver.list_databases().await
     })
     .await
+    .map_err(String::from)
 }
 
 pub async fn list_databases_by_id_direct(state: &AppState, id: i64) -> Result<Vec<String>, String> {
@@ -287,6 +288,7 @@ pub async fn list_databases_by_id_direct(state: &AppState, id: i64) -> Result<Ve
         driver.list_databases().await
     })
     .await
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -379,7 +381,7 @@ pub async fn create_database_by_id(
         )).to_string()),
     };
 
-    exec_res.map_err(|e| normalize_create_database_error(e, &db_name))
+    exec_res.map_err(|e| normalize_create_database_error(e.to_string(), &db_name))
 }
 
 pub async fn create_database_by_id_direct(
@@ -471,7 +473,7 @@ pub async fn create_database_by_id_direct(
         )).to_string()),
     };
 
-    exec_res.map_err(|e| normalize_create_database_error(e, &db_name))
+    exec_res.map_err(|e| normalize_create_database_error(e.to_string(), &db_name))
 }
 
 #[tauri::command]
@@ -524,6 +526,7 @@ pub async fn get_mysql_charsets_by_id(
         Ok::<Vec<String>, AppError>(charsets)
     })
     .await
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -559,6 +562,7 @@ pub async fn get_mysql_collations_by_id(
         }
     })
     .await
+    .map_err(String::from)
 }
 
 pub async fn get_mysql_charsets_by_id_direct(
@@ -582,6 +586,7 @@ pub async fn get_mysql_charsets_by_id_direct(
         Ok::<Vec<String>, AppError>(charsets)
     })
     .await
+    .map_err(String::from)
 }
 
 pub async fn get_mysql_collations_by_id_direct(
@@ -616,6 +621,7 @@ pub async fn get_mysql_collations_by_id_direct(
         }
     })
     .await
+    .map_err(String::from)
 }
 
 #[tauri::command]
