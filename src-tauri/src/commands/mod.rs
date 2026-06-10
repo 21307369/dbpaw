@@ -30,26 +30,26 @@ fn connection_pool_key(id: i64, database: &Option<String>) -> String {
 pub async fn get_connection_form_by_id(
     state: &State<'_, AppState>,
     id: i64,
-) -> Result<ConnectionForm, String> {
+) -> Result<ConnectionForm, AppError> {
     let local_db = {
         let lock = state.local_db.lock().await;
         lock.clone()
     };
-    let db = local_db.ok_or("Local DB not initialized")?;
-    db.get_connection_form_by_id(id).await
+    let db = local_db.ok_or_else(|| AppError::internal("Local DB not initialized"))?;
+    db.get_connection_form_by_id(id).await.map_err(AppError::internal)
 }
 
 pub async fn get_connection_form_by_id_with_driver_check(
     state: &State<'_, AppState>,
     id: i64,
     expected_driver: &str,
-) -> Result<ConnectionForm, String> {
+) -> Result<ConnectionForm, AppError> {
     let form = get_connection_form_by_id(state, id).await?;
     if form.driver != expected_driver {
         return Err(AppError::unsupported(format!(
             "Connection {} is not a {} connection",
             id, expected_driver
-        )).to_string());
+        )));
     }
     Ok(form)
 }
@@ -116,7 +116,7 @@ async fn execute_with_retry_core<T, E, Ensure, EnsureFut, Remove, RemoveFut, Tas
     mut ensure: Ensure,
     mut remove: Remove,
     task: Task,
-) -> Result<T, String>
+) -> Result<T, AppError>
 where
     Ensure: FnMut() -> EnsureFut,
     EnsureFut: std::future::Future<Output = Result<Arc<dyn DatabaseDriver>, AppError>>,
@@ -126,7 +126,7 @@ where
     TaskFut: std::future::Future<Output = Result<T, E>>,
     E: Into<AppError>,
 {
-    let driver = ensure().await.map_err(String::from)?;
+    let driver = ensure().await?;
     match task(driver.clone()).await {
         Ok(res) => Ok(res),
         Err(e) => {
@@ -134,15 +134,15 @@ where
             if is_connection_error(&err.to_string()) {
                 println!("[Pool] Connection error detected, retrying...");
                 remove().await;
-                let driver = ensure().await.map_err(String::from)?;
+                let driver = ensure().await?;
                 task(driver).await.map_err(|e| {
                     let err = e.into();
                     println!("[Pool] Retry failed: {}", err);
-                    String::from(err)
+                    err
                 })
             } else {
                 println!("[Pool] Operation failed: {}", err);
-                Err(String::from(err))
+                Err(err)
             }
         }
     }
@@ -153,7 +153,7 @@ pub async fn execute_with_retry<F, Fut, T, E>(
     id: i64,
     database: Option<String>,
     task: F,
-) -> Result<T, String>
+) -> Result<T, AppError>
 where
     F: Fn(Arc<dyn DatabaseDriver>) -> Fut,
     Fut: std::future::Future<Output = Result<T, E>>,
@@ -167,7 +167,7 @@ pub async fn execute_with_retry_from_app_state<F, Fut, T, E>(
     id: i64,
     database: Option<String>,
     task: F,
-) -> Result<T, String>
+) -> Result<T, AppError>
 where
     F: Fn(Arc<dyn DatabaseDriver>) -> Fut,
     Fut: std::future::Future<Output = Result<T, E>>,
@@ -181,7 +181,7 @@ async fn execute_with_retry_inner<F, Fut, T, E>(
     id: i64,
     database: Option<String>,
     task: F,
-) -> Result<T, String>
+) -> Result<T, AppError>
 where
     F: Fn(Arc<dyn DatabaseDriver>) -> Fut,
     Fut: std::future::Future<Output = Result<T, E>>,
@@ -211,6 +211,7 @@ fn is_connection_error(e: &str) -> bool {
 mod tests {
     use super::{connection_pool_key, execute_with_retry_core, is_connection_error};
     use crate::db::drivers::{DatabaseDriver, DriverResult};
+    use crate::error::AppError;
     use crate::models::{
         QueryResult, SchemaOverview, TableDataResponse, TableInfo, TableMetadata, TableStructure,
     };
@@ -298,7 +299,7 @@ mod tests {
         let remove_calls_c = remove_calls.clone();
         let task_calls_c = task_calls.clone();
 
-        let result: Result<String, String> = execute_with_retry_core(
+        let result: Result<String, AppError> = execute_with_retry_core(
             move || {
                 let ensure_calls_c = ensure_calls_c.clone();
                 let ensure_driver = ensure_driver.clone();
@@ -347,7 +348,7 @@ mod tests {
         let remove_calls_c = remove_calls.clone();
         let task_calls_c = task_calls.clone();
 
-        let result: Result<String, String> = execute_with_retry_core(
+        let result: Result<String, AppError> = execute_with_retry_core(
             move || {
                 let ensure_calls_c = ensure_calls_c.clone();
                 let ensure_driver = ensure_driver.clone();
@@ -374,7 +375,7 @@ mod tests {
         )
         .await;
 
-        assert_eq!(result.unwrap_err(), "[ERR-2001] pool closed");
+        assert_eq!(result.unwrap_err().to_string(), "[ERR-2001] pool closed");
         assert_eq!(task_calls.load(Ordering::SeqCst), 2);
         assert_eq!(ensure_calls.load(Ordering::SeqCst), 2);
         assert_eq!(remove_calls.load(Ordering::SeqCst), 1);
