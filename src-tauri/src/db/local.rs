@@ -51,7 +51,8 @@ impl LocalDb {
 
     pub async fn init_with_app_dir(app_dir: &Path) -> Result<Self, AppError> {
         if !app_dir.exists() {
-            fs::create_dir_all(app_dir).map_err(|e| AppError::internal_with("Database operation failed", e))?;
+            fs::create_dir_all(app_dir)
+                .map_err(|e| AppError::internal_with("Database operation failed", e))?;
         }
         let ai_master_key = Self::load_or_create_ai_master_key(&app_dir)?;
         let db_path = app_dir.join("dbpaw.sqlite");
@@ -63,224 +64,7 @@ impl LocalDb {
             .await
             .map_err(|e| AppError::internal_with("Local DB initialization failed", e))?;
 
-        // Run migrations
-        sqlx::query(include_str!("../../migrations/001_initial.sql"))
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::internal(format!("Migration 001 failed: {e}")))?;
-
-        sqlx::query(include_str!("../../migrations/002_saved_queries.sql"))
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::internal(format!("Migration 002 failed: {e}")))?;
-
-        // Check if database column exists in saved_queries to avoid duplicate column error
-        let has_database_column: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('saved_queries') WHERE name='database')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 003 check failed: {e}")))?;
-
-        if !has_database_column {
-            sqlx::query(include_str!(
-                "../../migrations/003_add_database_to_saved_queries.sql"
-            ))
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::internal(format!("Migration 003 failed: {e}")))?;
-        }
-
-        // Check if ssh_enabled column exists in connections
-        let has_ssh_column: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='ssh_enabled')"
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 004 check failed: {e}")))?;
-
-        if !has_ssh_column {
-            // Split migration because sqlite doesn't support multiple ALTER TABLE in one query usually via sqlx wrapper sometimes
-            // But let's try execute multiple or one by one.
-            // Safe bet: run the script which has multiple statements if supported, or read line by line.
-            // SQLx execute support multiple statements for sqlite? Yes usually.
-            sqlx::query(include_str!("../../migrations/004_add_ssh_fields.sql"))
-                .execute(&pool)
-                .await
-                .map_err(|e| AppError::internal(format!("Migration 004 failed: {e}")))?;
-        }
-
-        let has_ai_providers: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_providers')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 005 check failed: {e}")))?;
-
-        if !has_ai_providers {
-            sqlx::query(include_str!("../../migrations/005_ai_providers.sql"))
-                .execute(&pool)
-                .await
-                .map_err(|e| AppError::internal(format!("Migration 005 failed: {e}")))?;
-        }
-
-        let has_ai_conversations: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_conversations')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 006 check failed: {e}")))?;
-
-        if !has_ai_conversations {
-            sqlx::query(include_str!("../../migrations/006_ai_conversations.sql"))
-                .execute(&pool)
-                .await
-                .map_err(|e| AppError::internal(format!("Migration 006 failed: {e}")))?;
-        }
-
-        let has_ai_messages: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_messages')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 007 check failed: {e}")))?;
-
-        if !has_ai_messages {
-            sqlx::query(include_str!("../../migrations/007_ai_messages.sql"))
-                .execute(&pool)
-                .await
-                .map_err(|e| AppError::internal(format!("Migration 007 failed: {e}")))?;
-        }
-
-        let has_provider_type_unique_index: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_ai_providers_provider_type_unique')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 008 check failed: {e}")))?;
-
-        if !has_provider_type_unique_index {
-            sqlx::query(include_str!(
-                "../../migrations/008_ai_provider_vendor_unique.sql"
-            ))
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::internal(format!("Migration 008 failed: {e}")))?;
-        }
-
-        // Migration 009: Always execute — its SQL is idempotent (DROP IF EXISTS + CREATE IF NOT EXISTS).
-        // The previous conditional check based on trigger name was buggy because migration 008
-        // already created a trigger with the same name, causing migration 009 to be skipped.
-        sqlx::query(include_str!(
-            "../../migrations/009_ai_provider_type_relaxed.sql"
-        ))
-        .execute(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 009 failed: {e}")))?;
-
-        let has_sql_execution_logs: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='sql_execution_logs')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 010 check failed: {e}")))?;
-
-        if !has_sql_execution_logs {
-            sqlx::query(include_str!("../../migrations/010_sql_execution_logs.sql"))
-                .execute(&pool)
-                .await
-                .map_err(|e| AppError::internal(format!("Migration 010 failed: {e}")))?;
-        }
-
-        let has_ssl_mode_column: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='ssl_mode')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 011 check failed: {e}")))?;
-
-        if !has_ssl_mode_column {
-            sqlx::query(include_str!("../../migrations/011_add_ssl_fields.sql"))
-                .execute(&pool)
-                .await
-                .map_err(|e| AppError::internal(format!("Migration 011 failed: {e}")))?;
-        }
-
-        let has_redis_mode_column: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='mode')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 012 check failed: {e}")))?;
-
-        if !has_redis_mode_column {
-            sqlx::query(include_str!(
-                "../../migrations/012_add_redis_connection_options.sql"
-            ))
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::internal(format!("Migration 012 failed: {e}")))?;
-        }
-
-        let has_auth_mode_column: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='auth_mode')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 013 check failed: {e}")))?;
-
-        if !has_auth_mode_column {
-            sqlx::query(include_str!(
-                "../../migrations/013_add_elasticsearch_connection_options.sql"
-            ))
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::internal(format!("Migration 013 failed: {e}")))?;
-        }
-
-        let has_service_name_column: bool = sqlx::query_scalar(
-            "SELECT COUNT(*) > 0 FROM pragma_table_info('connections') WHERE name = 'service_name'",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 014 check failed: {e}")))?;
-
-        if !has_service_name_column {
-            sqlx::query(include_str!("../../migrations/014_add_sentinel_fields.sql"))
-                .execute(&pool)
-                .await
-                .map_err(|e| AppError::internal(format!("Migration 014 failed: {e}")))?;
-        }
-
-        let has_auth_source_column: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='auth_source')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 015 check failed: {e}")))?;
-
-        if !has_auth_source_column {
-            sqlx::query(include_str!(
-                "../../migrations/015_add_mongodb_auth_source.sql"
-            ))
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::internal(format!("Migration 015 failed: {e}")))?;
-        }
-
-        let has_redis_command_logs: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='redis_command_logs')",
-        )
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::internal(format!("Migration 016 check failed: {e}")))?;
-
-        if !has_redis_command_logs {
-            sqlx::query(include_str!("../../migrations/016_redis_command_logs.sql"))
-                .execute(&pool)
-                .await
-                .map_err(|e| AppError::internal(format!("Migration 016 failed: {e}")))?;
-        }
+        crate::db::migrations::run_migrations(&pool).await?;
 
         Ok(Self {
             pool,
@@ -304,7 +88,8 @@ impl LocalDb {
     fn load_or_create_ai_master_key(app_dir: &Path) -> Result<[u8; 32], AppError> {
         let key_path = app_dir.join("ai_master.key");
         if key_path.exists() {
-            let bytes = fs::read(&key_path).map_err(|e| AppError::internal(format!("[AI_MASTER_KEY_READ] {e}")))?;
+            let bytes = fs::read(&key_path)
+                .map_err(|e| AppError::internal(format!("[AI_MASTER_KEY_READ] {e}")))?;
             if bytes.len() != 32 {
                 return Err(AppError::internal("Invalid master key length"));
             }
@@ -315,7 +100,8 @@ impl LocalDb {
 
         let mut key = [0u8; 32];
         rand::rng().fill_bytes(&mut key);
-        fs::write(&key_path, &key).map_err(|e| AppError::internal(format!("[AI_MASTER_KEY_WRITE] {e}")))?;
+        fs::write(&key_path, &key)
+            .map_err(|e| AppError::internal(format!("[AI_MASTER_KEY_WRITE] {e}")))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -326,8 +112,8 @@ impl LocalDb {
     }
 
     fn encrypt_ai_api_key_raw(master_key: &[u8; 32], plaintext: &str) -> Result<String, AppError> {
-        let cipher =
-            Aes256Gcm::new_from_slice(master_key).map_err(|e| AppError::internal(format!("[AI_KEY_CIPHER] {e}")))?;
+        let cipher = Aes256Gcm::new_from_slice(master_key)
+            .map_err(|e| AppError::internal(format!("[AI_KEY_CIPHER] {e}")))?;
         let mut nonce_bytes = [0u8; 12];
         rand::rng().fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
@@ -355,13 +141,14 @@ impl LocalDb {
             return Err(AppError::internal("Payload too short"));
         }
         let (nonce_bytes, ciphertext) = payload.split_at(12);
-        let cipher =
-            Aes256Gcm::new_from_slice(master_key).map_err(|e| AppError::internal(format!("[AI_KEY_CIPHER] {e}")))?;
+        let cipher = Aes256Gcm::new_from_slice(master_key)
+            .map_err(|e| AppError::internal(format!("[AI_KEY_CIPHER] {e}")))?;
         let nonce = Nonce::from_slice(nonce_bytes);
         let plaintext = cipher
             .decrypt(nonce, ciphertext)
             .map_err(|e| AppError::internal(format!("AI key decryption failed: {}", e)))?;
-        String::from_utf8(plaintext).map_err(|e| AppError::internal_with("AI key UTF-8 conversion failed", e))
+        String::from_utf8(plaintext)
+            .map_err(|e| AppError::internal_with("AI key UTF-8 conversion failed", e))
     }
 
     pub async fn create_connection(&self, form: ConnectionForm) -> Result<Connection, AppError> {
@@ -383,7 +170,10 @@ impl LocalDb {
                 .map_err(|e| AppError::internal_with("Database existence check failed", e))?;
 
         if exists {
-            return Err(AppError::already_exists(format!("Connection with name '{}' already exists", name)));
+            return Err(AppError::already_exists(format!(
+                "Connection with name '{}' already exists",
+                name
+            )));
         }
 
         let id = sqlx::query_scalar::<_, i64>(
@@ -813,7 +603,10 @@ impl LocalDb {
         .map_err(|e| AppError::internal(format!("[LIST_AI_PROVIDERS_PUBLIC_ERROR] {e}")))
     }
 
-    pub async fn get_ai_provider_public_by_id(&self, id: i64) -> Result<AiProviderPublic, AppError> {
+    pub async fn get_ai_provider_public_by_id(
+        &self,
+        id: i64,
+    ) -> Result<AiProviderPublic, AppError> {
         sqlx::query_as::<_, AiProviderPublic>(
             "SELECT id, name, provider_type, base_url, model, CASE WHEN api_key LIKE 'enc:v1:%' THEN 1 ELSE 0 END AS has_api_key, is_default, enabled, extra_json, created_at, updated_at FROM ai_providers WHERE id = ?",
         )
@@ -851,7 +644,9 @@ impl LocalDb {
         .map_err(|e| AppError::internal(format!("[GET_DEFAULT_AI_PROVIDER_ERROR] {e}")))?;
 
         provider.ok_or_else(|| {
-            AppError::validation("No enabled AI provider is configured. Please enable one in AI Provider settings.")
+            AppError::validation(
+                "No enabled AI provider is configured. Please enable one in AI Provider settings.",
+            )
         })
     }
 
@@ -888,7 +683,11 @@ impl LocalDb {
                     sqlx::query("UPDATE ai_providers SET is_default = 0")
                         .execute(&self.pool)
                         .await
-                        .map_err(|e| AppError::internal(format!("[CREATE_AI_PROVIDER_DEFAULT_RESET_ERROR] {e}")))?;
+                        .map_err(|e| {
+                            AppError::internal(format!(
+                                "[CREATE_AI_PROVIDER_DEFAULT_RESET_ERROR] {e}"
+                            ))
+                        })?;
                 }
                 sqlx::query(
                     "UPDATE ai_providers SET name = ?, base_url = ?, model = ?, api_key = ?, is_default = ?, enabled = ?, extra_json = ?, updated_at = datetime('now') WHERE id = ?",
@@ -913,7 +712,11 @@ impl LocalDb {
                     sqlx::query("UPDATE ai_providers SET is_default = 0")
                         .execute(&self.pool)
                         .await
-                        .map_err(|e| AppError::internal(format!("[CREATE_AI_PROVIDER_DEFAULT_RESET_ERROR] {e}")))?;
+                        .map_err(|e| {
+                            AppError::internal(format!(
+                                "[CREATE_AI_PROVIDER_DEFAULT_RESET_ERROR] {e}"
+                            ))
+                        })?;
                 }
                 let id = sqlx::query_scalar::<_, i64>(
                     "INSERT INTO ai_providers (name, provider_type, base_url, model, api_key, is_default, enabled, extra_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
@@ -957,7 +760,9 @@ impl LocalDb {
             sqlx::query("UPDATE ai_providers SET is_default = 0")
                 .execute(&self.pool)
                 .await
-                .map_err(|e| AppError::internal(format!("[UPDATE_AI_PROVIDER_DEFAULT_RESET_ERROR] {e}")))?;
+                .map_err(|e| {
+                    AppError::internal(format!("[UPDATE_AI_PROVIDER_DEFAULT_RESET_ERROR] {e}"))
+                })?;
         }
 
         sqlx::query(
@@ -994,21 +799,25 @@ impl LocalDb {
                 .bind(id)
                 .fetch_optional(&self.pool)
                 .await
-                .map_err(|e| AppError::internal(format!("[SET_DEFAULT_AI_PROVIDER_LOOKUP_ERROR] {e}")))?;
+                .map_err(|e| {
+                    AppError::internal(format!("[SET_DEFAULT_AI_PROVIDER_LOOKUP_ERROR] {e}"))
+                })?;
 
         let Some(enabled) = target_enabled else {
             return Err(AppError::not_found("Provider not found"));
         };
         if !enabled {
-            return Err(
-                AppError::validation("Disabled provider cannot be set as default"),
-            );
+            return Err(AppError::validation(
+                "Disabled provider cannot be set as default",
+            ));
         }
 
         sqlx::query("UPDATE ai_providers SET is_default = 0")
             .execute(&self.pool)
             .await
-            .map_err(|e| AppError::internal(format!("[SET_DEFAULT_AI_PROVIDER_RESET_ERROR] {e}")))?;
+            .map_err(|e| {
+                AppError::internal(format!("[SET_DEFAULT_AI_PROVIDER_RESET_ERROR] {e}"))
+            })?;
         sqlx::query(
             "UPDATE ai_providers SET is_default = 1, updated_at = datetime('now') WHERE id = ?",
         )
@@ -1086,7 +895,9 @@ impl LocalDb {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(|e| AppError::internal(format!("[DELETE_AI_CONVERSATION_MESSAGES_ERROR] {e}")))?;
+            .map_err(|e| {
+                AppError::internal(format!("[DELETE_AI_CONVERSATION_MESSAGES_ERROR] {e}"))
+            })?;
         sqlx::query("DELETE FROM ai_conversations WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
@@ -1169,29 +980,9 @@ mod tests {
             .await
             .expect("connect sqlite memory db");
 
-        for migration in [
-            include_str!("../../migrations/001_initial.sql"),
-            include_str!("../../migrations/002_saved_queries.sql"),
-            include_str!("../../migrations/003_add_database_to_saved_queries.sql"),
-            include_str!("../../migrations/004_add_ssh_fields.sql"),
-            include_str!("../../migrations/005_ai_providers.sql"),
-            include_str!("../../migrations/006_ai_conversations.sql"),
-            include_str!("../../migrations/007_ai_messages.sql"),
-            include_str!("../../migrations/008_ai_provider_vendor_unique.sql"),
-            include_str!("../../migrations/009_ai_provider_type_relaxed.sql"),
-            include_str!("../../migrations/010_sql_execution_logs.sql"),
-            include_str!("../../migrations/011_add_ssl_fields.sql"),
-            include_str!("../../migrations/012_add_redis_connection_options.sql"),
-            include_str!("../../migrations/013_add_elasticsearch_connection_options.sql"),
-            include_str!("../../migrations/014_add_sentinel_fields.sql"),
-            include_str!("../../migrations/015_add_mongodb_auth_source.sql"),
-            include_str!("../../migrations/016_redis_command_logs.sql"),
-        ] {
-            sqlx::query(migration)
-                .execute(&pool)
-                .await
-                .expect("apply migration");
-        }
+        crate::db::migrations::run_migrations(&pool)
+            .await
+            .expect("apply migrations");
 
         let mut ai_master_key = [0u8; 32];
         rand::rng().fill_bytes(&mut ai_master_key);
@@ -1231,7 +1022,11 @@ mod tests {
         assert_eq!(decrypted, "secret-123");
 
         let err = LocalDb::decrypt_ai_api_key_raw(&key, "plaintext").unwrap_err();
-        assert!(err.to_string().contains("[ERR-5002]") || err.to_string().contains("Missing encryption prefix") || err.to_string().contains("Payload too short"));
+        assert!(
+            err.to_string().contains("[ERR-5002]")
+                || err.to_string().contains("Missing encryption prefix")
+                || err.to_string().contains("Payload too short")
+        );
     }
 
     #[tokio::test]
@@ -1512,7 +1307,9 @@ mod tests {
 
         db.delete_saved_query(created.id).await.unwrap();
         let get_err = db.get_saved_query_by_id(created.id).await.unwrap_err();
-        assert!(get_err.to_string().contains("[ERR-5003]") || get_err.to_string().contains("not found"));
+        assert!(
+            get_err.to_string().contains("[ERR-5003]") || get_err.to_string().contains("not found")
+        );
 
         let list_after = db.list_saved_queries().await.unwrap();
         assert!(list_after.is_empty());
