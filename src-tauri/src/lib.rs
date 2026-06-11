@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 
 use crate::db::local::LocalDb;
+use crate::error::AppError;
 use crate::state::AppState;
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -20,9 +21,9 @@ async fn set_log_level(
     let handle = state.log_reload_handle.lock().await;
     if let Some(ref h) = *handle {
         let filter = tracing_subscriber::EnvFilter::try_new(&level)
-            .map_err(|e| format!("Invalid log level: {}", e))?;
+            .map_err(|e| AppError::validation(format!("Invalid log level: {}", e)))?;
         h.reload(filter)
-            .map_err(|e| format!("Failed to set log level: {}", e))?;
+            .map_err(|e| AppError::internal(format!("Failed to set log level: {}", e)))?;
     }
     Ok(())
 }
