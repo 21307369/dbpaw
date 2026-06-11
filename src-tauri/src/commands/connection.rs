@@ -301,7 +301,7 @@ pub async fn create_database_by_id(
             let lock = state.local_db.lock().await;
             lock.clone()
         };
-        let db = local_db.ok_or("Local DB not initialized".to_string())?;
+        let db = local_db.ok_or_else(|| AppError::internal("Local DB not initialized").to_string())?;
         db.get_connection_form_by_id(id)
             .await?
             .driver
@@ -393,7 +393,7 @@ pub async fn create_database_by_id_direct(
             let lock = state.local_db.lock().await;
             lock.clone()
         };
-        let db = local_db.ok_or("Local DB not initialized".to_string())?;
+        let db = local_db.ok_or_else(|| AppError::internal("Local DB not initialized").to_string())?;
         db.get_connection_form_by_id(id)
             .await?
             .driver
@@ -630,7 +630,7 @@ pub async fn get_connections(state: State<'_, AppState>) -> Result<Vec<Connectio
     if let Some(db) = local_db {
         db.list_connections().await.map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -642,7 +642,7 @@ pub async fn get_connections_direct(state: &AppState) -> Result<Vec<Connection>,
     if let Some(db) = local_db {
         db.list_connections().await.map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -659,7 +659,7 @@ pub async fn create_connection(
     if let Some(db) = local_db {
         db.create_connection(form).await.map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -675,7 +675,7 @@ pub async fn create_connection_direct(
     if let Some(db) = local_db {
         db.create_connection(form).await.map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -696,7 +696,7 @@ pub async fn update_connection(
 
         db.update_connection(id, form).await.map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -714,7 +714,7 @@ pub async fn update_connection_direct(
         state.pool_manager.remove_by_prefix(&id.to_string()).await;
         db.update_connection(id, form).await.map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -733,7 +733,7 @@ pub async fn delete_connection_direct(state: &AppState, id: i64) -> Result<(), S
         state.redis_cache.lock().await.remove_by_connection_id(id);
         db.delete_connection(id).await.map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -1064,7 +1064,7 @@ pub async fn import_connections(
     if let Some(db) = local_db {
         crate::import::import_from_file(&file_path, &db).await
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
