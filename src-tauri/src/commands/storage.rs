@@ -18,7 +18,7 @@ pub async fn save_query(
             .await
             .map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -55,7 +55,7 @@ pub async fn update_saved_query(
             .await
             .map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -83,7 +83,7 @@ pub async fn delete_saved_query(state: State<'_, AppState>, id: i64) -> Result<(
     if let Some(db) = local_db.as_ref() {
         db.delete_saved_query(id).await.map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
@@ -102,7 +102,7 @@ pub async fn get_saved_queries(state: State<'_, AppState>) -> Result<Vec<SavedQu
     if let Some(db) = local_db.as_ref() {
         db.list_saved_queries().await.map_err(String::from)
     } else {
-        Err("Local DB not initialized".to_string())
+        Err(AppError::internal("Local DB not initialized").into())
     }
 }
 
