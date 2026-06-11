@@ -352,7 +352,7 @@ mod tests {
             _schema: String,
             _table: String,
         ) -> DriverResult<TableStructure> {
-            Err("not used".to_string().into())
+            Err(AppError::unsupported("not implemented in mock").into())
         }
 
         async fn get_table_metadata(
@@ -403,7 +403,7 @@ mod tests {
             _filter: Option<String>,
             _order_by: Option<String>,
         ) -> DriverResult<TableDataResponse> {
-            Err("not used".to_string().into())
+            Err(AppError::unsupported("not implemented in mock").into())
         }
 
         async fn get_table_data_chunk(
@@ -439,14 +439,14 @@ mod tests {
         }
 
         async fn execute_query(&self, _sql: String) -> DriverResult<QueryResult> {
-            Err("not used".to_string().into())
+            Err(AppError::unsupported("not implemented in mock").into())
         }
 
         async fn get_schema_overview(
             &self,
             _schema: Option<String>,
         ) -> DriverResult<SchemaOverview> {
-            Err("not used".to_string().into())
+            Err(AppError::unsupported("not implemented in mock").into())
         }
 
         async fn close(&self) {}
