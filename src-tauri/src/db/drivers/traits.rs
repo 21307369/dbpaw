@@ -34,22 +34,34 @@ pub trait DatabaseDriver: Send + Sync {
     async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>>;
     async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
         let _ = schema;
-        Err(AppError::unsupported("Routines are not supported for this driver"))
+        Err(AppError::unsupported(
+            "Routines are not supported for this driver",
+        ))
     }
     async fn list_events(&self, _schema: Option<String>) -> DriverResult<Vec<EventInfo>> {
-        Err(AppError::unsupported("Events are not supported for this driver"))
+        Err(AppError::unsupported(
+            "Events are not supported for this driver",
+        ))
     }
     async fn list_sequences(&self, _schema: Option<String>) -> DriverResult<Vec<SequenceInfo>> {
-        Err(AppError::unsupported("Sequences are not supported for this driver"))
+        Err(AppError::unsupported(
+            "Sequences are not supported for this driver",
+        ))
     }
     async fn list_types(&self, _schema: Option<String>) -> DriverResult<Vec<TypeInfo>> {
-        Err(AppError::unsupported("Types are not supported for this driver"))
+        Err(AppError::unsupported(
+            "Types are not supported for this driver",
+        ))
     }
     async fn list_synonyms(&self, _schema: Option<String>) -> DriverResult<Vec<SynonymInfo>> {
-        Err(AppError::unsupported("Synonyms are not supported for this driver"))
+        Err(AppError::unsupported(
+            "Synonyms are not supported for this driver",
+        ))
     }
     async fn list_packages(&self, _schema: Option<String>) -> DriverResult<Vec<PackageInfo>> {
-        Err(AppError::unsupported("Packages are not supported for this driver"))
+        Err(AppError::unsupported(
+            "Packages are not supported for this driver",
+        ))
     }
     async fn get_routine_ddl(
         &self,

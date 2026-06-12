@@ -328,8 +328,13 @@ impl DatabaseDriver for DuckdbDriver {
         self.run_blocking(|conn| {
             let mut out = Vec::new();
             if let Ok(mut stmt) = conn.prepare("SELECT database_name FROM duckdb_databases()") {
-                let mut rows = stmt.query([]).map_err(|e| AppError::query_failed(format!("{e}")))?;
-                while let Some(row) = rows.next().map_err(|e| AppError::query_failed(format!("{e}")))? {
+                let mut rows = stmt
+                    .query([])
+                    .map_err(|e| AppError::query_failed(format!("{e}")))?;
+                while let Some(row) = rows
+                    .next()
+                    .map_err(|e| AppError::query_failed(format!("{e}")))?
+                {
                     let db_name = row
                         .get::<usize, String>(0)
                         .unwrap_or_else(|_| "main".to_string());
@@ -374,10 +379,15 @@ impl DatabaseDriver for DuckdbDriver {
             let mut stmt = conn
                 .prepare(&sql)
                 .map_err(|e| AppError::query_failed(format!("{e}")))?;
-            let mut rows = stmt.query([]).map_err(|e| AppError::query_failed(format!("{e}")))?;
+            let mut rows = stmt
+                .query([])
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut tables = Vec::new();
 
-            while let Some(row) = rows.next().map_err(|e| AppError::query_failed(format!("{e}")))? {
+            while let Some(row) = rows
+                .next()
+                .map_err(|e| AppError::query_failed(format!("{e}")))?
+            {
                 let schema_name = row
                     .get::<usize, String>(0)
                     .unwrap_or_else(|_| "main".to_string());
@@ -424,7 +434,9 @@ impl DatabaseDriver for DuckdbDriver {
             let mut stmt = conn
                 .prepare(&sql)
                 .map_err(|e| AppError::query_failed(format!("{e}")))?;
-            let mut rows = stmt.query([]).map_err(|e| AppError::query_failed(format!("{e}")))?;
+            let mut rows = stmt
+                .query([])
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
 
             let pk_sql = format!(
                 "SELECT kcu.column_name \
@@ -446,7 +458,10 @@ impl DatabaseDriver for DuckdbDriver {
                 .query([])
                 .map_err(|e| AppError::query_failed(format!("{e}")))?;
             let mut pk_cols = std::collections::HashSet::new();
-            while let Some(row) = pk_rows.next().map_err(|e| AppError::query_failed(format!("{e}")))? {
+            while let Some(row) = pk_rows
+                .next()
+                .map_err(|e| AppError::query_failed(format!("{e}")))?
+            {
                 let col_name = row.get::<usize, String>(0).unwrap_or_default();
                 if !col_name.is_empty() {
                     pk_cols.insert(col_name);
@@ -454,7 +469,10 @@ impl DatabaseDriver for DuckdbDriver {
             }
 
             let mut columns = Vec::new();
-            while let Some(row) = rows.next().map_err(|e| AppError::query_failed(format!("{e}")))? {
+            while let Some(row) = rows
+                .next()
+                .map_err(|e| AppError::query_failed(format!("{e}")))?
+            {
                 let name = row.get::<usize, String>(0).unwrap_or_default();
                 if name.is_empty() {
                     continue;
@@ -514,15 +532,23 @@ impl DatabaseDriver for DuckdbDriver {
             let mut stmt = conn
                 .prepare(&sql)
                 .map_err(|e| AppError::query_failed(format!("{e}")))?;
-            let mut rows = stmt.query([]).map_err(|e| AppError::query_failed(format!("{e}")))?;
-            if let Some(row) = rows.next().map_err(|e| AppError::query_failed(format!("{e}")))? {
+            let mut rows = stmt
+                .query([])
+                .map_err(|e| AppError::query_failed(format!("{e}")))?;
+            if let Some(row) = rows
+                .next()
+                .map_err(|e| AppError::query_failed(format!("{e}")))?
+            {
                 let ddl = row.get::<usize, Option<String>>(0).unwrap_or(None);
                 if let Some(ddl) = ddl.filter(|v| !v.trim().is_empty()) {
                     return Ok(ddl);
                 }
             }
 
-            Err(AppError::query_failed(format!("Failed to read DDL for '{}'", table)))
+            Err(AppError::query_failed(format!(
+                "Failed to read DDL for '{}'",
+                table
+            )))
         })
         .await
     }
@@ -591,7 +617,10 @@ impl DatabaseDriver for DuckdbDriver {
                 rows.as_ref().map(|s| s.column_names()).unwrap_or_default();
 
             let mut data = Vec::new();
-            while let Some(row) = rows.next().map_err(|e| AppError::query_failed(format!("{e}")))? {
+            while let Some(row) = rows
+                .next()
+                .map_err(|e| AppError::query_failed(format!("{e}")))?
+            {
                 let mut obj = serde_json::Map::new();
                 for (idx, name) in col_names.iter().enumerate() {
                     let cell = duckdb_cell_to_json(row, idx, name)?;
@@ -664,7 +693,9 @@ impl DatabaseDriver for DuckdbDriver {
                     let mut stmt = conn
                         .prepare(last_sql)
                         .map_err(|e| AppError::query_failed(format!("{e}")))?;
-                    let mut rows = stmt.query([]).map_err(|e| AppError::query_failed(format!("{e}")))?;
+                    let mut rows = stmt
+                        .query([])
+                        .map_err(|e| AppError::query_failed(format!("{e}")))?;
                     let columns: Vec<QueryColumn> = rows
                         .as_ref()
                         .map(|s| {
@@ -680,7 +711,10 @@ impl DatabaseDriver for DuckdbDriver {
                     let mut columns = columns;
                     let mut data = Vec::new();
                     let mut inferred_types = false;
-                    while let Some(row) = rows.next().map_err(|e| AppError::query_failed(format!("{e}")))? {
+                    while let Some(row) = rows
+                        .next()
+                        .map_err(|e| AppError::query_failed(format!("{e}")))?
+                    {
                         if !inferred_types {
                             for (idx, col) in columns.iter_mut().enumerate() {
                                 if let Ok(v) = row.get_ref(idx) {
@@ -746,65 +780,71 @@ impl DatabaseDriver for DuckdbDriver {
                         | Some("VALUES")
                 ) || sql_contains_keyword(statement, "returning");
 
-                let result: Result<(Vec<QueryColumn>, Vec<serde_json::Value>, i64), AppError> = if should_fetch_rows {
-                    let mut stmt = match conn.prepare(statement) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            last_error = Some(AppError::query_failed(format!("{e}")).to_string());
-                            break;
-                        }
-                    };
-                    let mut rows = match stmt.query([]) {
-                        Ok(r) => r,
-                        Err(e) => {
-                            last_error = Some(AppError::query_failed(format!("{e}")).to_string());
-                            break;
-                        }
-                    };
-                    let columns: Vec<QueryColumn> = rows
-                        .as_ref()
-                        .map(|s| {
-                            s.column_names()
-                                .into_iter()
-                                .map(|name| QueryColumn {
-                                    name,
-                                    r#type: "UNKNOWN".to_string(),
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                    let mut columns = columns;
-                    let mut data = Vec::new();
-                    let mut inferred_types = false;
-                    while let Some(row) = rows.next().map_err(|e| AppError::query_failed(format!("{e}")))? {
-                        if !inferred_types {
-                            for (i, col) in columns.iter_mut().enumerate() {
-                                if let Ok(v) = row.get_ref(i) {
-                                    col.r#type = duckdb_value_ref_type_name(&v).to_string();
-                                }
+                let result: Result<(Vec<QueryColumn>, Vec<serde_json::Value>, i64), AppError> =
+                    if should_fetch_rows {
+                        let mut stmt = match conn.prepare(statement) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                last_error =
+                                    Some(AppError::query_failed(format!("{e}")).to_string());
+                                break;
                             }
-                            inferred_types = true;
+                        };
+                        let mut rows = match stmt.query([]) {
+                            Ok(r) => r,
+                            Err(e) => {
+                                last_error =
+                                    Some(AppError::query_failed(format!("{e}")).to_string());
+                                break;
+                            }
+                        };
+                        let columns: Vec<QueryColumn> = rows
+                            .as_ref()
+                            .map(|s| {
+                                s.column_names()
+                                    .into_iter()
+                                    .map(|name| QueryColumn {
+                                        name,
+                                        r#type: "UNKNOWN".to_string(),
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        let mut columns = columns;
+                        let mut data = Vec::new();
+                        let mut inferred_types = false;
+                        while let Some(row) = rows
+                            .next()
+                            .map_err(|e| AppError::query_failed(format!("{e}")))?
+                        {
+                            if !inferred_types {
+                                for (i, col) in columns.iter_mut().enumerate() {
+                                    if let Ok(v) = row.get_ref(i) {
+                                        col.r#type = duckdb_value_ref_type_name(&v).to_string();
+                                    }
+                                }
+                                inferred_types = true;
+                            }
+                            let mut obj = serde_json::Map::new();
+                            for (i, col) in columns.iter().enumerate() {
+                                let cell = duckdb_cell_to_json(row, i, &col.name)?;
+                                obj.insert(col.name.clone(), cell);
+                            }
+                            data.push(serde_json::Value::Object(obj));
                         }
-                        let mut obj = serde_json::Map::new();
-                        for (i, col) in columns.iter().enumerate() {
-                            let cell = duckdb_cell_to_json(row, i, &col.name)?;
-                            obj.insert(col.name.clone(), cell);
-                        }
-                        data.push(serde_json::Value::Object(obj));
-                    }
-                    let row_count = data.len() as i64;
-                    Ok((columns, data, row_count))
-                } else {
-                    let row_count = match conn.execute(statement, []) {
-                        Ok(v) => v as i64,
-                        Err(_) => {
-                            conn.execute_batch(statement)
-                                .map_err(|e| AppError::query_failed(format!("{e}")))?;
-                            0
-                        }
+                        let row_count = data.len() as i64;
+                        Ok((columns, data, row_count))
+                    } else {
+                        let row_count = match conn.execute(statement, []) {
+                            Ok(v) => v as i64,
+                            Err(_) => {
+                                conn.execute_batch(statement)
+                                    .map_err(|e| AppError::query_failed(format!("{e}")))?;
+                                0
+                            }
+                        };
+                        Ok((Vec::new(), Vec::new(), row_count))
                     };
-                    Ok((Vec::new(), Vec::new(), row_count))
-                };
 
                 match result {
                     Ok((columns, data, row_count)) => {
@@ -905,7 +945,10 @@ mod tests {
         };
         let result = DuckdbDriver::connect(&form).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("file_path cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("file_path cannot be empty"));
     }
 
     #[tokio::test]

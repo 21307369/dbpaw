@@ -118,9 +118,9 @@ fn normalize_redis_options(form: &mut ConnectionForm) -> Result<(), AppError> {
                 .unwrap_or(0)
                 < 2
             {
-                return Err(
-                    AppError::validation("Redis cluster requires at least two seed nodes"),
-                );
+                return Err(AppError::validation(
+                    "Redis cluster requires at least two seed nodes",
+                ));
             }
         }
         Some("sentinel") => {
@@ -130,9 +130,9 @@ fn normalize_redis_options(form: &mut ConnectionForm) -> Result<(), AppError> {
                 .map(|nodes| nodes.is_empty())
                 .unwrap_or(true)
             {
-                return Err(
-                    AppError::validation("Redis sentinel requires at least one sentinel node"),
-                );
+                return Err(AppError::validation(
+                    "Redis sentinel requires at least one sentinel node",
+                ));
             }
             if form.service_name.is_none() {
                 form.service_name = Some("mymaster".to_string());
@@ -238,7 +238,9 @@ pub fn normalize_connection_form(mut form: ConnectionForm) -> Result<ConnectionF
             form.ssh_port = Some(22);
         }
         if form.ssh_password.is_none() && form.ssh_key_path.is_none() {
-            return Err(AppError::validation("ssh password or ssh key path is required"));
+            return Err(AppError::validation(
+                "ssh password or ssh key path is required",
+            ));
         }
     }
 

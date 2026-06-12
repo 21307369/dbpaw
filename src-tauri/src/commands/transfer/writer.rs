@@ -33,7 +33,8 @@ pub(super) fn resolve_output_path(
     validate_output_path(&path)?;
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| AppError::internal(format!("create dir failed: {e}")))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| AppError::internal(format!("create dir failed: {e}")))?;
     }
     Ok(path)
 }
@@ -94,8 +95,8 @@ pub(super) struct ExportWriter {
 
 impl ExportWriter {
     pub(super) fn new(path: PathBuf, format: ExportFormat) -> Result<Self, AppError> {
-        let file =
-            File::create(path).map_err(|e| AppError::internal(format!("create dir failed: {e}")))?;
+        let file = File::create(path)
+            .map_err(|e| AppError::internal(format!("create dir failed: {e}")))?;
         let mut writer = BufWriter::new(file);
 
         if matches!(format, ExportFormat::Json) {

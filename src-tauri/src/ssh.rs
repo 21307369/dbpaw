@@ -50,7 +50,10 @@ impl Drop for TunnelGuard {
 
 pub fn start_ssh_tunnel(config: &ConnectionForm) -> Result<SshTunnel, AppError> {
     // Validate config
-    let ssh_host = config.ssh_host.clone().ok_or(AppError::validation("SSH Host is required"))?;
+    let ssh_host = config
+        .ssh_host
+        .clone()
+        .ok_or(AppError::validation("SSH Host is required"))?;
     let ssh_port = config.ssh_port.unwrap_or(22);
     if ssh_port < 1 || ssh_port > 65535 {
         return Err(AppError::validation("SSH port must be between 1 and 65535"));
@@ -73,7 +76,9 @@ pub fn start_ssh_tunnel(config: &ConnectionForm) -> Result<SshTunnel, AppError> 
     let default_port = default_target_port(&normalized_driver);
     let target_port = config.port.unwrap_or(default_port);
     if target_port < 1 || target_port > 65535 {
-        return Err(AppError::validation("Target port must be between 1 and 65535"));
+        return Err(AppError::validation(
+            "Target port must be between 1 and 65535",
+        ));
     }
     let target_port = target_port as u16;
 
@@ -138,13 +143,22 @@ fn handle_connection(
     target_port: u16,
 ) -> Result<(), AppError> {
     // 1. Connect to SSH server
-    let tcp = TcpStream::connect(format!("{}:{}", ssh_host, ssh_port))
-        .map_err(|e| AppError::conn_failed(format!("Failed to connect to SSH server: {}", e), "Check SSH host and port"))?;
+    let tcp = TcpStream::connect(format!("{}:{}", ssh_host, ssh_port)).map_err(|e| {
+        AppError::conn_failed(
+            format!("Failed to connect to SSH server: {}", e),
+            "Check SSH host and port",
+        )
+    })?;
 
-    let mut sess = Session::new().map_err(|e| AppError::internal_with("Failed to create SSH session", e))?;
+    let mut sess =
+        Session::new().map_err(|e| AppError::internal_with("Failed to create SSH session", e))?;
     sess.set_tcp_stream(tcp);
-    sess.handshake()
-        .map_err(|e| AppError::conn_failed(format!("SSH handshake failed: {}", e), "Check SSH server availability"))?;
+    sess.handshake().map_err(|e| {
+        AppError::conn_failed(
+            format!("SSH handshake failed: {}", e),
+            "Check SSH server availability",
+        )
+    })?;
 
     // 2. Authenticate
     if let Some(key_path) = ssh_key_path {
@@ -154,7 +168,9 @@ fn handle_connection(
         sess.userauth_password(ssh_user, password)
             .map_err(|e| AppError::conn_auth_failed(format!("SSH password auth failed: {}", e)))?;
     } else {
-        return Err(AppError::validation("SSH authentication requires password or key"));
+        return Err(AppError::validation(
+            "SSH authentication requires password or key",
+        ));
     }
 
     // 3. Open Channel
@@ -269,7 +285,7 @@ fn handle_connection(
 #[cfg(test)]
 mod tests {
     use super::*;
-use crate::models::ConnectionForm;
+    use crate::models::ConnectionForm;
 
     #[test]
     fn test_target_port_default_by_driver() {

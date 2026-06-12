@@ -117,7 +117,16 @@ impl DatabaseDriver for MysqlDriver {
         order_by: Option<String>,
     ) -> DriverResult<TableDataResponse> {
         self.table_data
-            .get_table_data(schema, table, page, limit, sort_column, sort_direction, filter, order_by)
+            .get_table_data(
+                schema,
+                table,
+                page,
+                limit,
+                sort_column,
+                sort_direction,
+                filter,
+                order_by,
+            )
             .await
     }
 
@@ -133,7 +142,16 @@ impl DatabaseDriver for MysqlDriver {
         order_by: Option<String>,
     ) -> DriverResult<TableDataResponse> {
         self.table_data
-            .get_table_data_chunk(schema, table, page, limit, sort_column, sort_direction, filter, order_by)
+            .get_table_data_chunk(
+                schema,
+                table,
+                page,
+                limit,
+                sort_column,
+                sort_direction,
+                filter,
+                order_by,
+            )
             .await
     }
 
@@ -166,7 +184,9 @@ impl RoutineDriver for MysqlDriver {
         name: String,
         routine_type: String,
     ) -> DriverResult<String> {
-        self.metadata.get_routine_ddl(schema, name, routine_type).await
+        self.metadata
+            .get_routine_ddl(schema, name, routine_type)
+            .await
     }
 }
 

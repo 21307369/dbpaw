@@ -13,10 +13,7 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-async fn set_log_level(
-    state: tauri::State<'_, AppState>,
-    level: String,
-) -> Result<(), String> {
+async fn set_log_level(state: tauri::State<'_, AppState>, level: String) -> Result<(), String> {
     let handle = state.log_reload_handle.lock().await;
     if let Some(ref h) = *handle {
         let filter = tracing_subscriber::EnvFilter::try_new(&level)

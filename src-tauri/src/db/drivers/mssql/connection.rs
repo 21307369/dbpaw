@@ -174,15 +174,27 @@ impl MssqlConnectionManager {
     async fn connect_single(&self) -> DriverResult<Client<Compat<TcpStream>>> {
         let attempts = if self.config.ssl {
             vec![
-                (EncryptionLevel::Required, false, "encrypt=required,trust_cert=false"),
+                (
+                    EncryptionLevel::Required,
+                    false,
+                    "encrypt=required,trust_cert=false",
+                ),
                 (EncryptionLevel::On, false, "encrypt=on,trust_cert=false"),
             ]
         } else {
             vec![
                 (EncryptionLevel::Off, false, "encrypt=off"),
-                (EncryptionLevel::NotSupported, false, "encrypt=not_supported"),
+                (
+                    EncryptionLevel::NotSupported,
+                    false,
+                    "encrypt=not_supported",
+                ),
                 (EncryptionLevel::On, true, "encrypt=on,trust_cert=true"),
-                (EncryptionLevel::Required, true, "encrypt=required,trust_cert=true"),
+                (
+                    EncryptionLevel::Required,
+                    true,
+                    "encrypt=required,trust_cert=true",
+                ),
             ]
         };
 

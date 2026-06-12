@@ -482,7 +482,10 @@ impl MysqlMetadata {
         decode_mysql_text_cell(&row, 1)
     }
 
-    pub async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, AppError> {
+    pub async fn get_schema_overview(
+        &self,
+        schema: Option<String>,
+    ) -> Result<SchemaOverview, AppError> {
         let sql = "SELECT table_schema, table_name, column_name, data_type \
              FROM information_schema.columns"
             .to_string();
@@ -557,7 +560,10 @@ impl MysqlMetadata {
         Ok(SchemaOverview { tables })
     }
 
-    pub async fn list_routines(&self, schema: Option<String>) -> Result<Vec<RoutineInfo>, AppError> {
+    pub async fn list_routines(
+        &self,
+        schema: Option<String>,
+    ) -> Result<Vec<RoutineInfo>, AppError> {
         let target_schema = if let Some(s) = schema {
             s
         } else {

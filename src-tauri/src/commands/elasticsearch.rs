@@ -25,7 +25,11 @@ pub async fn elasticsearch_test_connection(
     state: State<'_, AppState>,
     id: i64,
 ) -> Result<ElasticsearchConnectionInfo, String> {
-    client_from_id(&state, id).await?.test_connection().await.map_err(String::from)
+    client_from_id(&state, id)
+        .await?
+        .test_connection()
+        .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -52,7 +56,11 @@ pub async fn elasticsearch_list_indices(
     state: State<'_, AppState>,
     id: i64,
 ) -> Result<Vec<ElasticsearchIndexInfo>, String> {
-    client_from_id(&state, id).await?.list_indices().await.map_err(String::from)
+    client_from_id(&state, id)
+        .await?
+        .list_indices()
+        .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -88,7 +96,11 @@ pub async fn elasticsearch_delete_index(
     id: i64,
     index: String,
 ) -> Result<ElasticsearchIndexOperationResult, String> {
-    client_from_id(&state, id).await?.delete_index(index).await.map_err(String::from)
+    client_from_id(&state, id)
+        .await?
+        .delete_index(index)
+        .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -97,7 +109,11 @@ pub async fn elasticsearch_refresh_index(
     id: i64,
     index: String,
 ) -> Result<ElasticsearchIndexOperationResult, String> {
-    client_from_id(&state, id).await?.refresh_index(index).await.map_err(String::from)
+    client_from_id(&state, id)
+        .await?
+        .refresh_index(index)
+        .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -106,7 +122,11 @@ pub async fn elasticsearch_open_index(
     id: i64,
     index: String,
 ) -> Result<ElasticsearchIndexOperationResult, String> {
-    client_from_id(&state, id).await?.open_index(index).await.map_err(String::from)
+    client_from_id(&state, id)
+        .await?
+        .open_index(index)
+        .await
+        .map_err(String::from)
 }
 
 #[tauri::command]
@@ -115,7 +135,11 @@ pub async fn elasticsearch_close_index(
     id: i64,
     index: String,
 ) -> Result<ElasticsearchIndexOperationResult, String> {
-    client_from_id(&state, id).await?.close_index(index).await.map_err(String::from)
+    client_from_id(&state, id)
+        .await?
+        .close_index(index)
+        .await
+        .map_err(String::from)
 }
 
 #[tauri::command]

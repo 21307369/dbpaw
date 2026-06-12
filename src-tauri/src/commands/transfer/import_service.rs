@@ -40,7 +40,9 @@ pub(super) fn prepare_sql_import(
 
     let import_plan = prepare_import_plan(&source, &normalized_driver)?;
     if import_plan.units.is_empty() {
-        return Err(AppError::internal("SQL file does not contain executable statements"));
+        return Err(AppError::internal(
+            "SQL file does not contain executable statements",
+        ));
     }
     if import_plan.units.len() > MAX_IMPORT_STATEMENTS {
         return Err(AppError::internal(format!(

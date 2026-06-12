@@ -377,7 +377,12 @@ impl MysqlTableData {
 
     async fn fetch_i64_scalar_sql(&self, sql: &str) -> Result<i64, AppError> {
         if self.is_compatibility_mode() {
-            let row = self.fetch_all_sql(sql).await?.into_iter().next().ok_or_else(|| query_error("No rows returned"))?;
+            let row = self
+                .fetch_all_sql(sql)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| query_error("No rows returned"))?;
             row.try_get::<i64, _>(0)
                 .or_else(|_| row.try_get::<u64, _>(0).map(|v| v as i64))
                 .map_err(|e| query_error(format!("SQL: {} | {}", sql, e)))
@@ -390,7 +395,12 @@ impl MysqlTableData {
     }
 
     async fn current_database(&self) -> Result<Option<String>, AppError> {
-        let row = self.fetch_all_sql("SELECT DATABASE()").await?.into_iter().next().ok_or_else(|| query_error("No rows returned"))?;
+        let row = self
+            .fetch_all_sql("SELECT DATABASE()")
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| query_error("No rows returned"))?;
         decode_mysql_optional_text_cell(&row, 0)
     }
 

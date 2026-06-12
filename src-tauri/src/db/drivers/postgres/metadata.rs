@@ -58,7 +58,10 @@ pub fn is_high_precision_pg_type(data_type: &str, udt_name: &str) -> bool {
     ) || matches!(udt_name.as_str(), "int8" | "numeric" | "decimal" | "money")
 }
 
-pub fn decode_postgres_text_cell(row: &sqlx::postgres::PgRow, idx: usize) -> Result<String, AppError> {
+pub fn decode_postgres_text_cell(
+    row: &sqlx::postgres::PgRow,
+    idx: usize,
+) -> Result<String, AppError> {
     if let Ok(v) = row.try_get::<String, _>(idx) {
         return Ok(v);
     }
@@ -552,7 +555,11 @@ impl PostgresMetadata {
         })
     }
 
-    async fn load_pg_columns(&self, schema: &str, table: &str) -> Result<Vec<PgColumnInfo>, AppError> {
+    async fn load_pg_columns(
+        &self,
+        schema: &str,
+        table: &str,
+    ) -> Result<Vec<PgColumnInfo>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT
@@ -604,11 +611,14 @@ impl PostgresMetadata {
         &self,
         schema: &str,
         table: &str,
-    ) -> Result<(
-        Vec<PgKeyConstraint>,
-        Vec<ForeignKeyInfo>,
-        Vec<(String, String)>,
-    ), AppError> {
+    ) -> Result<
+        (
+            Vec<PgKeyConstraint>,
+            Vec<ForeignKeyInfo>,
+            Vec<(String, String)>,
+        ),
+        AppError,
+    > {
         let rows = sqlx::query(
             r#"
             SELECT
@@ -716,7 +726,11 @@ impl PostgresMetadata {
         Ok((key_constraints, foreign_keys, check_constraints))
     }
 
-    async fn load_pg_indexes(&self, schema: &str, table: &str) -> Result<Vec<PgIndexInfo>, AppError> {
+    async fn load_pg_indexes(
+        &self,
+        schema: &str,
+        table: &str,
+    ) -> Result<Vec<PgIndexInfo>, AppError> {
         let rows = sqlx::query(
             r#"
             SELECT
@@ -869,7 +883,10 @@ impl PostgresMetadata {
         ))
     }
 
-    pub async fn get_schema_overview(&self, schema: Option<String>) -> Result<SchemaOverview, AppError> {
+    pub async fn get_schema_overview(
+        &self,
+        schema: Option<String>,
+    ) -> Result<SchemaOverview, AppError> {
         let rows = if let Some(s) = schema {
             sqlx::query(
                 "SELECT table_schema, table_name, column_name, data_type \
@@ -958,7 +975,10 @@ impl PostgresMetadata {
         Ok(cols)
     }
 
-    pub async fn list_routines(&self, schema: Option<String>) -> Result<Vec<RoutineInfo>, AppError> {
+    pub async fn list_routines(
+        &self,
+        schema: Option<String>,
+    ) -> Result<Vec<RoutineInfo>, AppError> {
         let rows = if let Some(schema) = schema {
             sqlx::query(
                 "SELECT n.nspname AS schema_name, \
@@ -1031,7 +1051,10 @@ impl PostgresMetadata {
         Ok(ddl)
     }
 
-    pub async fn list_sequences(&self, schema: Option<String>) -> Result<Vec<SequenceInfo>, AppError> {
+    pub async fn list_sequences(
+        &self,
+        schema: Option<String>,
+    ) -> Result<Vec<SequenceInfo>, AppError> {
         let target_schema = schema.unwrap_or_else(|| "public".to_string());
 
         let rows = sqlx::query(

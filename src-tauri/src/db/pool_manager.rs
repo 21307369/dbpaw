@@ -132,8 +132,7 @@ impl PoolManager {
                 "Connection timeout after {} seconds",
                 self.config.connection_timeout_secs
             ))
-        })?
-        ?;
+        })??;
 
         let driver: Arc<dyn DatabaseDriver> = Arc::from(driver_box);
 
@@ -562,7 +561,10 @@ mod tests {
     impl DatabaseDriver for UnhealthyMockDriver {
         async fn close(&self) {}
         async fn test_connection(&self) -> DriverResult<()> {
-            Err(crate::error::AppError::conn_failed("Connection failed", "Check connection settings"))
+            Err(crate::error::AppError::conn_failed(
+                "Connection failed",
+                "Check connection settings",
+            ))
         }
         async fn list_databases(&self) -> DriverResult<Vec<String>> {
             Err(crate::error::AppError::unsupported("Unimplemented"))

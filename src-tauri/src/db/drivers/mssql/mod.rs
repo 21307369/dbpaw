@@ -4,16 +4,17 @@ pub mod query;
 pub mod table_data;
 
 use super::{
-    DatabaseDriver, DriverCapabilities, DriverResult, ForeignKeyDriver, RoutineDriver, SynonymDriver,
+    DatabaseDriver, DriverCapabilities, DriverResult, ForeignKeyDriver, RoutineDriver,
+    SynonymDriver,
 };
 use crate::models::{
-    ConnectionForm, QueryResult, RoutineInfo, SchemaForeignKey, SchemaOverview,
-    SynonymInfo, TableDataResponse, TableInfo, TableMetadata, TableStructure,
+    ConnectionForm, QueryResult, RoutineInfo, SchemaForeignKey, SchemaOverview, SynonymInfo,
+    TableDataResponse, TableInfo, TableMetadata, TableStructure,
 };
+use crate::ssh::SshTunnel;
 use async_trait::async_trait;
 use bb8::Pool;
 use connection::MssqlConnectionManager;
-use crate::ssh::SshTunnel;
 
 pub struct MssqlDriver {
     pub pool: Pool<MssqlConnectionManager>,
@@ -53,11 +54,19 @@ impl DatabaseDriver for MssqlDriver {
         self.list_tables_impl(schema).await
     }
 
-    async fn get_table_structure(&self, schema: String, table: String) -> DriverResult<TableStructure> {
+    async fn get_table_structure(
+        &self,
+        schema: String,
+        table: String,
+    ) -> DriverResult<TableStructure> {
         self.get_table_structure_impl(schema, table).await
     }
 
-    async fn get_table_metadata(&self, schema: String, table: String) -> DriverResult<TableMetadata> {
+    async fn get_table_metadata(
+        &self,
+        schema: String,
+        table: String,
+    ) -> DriverResult<TableMetadata> {
         self.get_table_metadata_impl(schema, table).await
     }
 
@@ -66,19 +75,51 @@ impl DatabaseDriver for MssqlDriver {
     }
 
     async fn get_table_data(
-        &self, schema: String, table: String, page: i64, limit: i64,
-        sort_column: Option<String>, sort_direction: Option<String>,
-        filter: Option<String>, order_by: Option<String>,
+        &self,
+        schema: String,
+        table: String,
+        page: i64,
+        limit: i64,
+        sort_column: Option<String>,
+        sort_direction: Option<String>,
+        filter: Option<String>,
+        order_by: Option<String>,
     ) -> DriverResult<TableDataResponse> {
-        self.get_table_data_impl(schema, table, page, limit, sort_column, sort_direction, filter, order_by).await
+        self.get_table_data_impl(
+            schema,
+            table,
+            page,
+            limit,
+            sort_column,
+            sort_direction,
+            filter,
+            order_by,
+        )
+        .await
     }
 
     async fn get_table_data_chunk(
-        &self, schema: String, table: String, page: i64, limit: i64,
-        sort_column: Option<String>, sort_direction: Option<String>,
-        filter: Option<String>, order_by: Option<String>,
+        &self,
+        schema: String,
+        table: String,
+        page: i64,
+        limit: i64,
+        sort_column: Option<String>,
+        sort_direction: Option<String>,
+        filter: Option<String>,
+        order_by: Option<String>,
     ) -> DriverResult<TableDataResponse> {
-        self.get_table_data_chunk_impl(schema, table, page, limit, sort_column, sort_direction, filter, order_by).await
+        self.get_table_data_chunk_impl(
+            schema,
+            table,
+            page,
+            limit,
+            sort_column,
+            sort_direction,
+            filter,
+            order_by,
+        )
+        .await
     }
 
     async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
@@ -96,7 +137,12 @@ impl RoutineDriver for MssqlDriver {
         self.list_routines_impl(schema).await
     }
 
-    async fn get_routine_ddl(&self, schema: String, name: String, routine_type: String) -> DriverResult<String> {
+    async fn get_routine_ddl(
+        &self,
+        schema: String,
+        name: String,
+        routine_type: String,
+    ) -> DriverResult<String> {
         self.get_routine_ddl_impl(schema, name, routine_type).await
     }
 }
@@ -110,7 +156,10 @@ impl SynonymDriver for MssqlDriver {
 
 #[async_trait]
 impl ForeignKeyDriver for MssqlDriver {
-    async fn get_schema_foreign_keys(&self, database: Option<&str>) -> DriverResult<Vec<SchemaForeignKey>> {
+    async fn get_schema_foreign_keys(
+        &self,
+        database: Option<&str>,
+    ) -> DriverResult<Vec<SchemaForeignKey>> {
         self.get_schema_foreign_keys_impl(database).await
     }
 }

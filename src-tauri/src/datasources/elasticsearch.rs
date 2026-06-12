@@ -181,9 +181,13 @@ impl BulkImportAccumulator {
 }
 
 fn trim_to_option(value: Option<&String>) -> Option<String> {
-    value
-        .map(|v| v.trim())
-        .and_then(|v| if v.is_empty() { None } else { Some(v.to_string()) })
+    value.map(|v| v.trim()).and_then(|v| {
+        if v.is_empty() {
+            None
+        } else {
+            Some(v.to_string())
+        }
+    })
 }
 
 fn parse_cloud_id(cloud_id: &str) -> Result<String, AppError> {
@@ -243,10 +247,12 @@ fn build_api_key(form: &ConnectionForm) -> Result<Option<String>, AppError> {
     let id = trim_to_option(form.api_key_id.as_ref());
     let secret = trim_to_option(form.api_key_secret.as_ref());
     match (id, secret) {
-        (Some(id), Some(secret)) => Ok(Some(general_purpose::STANDARD.encode(format!("{id}:{secret}")))),
-        (Some(_), None) | (None, Some(_)) => Err(
-            AppError::validation("both apiKeyId and apiKeySecret are required for API key authentication"),
-        ),
+        (Some(id), Some(secret)) => Ok(Some(
+            general_purpose::STANDARD.encode(format!("{id}:{secret}")),
+        )),
+        (Some(_), None) | (None, Some(_)) => Err(AppError::validation(
+            "both apiKeyId and apiKeySecret are required for API key authentication",
+        )),
         (None, None) => Ok(None),
     }
 }
@@ -303,7 +309,10 @@ fn build_auth(form: &ConnectionForm) -> Result<ElasticsearchAuth, AppError> {
     }
 }
 
-fn build_reqwest_client(form: &ConnectionForm, timeout_ms: i64) -> Result<reqwest::Client, AppError> {
+fn build_reqwest_client(
+    form: &ConnectionForm,
+    timeout_ms: i64,
+) -> Result<reqwest::Client, AppError> {
     let mut builder = reqwest::Client::builder().timeout(Duration::from_millis(timeout_ms as u64));
     if form.ssl.unwrap_or(false) {
         let ssl_mode =
@@ -338,22 +347,14 @@ fn normalize_error(status: StatusCode, body: &str) -> AppError {
             return AppError::internal(format!("HTTP {}: {}", status.as_u16(), reason));
         }
         if let Some(error_type) = value.pointer("/error/type").and_then(Value::as_str) {
-            return AppError::internal(format!(
-                "HTTP {}: {}",
-                status.as_u16(),
-                error_type
-            ));
+            return AppError::internal(format!("HTTP {}: {}", status.as_u16(), error_type));
         }
     }
     let compact = body.trim();
     if compact.is_empty() {
         AppError::internal(format!("HTTP {}", status.as_u16()))
     } else {
-        AppError::internal(format!(
-            "HTTP {}: {}",
-            status.as_u16(),
-            compact
-        ))
+        AppError::internal(format!("HTTP {}: {}", status.as_u16(), compact))
     }
 }
 
@@ -388,7 +389,9 @@ fn validate_raw_path(path: &str) -> Result<String, AppError> {
         return Err(AppError::validation("request path cannot be empty"));
     }
     if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-        return Err(AppError::validation("raw requests must use a path, not a full URL"));
+        return Err(AppError::validation(
+            "raw requests must use a path, not a full URL",
+        ));
     }
     let path = if trimmed.starts_with('/') {
         trimmed.to_string()
@@ -451,10 +454,14 @@ fn validate_file_path(file_path: &str, operation: &str) -> Result<PathBuf, AppEr
 
 fn parse_bulk_action_line(line: &str, line_number: usize) -> Result<BulkAction, AppError> {
     let value = serde_json::from_str::<Value>(line.trim()).map_err(|e| {
-        AppError::validation(format!("invalid bulk action JSON at line {line_number}: {e}"))
+        AppError::validation(format!(
+            "invalid bulk action JSON at line {line_number}: {e}"
+        ))
     })?;
     let obj = value.as_object().ok_or_else(|| {
-        AppError::validation(format!("bulk action at line {line_number} must be a JSON object"))
+        AppError::validation(format!(
+            "bulk action at line {line_number} must be a JSON object"
+        ))
     })?;
     if obj.len() != 1 {
         return Err(AppError::validation(format!(
@@ -604,8 +611,7 @@ impl ElasticsearchClient {
         if !status.is_success() {
             return Err(normalize_error(status, &body));
         }
-        serde_json::from_str::<Value>(&body)
-            .map_err(|e| AppError::internal(format!("{e}")))
+        serde_json::from_str::<Value>(&body).map_err(|e| AppError::internal(format!("{e}")))
     }
 
     async fn read_mutation(
@@ -883,7 +889,9 @@ impl ElasticsearchClient {
         refresh: bool,
     ) -> Result<ElasticsearchMutationResult, AppError> {
         if !source.is_object() {
-            return Err(AppError::validation("document source must be a JSON object"));
+            return Err(AppError::validation(
+                "document source must be a JSON object",
+            ));
         }
         let refresh_query = if refresh { "?refresh=true" } else { "" };
         let (method, path) = match document_id.and_then(|v| {
@@ -945,8 +953,7 @@ impl ElasticsearchClient {
         let mut body = build_search_body(query, dsl)?;
         set_search_pagination(&mut body, None, batch_size)?;
 
-        let file = File::create(&output_path)
-            .map_err(|e| AppError::internal(format!("{e}")))?;
+        let file = File::create(&output_path).map_err(|e| AppError::internal(format!("{e}")))?;
         let mut writer = BufWriter::new(file);
         let started = Instant::now();
         let mut documents = 0i64;
@@ -1027,11 +1034,12 @@ impl ElasticsearchClient {
         let index = validate_index_name(&index)?;
         let import_path = validate_file_path(&file_path, "import")?;
         if !import_path.exists() {
-            return Err(AppError::internal("Elasticsearch bulk import file does not exist"));
+            return Err(AppError::internal(
+                "Elasticsearch bulk import file does not exist",
+            ));
         }
         let batch_size = clamp_bulk_batch_size(batch_size.unwrap_or(DEFAULT_BULK_BATCH_SIZE));
-        let file = File::open(&import_path)
-            .map_err(|e| AppError::internal(format!("{e}")))?;
+        let file = File::open(&import_path).map_err(|e| AppError::internal(format!("{e}")))?;
         let mut reader = BufReader::new(file);
         let started = Instant::now();
         let mut line_number = 0usize;
@@ -1066,7 +1074,10 @@ impl ElasticsearchClient {
             }
             line_number += 1;
             let source = serde_json::from_str::<Value>(source_line.trim()).map_err(|e| {
-                AppError::validation(format!("invalid bulk source JSON at line {line_number}: {e}")).to_string()
+                AppError::validation(format!(
+                    "invalid bulk source JSON at line {line_number}: {e}"
+                ))
+                .to_string()
             })?;
             if !source.is_object() {
                 return Err(AppError::validation(format!(
@@ -1077,8 +1088,7 @@ impl ElasticsearchClient {
             batch.push_str(&build_bulk_action_line(&index, &action)?);
             batch.push('\n');
             batch.push_str(
-                &serde_json::to_string(&source)
-                    .map_err(|e| AppError::internal(format!("{e}")))?,
+                &serde_json::to_string(&source).map_err(|e| AppError::internal(format!("{e}")))?,
             );
             batch.push('\n');
             batch_actions += 1;
@@ -1105,9 +1115,9 @@ impl ElasticsearchClient {
         .await?;
 
         if accumulator.total_actions == 0 {
-            return Err(
-                AppError::internal("Elasticsearch bulk file does not contain actions"),
-            );
+            return Err(AppError::internal(
+                "Elasticsearch bulk file does not contain actions",
+            ));
         }
 
         Ok(ElasticsearchBulkImportResult {
@@ -1164,8 +1174,8 @@ impl ElasticsearchClient {
         if !status.is_success() {
             return Err(normalize_error(status, &text));
         }
-        let value = serde_json::from_str::<Value>(&text)
-            .map_err(|e| AppError::internal(format!("{e}")))?;
+        let value =
+            serde_json::from_str::<Value>(&text).map_err(|e| AppError::internal(format!("{e}")))?;
         let items = value
             .get("items")
             .and_then(Value::as_array)
@@ -1230,9 +1240,9 @@ impl ElasticsearchClient {
             "DELETE" => reqwest::Method::DELETE,
             "PATCH" => reqwest::Method::PATCH,
             _ => {
-                return Err(
-                    AppError::validation("method must be one of GET, POST, PUT, DELETE, PATCH"),
-                )
+                return Err(AppError::validation(
+                    "method must be one of GET, POST, PUT, DELETE, PATCH",
+                ))
             }
         };
         let path = validate_raw_path(&path)?;
@@ -1278,7 +1288,7 @@ mod tests {
         validate_file_path, validate_index_name, validate_raw_path, BulkActionKind,
         ElasticsearchAuth,
     };
-use crate::models::ConnectionForm;
+    use crate::models::ConnectionForm;
     use base64::{engine::general_purpose, Engine as _};
     use reqwest::StatusCode;
 
@@ -1538,11 +1548,8 @@ use crate::models::ConnectionForm;
 
     #[test]
     fn build_search_body_dsl_takes_priority() {
-        let result = build_search_body(
-            Some("ignored"),
-            Some(r#"{"match":{"title":"hello"}}"#),
-        )
-        .unwrap();
+        let result =
+            build_search_body(Some("ignored"), Some(r#"{"match":{"title":"hello"}}"#)).unwrap();
         assert_eq!(result["match"]["title"], "hello");
     }
 

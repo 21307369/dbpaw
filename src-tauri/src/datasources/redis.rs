@@ -1,5 +1,5 @@
 use base64::Engine;
-use redis::{Value, from_redis_value};
+use redis::{from_redis_value, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 

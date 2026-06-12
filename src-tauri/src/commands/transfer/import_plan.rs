@@ -42,7 +42,8 @@ pub(super) fn import_transaction_sql<'a>(
         "starrocks" | "doris" => Err(AppError::unsupported(format!(
             "Driver {} does not support transactional SQL import in this flow",
             original_driver
-        )).to_string()),
+        ))
+        .to_string()),
         "postgres" | "sqlite" | "duckdb" => Ok(("BEGIN", "COMMIT", "ROLLBACK")),
         "mssql" => Ok((
             "BEGIN TRANSACTION",
@@ -51,13 +52,15 @@ pub(super) fn import_transaction_sql<'a>(
         )),
         "oracle" => Ok(("SELECT 1 FROM DUAL", "COMMIT", "ROLLBACK")),
         "db2" => Ok(("BEGIN", "COMMIT", "ROLLBACK")),
-        "clickhouse" => {
-            Err(AppError::unsupported("Driver clickhouse is read-only in this import flow").to_string())
-        }
+        "clickhouse" => Err(AppError::unsupported(
+            "Driver clickhouse is read-only in this import flow",
+        )
+        .to_string()),
         _ => Err(AppError::unsupported(format!(
             "Driver {} is not supported for SQL import",
             original_driver
-        )).to_string()),
+        ))
+        .to_string()),
     }
 }
 
@@ -324,7 +327,9 @@ pub(super) fn parse_mssql_batches(sql: &str) -> Result<Vec<String>, AppError> {
         | SqlScanState::DoubleQuoted
         | SqlScanState::BacktickQuoted
         | SqlScanState::DollarQuoted(_) => {
-            return Err(AppError::internal("Unterminated string literal in SQL file"));
+            return Err(AppError::internal(
+                "Unterminated string literal in SQL file",
+            ));
         }
     }
 
@@ -991,7 +996,9 @@ pub(super) fn parse_sql_statements(sql: &str, driver: &str) -> Result<Vec<String
         | SqlScanState::DoubleQuoted
         | SqlScanState::BacktickQuoted
         | SqlScanState::DollarQuoted(_) => {
-            return Err(AppError::internal("Unterminated string literal in SQL file"));
+            return Err(AppError::internal(
+                "Unterminated string literal in SQL file",
+            ));
         }
     }
 

@@ -36,7 +36,10 @@ fn normalize_mongo_error(e: impl std::fmt::Display) -> AppError {
     } else if msg.contains("timeout") || msg.contains("timed out") {
         AppError::conn_timeout(format!("Connection timed out: {}", msg))
     } else if msg.contains("refused") {
-        AppError::conn_failed(format!("Connection refused: {}", msg), "Check host and port")
+        AppError::conn_failed(
+            format!("Connection refused: {}", msg),
+            "Check host and port",
+        )
     } else {
         AppError::internal(format!("MongoDB error: {}", msg))
     }
@@ -101,12 +104,8 @@ fn parse_json_doc(json_str: &str, label: &str) -> DriverResult<Document> {
     }
     let value: serde_json::Value = serde_json::from_str(trimmed)
         .map_err(|e| AppError::validation(format!("Invalid {} JSON: {}", label, e)))?;
-    mongodb::bson::to_document(&value).map_err(|e| {
-        AppError::validation(format!(
-            "Failed to convert {} to BSON: {}",
-            label, e
-        ))
-    })
+    mongodb::bson::to_document(&value)
+        .map_err(|e| AppError::validation(format!("Failed to convert {} to BSON: {}", label, e)))
 }
 
 // ---------------------------------------------------------------------------
@@ -228,10 +227,9 @@ impl MongoDBDriver {
             let ssl_mode = trim_to_option(effective_form.ssl_mode.as_ref());
             if ssl_mode.as_deref() == Some("verify_ca") {
                 let ca_cert =
-                    trim_to_option(effective_form.ssl_ca_cert.as_ref())
-                        .ok_or_else(|| {
-                            AppError::validation("sslCaCert cannot be empty in verify_ca mode")
-                        })?;
+                    trim_to_option(effective_form.ssl_ca_cert.as_ref()).ok_or_else(|| {
+                        AppError::validation("sslCaCert cannot be empty in verify_ca mode")
+                    })?;
                 let tls_options = TlsOptions::builder()
                     .ca_file_path(std::path::PathBuf::from(ca_cert))
                     .build();
@@ -556,7 +554,10 @@ impl DatabaseDriver for MongoDBDriver {
             }
         }
 
-        Err(AppError::not_found(format!("Collection '{}' not found", table)))
+        Err(AppError::not_found(format!(
+            "Collection '{}' not found",
+            table
+        )))
     }
 
     async fn get_table_data(
@@ -682,9 +683,7 @@ impl DatabaseDriver for MongoDBDriver {
             }
 
             let cursor = builder.await.map_err(normalize_mongo_error)?;
-            return self
-                .cursor_to_query_result(cursor, trimmed, start)
-                .await;
+            return self.cursor_to_query_result(cursor, trimmed, start).await;
         }
 
         // --- aggregate command ---
@@ -697,8 +696,9 @@ impl DatabaseDriver for MongoDBDriver {
             let bson_pipeline: Vec<Document> = pipeline
                 .iter()
                 .map(|stage| {
-                    mongodb::bson::to_document(stage)
-                        .map_err(|e| AppError::query_failed(format!("Invalid pipeline stage: {}", e)))
+                    mongodb::bson::to_document(stage).map_err(|e| {
+                        AppError::query_failed(format!("Invalid pipeline stage: {}", e))
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -710,9 +710,7 @@ impl DatabaseDriver for MongoDBDriver {
                 .aggregate(bson_pipeline)
                 .await
                 .map_err(normalize_mongo_error)?;
-            return self
-                .cursor_to_query_result(cursor, trimmed, start)
-                .await;
+            return self.cursor_to_query_result(cursor, trimmed, start).await;
         }
 
         Err(AppError::query_failed("Unsupported query format. Use {\"find\": \"collection\", ...} or {\"aggregate\": \"collection\", \"pipeline\": [...]}"))

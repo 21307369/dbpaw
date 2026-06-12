@@ -1,4 +1,7 @@
-use super::{conn_failed_error, DatabaseDriver, DriverCapabilities, DriverResult, ForeignKeyDriver, PackageDriver, SequenceDriver, TypeDriver};
+use super::{
+    conn_failed_error, DatabaseDriver, DriverCapabilities, DriverResult, ForeignKeyDriver,
+    PackageDriver, SequenceDriver, TypeDriver,
+};
 use crate::error::AppError;
 use crate::models::{
     ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, PackageInfo, QueryColumn,

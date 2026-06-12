@@ -206,7 +206,9 @@ impl PostgresQuery {
                         "TIMESTAMP" => row
                             .try_get::<NaiveDateTime, _>(name)
                             .ok()
-                            .map(|v| serde_json::Value::String(super::super::format_naive_datetime(&v)))
+                            .map(|v| {
+                                serde_json::Value::String(super::super::format_naive_datetime(&v))
+                            })
                             .or_else(|| {
                                 row.try_get::<String, _>(name)
                                     .ok()
@@ -216,7 +218,9 @@ impl PostgresQuery {
                         "TIMESTAMPTZ" => row
                             .try_get::<DateTime<Utc>, _>(name)
                             .ok()
-                            .map(|v| serde_json::Value::String(super::super::format_datetime_utc(&v)))
+                            .map(|v| {
+                                serde_json::Value::String(super::super::format_datetime_utc(&v))
+                            })
                             .or_else(|| {
                                 row.try_get::<String, _>(name)
                                     .ok()

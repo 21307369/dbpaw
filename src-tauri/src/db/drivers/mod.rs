@@ -28,6 +28,6 @@ pub(crate) use crate::db::sql::splitter::{
 };
 pub use registry::{connect, is_mysql_family_driver};
 pub use traits::{
-    DatabaseDriver, DriverCapabilities, DriverResult, EventDriver, ForeignKeyDriver,
-    PackageDriver, RoutineDriver, SequenceDriver, SynonymDriver, TypeDriver,
+    DatabaseDriver, DriverCapabilities, DriverResult, EventDriver, ForeignKeyDriver, PackageDriver,
+    RoutineDriver, SequenceDriver, SynonymDriver, TypeDriver,
 };

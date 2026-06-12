@@ -2,8 +2,8 @@ use super::{conn_failed_error, DatabaseDriver, DriverCapabilities, DriverResult}
 use crate::error::AppError;
 use crate::models::{
     CassandraTableExtra, ColumnInfo, ColumnSchema, ConnectionForm, IndexInfo, QueryColumn,
-    QueryResult, SchemaOverview, TableDataResponse, TableInfo, TableMetadata,
-    TableSchema, TableStructure,
+    QueryResult, SchemaOverview, TableDataResponse, TableInfo, TableMetadata, TableSchema,
+    TableStructure,
 };
 use async_trait::async_trait;
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
@@ -31,7 +31,10 @@ fn normalize_cassandra_error(e: impl std::fmt::Display) -> AppError {
     if lower.contains("authentication") || lower.contains("credentials") {
         AppError::conn_auth_failed(format!("Authentication failed: {}", msg))
     } else if lower.contains("refused") || lower.contains("connect") {
-        AppError::conn_failed(format!("Connection refused: {}", msg), "Check host and port")
+        AppError::conn_failed(
+            format!("Connection refused: {}", msg),
+            "Check host and port",
+        )
     } else if lower.contains("timeout") || lower.contains("timed out") {
         AppError::conn_timeout(format!("Connection timed out: {}", msg))
     } else if lower.contains("resolve") || lower.contains("lookup") || lower.contains("dns") {
@@ -811,11 +814,7 @@ impl DatabaseDriver for CassandraDriver {
 }
 
 impl CassandraDriver {
-    async fn get_table_indexes(
-        &self,
-        keyspace: &str,
-        table: &str,
-    ) -> DriverResult<Vec<IndexInfo>> {
+    async fn get_table_indexes(&self, keyspace: &str, table: &str) -> DriverResult<Vec<IndexInfo>> {
         let result = self
             .session
             .query_unpaged(

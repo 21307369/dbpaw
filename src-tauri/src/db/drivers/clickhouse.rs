@@ -454,7 +454,10 @@ impl ClickHouseDriver {
 
         if !status.is_success() {
             let message = body.trim();
-            return Err(AppError::query_failed(format!("HTTP {}: {}", status, message)));
+            return Err(AppError::query_failed(format!(
+                "HTTP {}: {}",
+                status, message
+            )));
         }
 
         Ok(ClickHouseRawResponse { body, summary })
@@ -556,9 +559,7 @@ impl DatabaseDriver for ClickHouseDriver {
     }
 
     async fn test_connection(&self) -> DriverResult<()> {
-        self.execute_raw("SELECT 1", None)
-            .await
-            .map(|_| ())
+        self.execute_raw("SELECT 1", None).await.map(|_| ())
     }
 
     async fn list_databases(&self) -> DriverResult<Vec<String>> {
@@ -743,7 +744,9 @@ impl DatabaseDriver for ClickHouseDriver {
             }
         }
 
-        Err(AppError::query_failed("SHOW CREATE TABLE returned empty result"))
+        Err(AppError::query_failed(
+            "SHOW CREATE TABLE returned empty result",
+        ))
     }
 
     async fn get_table_data(

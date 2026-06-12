@@ -36,7 +36,9 @@ pub async fn get_connection_form_by_id(
         lock.clone()
     };
     let db = local_db.ok_or_else(|| AppError::internal("Local DB not initialized"))?;
-    db.get_connection_form_by_id(id).await.map_err(AppError::internal)
+    db.get_connection_form_by_id(id)
+        .await
+        .map_err(AppError::internal)
 }
 
 pub async fn get_connection_form_by_id_with_driver_check(
@@ -101,7 +103,10 @@ async fn ensure_connection_with_db_inner(
     };
 
     let db = local_db.ok_or_else(|| AppError::internal("Local DB not initialized"))?;
-    let mut form = db.get_connection_form_by_id(id).await.map_err(AppError::internal)?;
+    let mut form = db
+        .get_connection_form_by_id(id)
+        .await
+        .map_err(AppError::internal)?;
 
     if let Some(db_name) = database {
         if !db_name.is_empty() {

@@ -187,7 +187,9 @@ pub(super) async fn do_query_export(
     format: ExportFormat,
 ) -> Result<ExportResult, AppError> {
     if matches!(format, ExportFormat::SqlDdl) {
-        return Err(AppError::unsupported("SqlDdl format is not supported for query exports"));
+        return Err(AppError::unsupported(
+            "SqlDdl format is not supported for query exports",
+        ));
     }
 
     let result = db_driver.execute_query(sql).await?;
