@@ -51,9 +51,6 @@ export function useZSetRangeQuery(
     isFiltering,
     setFilterMin,
     setFilterMax,
-    setFilterActive,
-    setFilteredMembers,
-    setFilterTotal,
     handleFilter,
     clearFilter,
   };

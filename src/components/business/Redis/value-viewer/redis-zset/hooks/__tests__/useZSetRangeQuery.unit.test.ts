@@ -41,19 +41,34 @@ describe("useZSetRangeQuery", () => {
     expect(result.current.isFiltering).toBe(false);
   });
 
-  it("should clear filter and reset state", () => {
-    const { result } = renderHook(() => useZSetRangeQuery(mockOnZRangeByScore));
-    act(() => {
-      result.current.setFilterActive(true);
-      result.current.setFilteredMembers([{ member: "a", score: 5 }]);
-      result.current.setFilterTotal(1);
+  it("should clear filter and reset state", async () => {
+    mockOnZRangeByScore.mockResolvedValue({
+      members: [{ member: "a", score: 5 }],
+      total: 1,
     });
+    const { result } = renderHook(() => useZSetRangeQuery(mockOnZRangeByScore));
+
+    await act(async () => {
+      await result.current.handleFilter();
+    });
+    expect(result.current.filterActive).toBe(true);
+    expect(result.current.filteredMembers).toEqual([{ member: "a", score: 5 }]);
+
     act(() => {
       result.current.clearFilter();
     });
     expect(result.current.filterActive).toBe(false);
     expect(result.current.filteredMembers).toBeNull();
     expect(result.current.filterTotal).toBeNull();
+  });
+
+  it("should not execute if callback is undefined", async () => {
+    const { result } = renderHook(() => useZSetRangeQuery(undefined));
+    await act(async () => {
+      await result.current.handleFilter();
+    });
+    expect(result.current.isFiltering).toBe(false);
+    expect(result.current.filterActive).toBe(false);
   });
 
   it("should handle error gracefully", async () => {
