@@ -11,7 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
-tsconfig.tsbuildinfo
+*.tsbuildinfo
+vite.config.d.ts
 website/.astro/
 
 # Editor directories and files
@@ -37,6 +38,9 @@ reference
 
 # worktrees
 .worktrees
+
+# superpowers brainstorm state
+.superpowers/
 
 # skills
 .trae/skills/*
