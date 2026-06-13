@@ -1,0 +1,1482 @@
+# ClickHouse Driver 模块化拆分实现计划
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 将单文件的 ClickHouse driver (`clickhouse.rs`，约1227行) 拆分为模块化结构，以提高可维护性。
+
+**Architecture:** 遵循 MySQL、Postgres、SQLite 等已拆分 driver 的现有模式，将 ClickHouse driver 拆分为 6 个模块：mod.rs、connection.rs、metadata.rs、query.rs、table_data.rs、helpers.rs。
+
+**Tech Stack:** Rust, Tauri, async-trait, reqwest, serde_json
+
+---
+
+## 文件结构
+
+### 新建文件
+- `src-tauri/src/db/drivers/clickhouse/mod.rs` - 模块导出和 ClickHouseDriver 结构体定义
+- `src-tauri/src/db/drivers/clickhouse/connection.rs` - 连接配置、HTTP 客户端、SSH 隧道管理
+- `src-tauri/src/db/drivers/clickhouse/metadata.rs` - 表结构、元数据、DDL、schema 概览
+- `src-tauri/src/db/drivers/clickhouse/query.rs` - 查询执行、多语句处理、结果格式化
+- `src-tauri/src/db/drivers/clickhouse/table_data.rs` - 分页数据获取、排序、过滤
+- `src-tauri/src/db/drivers/clickhouse/helpers.rs` - 辅助函数（quote_ident, quote_literal 等）
+
+### 修改文件
+- `src-tauri/src/db/drivers/mod.rs` - 更新模块声明
+
+### 删除文件
+- `src-tauri/src/db/drivers/clickhouse.rs` - 原始单文件
+
+---
+
+## Task 1: 创建目录结构和 helpers.rs
+
+**Files:**
+- Create: `src-tauri/src/db/drivers/clickhouse/helpers.rs`
+- Create: `src-tauri/src/db/drivers/clickhouse/mod.rs` (初始版本)
+
+- [ ] **Step 1: 创建 clickhouse 目录**
+
+```bash
+mkdir -p src-tauri/src/db/drivers/clickhouse
+```
+
+- [ ] **Step 2: 创建 helpers.rs 文件**
+
+```rust
+use super::super::{DriverResult};
+use crate::error::AppError;
+use serde_json::Value;
+
+pub fn quote_ident(ident: &str) -> String {
+    format!("`{}`", ident.replace('`', "``"))
+}
+
+pub fn quote_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\\', "\\\\").replace('\'', "\\'"))
+}
+
+pub fn table_ref(schema: &str, table: &str) -> String {
+    let schema = schema.trim();
+    if schema.is_empty() {
+        quote_ident(table)
+    } else {
+        format!("{}.{}", quote_ident(schema), quote_ident(table))
+    }
+}
+
+pub fn trim_trailing_semicolon(sql: &str) -> &str {
+    let trimmed = sql.trim();
+    trimmed.trim_end_matches(';').trim_end()
+}
+
+pub fn value_to_bool(v: &Value) -> bool {
+    match v {
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_i64().unwrap_or(0) != 0,
+        Value::String(s) => {
+            let s = s.trim().to_ascii_lowercase();
+            s == "1" || s == "true" || s == "yes"
+        }
+        _ => false,
+    }
+}
+
+pub fn value_to_i64(v: &Value) -> Option<i64> {
+    match v {
+        Value::Number(n) => n.as_i64(),
+        Value::String(s) => s.parse::<i64>().ok(),
+        _ => None,
+    }
+}
+
+pub fn value_to_string(v: &Value) -> Option<String> {
+    match v {
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Bool(b) => Some(if *b {
+            "true".to_string()
+        } else {
+            "false".to_string()
+        }),
+        _ => None,
+    }
+}
+
+pub fn required_i64_from_json_row(
+    row: Option<&Value>,
+    key: &str,
+    context_sql: &str,
+) -> DriverResult<i64> {
+    let value = row.and_then(|v| v.get(key)).ok_or_else(|| {
+        AppError::query_failed(format!(
+            "Missing '{}' in response for SQL: {}",
+            key, context_sql
+        ))
+    })?;
+    value_to_i64(value).ok_or_else(|| {
+        AppError::query_failed(format!(
+            "Invalid '{}' value {:?} for SQL: {}",
+            key, value, context_sql
+        ))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quote_ident_escapes_backticks() {
+        assert_eq!(quote_ident("table`name"), "`table``name`");
+    }
+
+    #[test]
+    fn quote_literal_escapes_quotes() {
+        assert_eq!(quote_literal("it's"), "'it\\'s'");
+    }
+
+    #[test]
+    fn table_ref_quotes_schema_and_table() {
+        assert_eq!(table_ref("analytics", "events"), "`analytics`.`events`");
+        assert_eq!(table_ref("", "events"), "`events`");
+    }
+
+    #[test]
+    fn value_to_bool_converts_correctly() {
+        assert_eq!(value_to_bool(&Value::Bool(true)), true);
+        assert_eq!(value_to_bool(&Value::Number(1.into())), true);
+        assert_eq!(value_to_bool(&Value::String("true".to_string())), true);
+        assert_eq!(value_to_bool(&Value::String("false".to_string())), false);
+    }
+
+    #[test]
+    fn value_to_i64_converts_correctly() {
+        assert_eq!(value_to_i64(&Value::Number(42.into())), Some(42));
+        assert_eq!(value_to_i64(&Value::String("42".to_string())), Some(42));
+        assert_eq!(value_to_i64(&Value::String("abc".to_string())), None);
+    }
+
+    #[test]
+    fn required_i64_from_json_row_errors_on_missing() {
+        let row = serde_json::json!({ "total": "abc" });
+        let invalid = required_i64_from_json_row(Some(&row), "total", "SELECT count()");
+        assert!(invalid.is_err());
+
+        let missing = required_i64_from_json_row(None, "total", "SELECT count()");
+        assert!(missing.is_err());
+    }
+}
+```
+
+- [ ] **Step 3: 运行测试验证 helpers.rs**
+
+```bash
+cd src-tauri && cargo test --lib db::drivers::clickhouse::helpers::tests
+```
+
+Expected: PASS
+
+- [ ] **Step 4: 提交 helpers.rs**
+
+```bash
+git add src-tauri/src/db/drivers/clickhouse/helpers.rs
+git commit -m "feat(clickhouse): add helpers.rs with utility functions"
+```
+
+---
+
+## Task 2: 创建 connection.rs
+
+**Files:**
+- Create: `src-tauri/src/db/drivers/clickhouse/connection.rs`
+
+- [ ] **Step 1: 创建 connection.rs 文件**
+
+```rust
+use super::helpers::{quote_ident, quote_literal, table_ref};
+use super::super::{conn_failed_error, DriverResult};
+use crate::error::AppError;
+use crate::models::ConnectionForm;
+use crate::ssh::SshTunnel;
+use reqwest;
+use serde_json::Value;
+
+#[derive(Debug)]
+pub struct ClickHouseConfig {
+    pub base_url: String,
+    pub database: String,
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClickHouseMeta {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub type_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClickHouseJsonResponse {
+    #[serde(default)]
+    pub meta: Vec<ClickHouseMeta>,
+    #[serde(default)]
+    pub data: Vec<Value>,
+    pub rows: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct ClickHouseSummary {
+    pub read_rows: Option<i64>,
+    pub written_rows: Option<i64>,
+    pub result_rows: Option<i64>,
+    pub total_rows_to_read: Option<i64>,
+}
+
+#[derive(Debug)]
+pub struct ClickHouseRawResponse {
+    pub body: String,
+    pub summary: Option<ClickHouseSummary>,
+}
+
+pub fn build_config(form: &ConnectionForm) -> DriverResult<ClickHouseConfig> {
+    let host = form
+        .host
+        .clone()
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| AppError::validation("host cannot be empty"))?;
+
+    let ssl = form.ssl.unwrap_or(false);
+    let scheme = if ssl { "https" } else { "http" };
+    let port = form.port.unwrap_or(8123);
+    let database = form
+        .database
+        .clone()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| "default".to_string());
+    let username = form
+        .username
+        .clone()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| "default".to_string());
+    let password = form.password.clone().unwrap_or_default();
+
+    Ok(ClickHouseConfig {
+        base_url: format!("{}://{}:{}", scheme, host, port),
+        database,
+        username,
+        password,
+    })
+}
+
+pub fn parse_summary_header(headers: &reqwest::header::HeaderMap) -> Option<ClickHouseSummary> {
+    let header = headers.get("X-ClickHouse-Summary")?;
+    let text = header.to_str().ok()?;
+    serde_json::from_str::<ClickHouseSummary>(text).ok()
+}
+
+impl ClickHouseDriver {
+    pub async fn connect(form: &ConnectionForm) -> DriverResult<Self> {
+        let mut dsn_form = form.clone();
+        let mut ssh_tunnel = None;
+
+        if let Some(true) = form.ssh_enabled {
+            let tunnel = crate::ssh::start_ssh_tunnel(form)?;
+            dsn_form.host = Some("127.0.0.1".to_string());
+            dsn_form.port = Some(tunnel.local_port as i64);
+            ssh_tunnel = Some(tunnel);
+        }
+
+        let config = build_config(&dsn_form)?;
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| conn_failed_error(&format!("Failed to create HTTP client: {e}")))?;
+
+        Ok(Self {
+            client,
+            base_url: config.base_url,
+            database: config.database,
+            username: config.username,
+            password: config.password,
+            ssh_tunnel,
+        })
+    }
+
+    pub async fn execute_raw(
+        &self,
+        sql: &str,
+        query_id: Option<&str>,
+    ) -> DriverResult<ClickHouseRawResponse> {
+        let mut request = self
+            .client
+            .post(&self.base_url)
+            .query(&[("database", self.database.as_str())]);
+        if let Some(qid) = query_id.filter(|v| !v.trim().is_empty()) {
+            request = request.query(&[("query_id", qid)]);
+        }
+        let response = request
+            .basic_auth(&self.username, Some(&self.password))
+            .body(sql.to_string())
+            .send()
+            .await
+            .map_err(|e| AppError::query_failed(format!("HTTP request failed: {e}")))?;
+
+        let status = response.status();
+        let summary = parse_summary_header(response.headers());
+        let body = response
+            .text()
+            .await
+            .map_err(|e| AppError::query_failed(format!("Failed to read response body: {e}")))?;
+
+        if !status.is_success() {
+            let message = body.trim();
+            return Err(AppError::query_failed(format!(
+                "HTTP {}: {}",
+                status, message
+            )));
+        }
+
+        Ok(ClickHouseRawResponse { body, summary })
+    }
+
+    pub async fn execute_json(
+        &self,
+        sql: &str,
+        query_id: Option<&str>,
+    ) -> DriverResult<ClickHouseJsonResponse> {
+        let raw = self.execute_raw(sql, query_id).await?;
+        let body = raw.body;
+        serde_json::from_str::<ClickHouseJsonResponse>(&body).map_err(|e| {
+            let snippet = if body.len() > 240 {
+                format!("{}...", &body[..240])
+            } else {
+                body
+            };
+            AppError::query_failed(format!(
+                "Failed to parse ClickHouse JSON response: {} | body: {}",
+                e, snippet
+            ))
+        })
+    }
+
+    pub async fn kill_query(&self, query_id: &str) -> DriverResult<()> {
+        let qid = query_id.trim();
+        if qid.is_empty() {
+            return Err(AppError::validation("query_id cannot be empty"));
+        }
+        let sql = format!("KILL QUERY WHERE query_id = {} ASYNC", quote_literal(qid));
+        self.execute_raw(&sql, None).await.map(|_| ())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_config_uses_defaults() {
+        let form = ConnectionForm {
+            driver: "clickhouse".to_string(),
+            host: Some("localhost".to_string()),
+            ..Default::default()
+        };
+
+        let cfg = build_config(&form).unwrap();
+        assert_eq!(cfg.base_url, "http://localhost:8123");
+        assert_eq!(cfg.database, "default");
+        assert_eq!(cfg.username, "default");
+    }
+
+    #[test]
+    fn build_config_respects_ssl_and_custom_values() {
+        let form = ConnectionForm {
+            driver: "clickhouse".to_string(),
+            host: Some("db.internal".to_string()),
+            port: Some(9440),
+            database: Some("analytics".to_string()),
+            username: Some("app".to_string()),
+            password: Some("secret".to_string()),
+            ssl: Some(true),
+            ..Default::default()
+        };
+
+        let cfg = build_config(&form).unwrap();
+        assert_eq!(cfg.base_url, "https://db.internal:9440");
+        assert_eq!(cfg.database, "analytics");
+        assert_eq!(cfg.username, "app");
+        assert_eq!(cfg.password, "secret");
+    }
+}
+```
+
+- [ ] **Step 2: 运行测试验证 connection.rs**
+
+```bash
+cd src-tauri && cargo test --lib db::drivers::clickhouse::connection::tests
+```
+
+Expected: PASS
+
+- [ ] **Step 3: 提交 connection.rs**
+
+```bash
+git add src-tauri/src/db/drivers/clickhouse/connection.rs
+git commit -m "feat(clickhouse): add connection.rs with HTTP client and config"
+```
+
+---
+
+## Task 3: 创建 query.rs
+
+**Files:**
+- Create: `src-tauri/src/db/drivers/clickhouse/query.rs`
+
+- [ ] **Step 1: 创建 query.rs 文件**
+
+```rust
+use super::connection::{ClickHouseJsonResponse, ClickHouseRawResponse};
+use super::helpers::{quote_ident, quote_literal, table_ref, trim_trailing_semicolon};
+use super::super::{DriverResult, QueryColumn, QueryResult, SingleResultSet};
+use crate::error::AppError;
+use serde_json::Value;
+
+pub fn has_format_clause(sql: &str) -> bool {
+    trim_trailing_semicolon(sql)
+        .to_ascii_lowercase()
+        .contains(" format ")
+}
+
+pub fn is_json_format(sql: &str) -> bool {
+    let lower = trim_trailing_semicolon(sql).to_ascii_lowercase();
+    // Split by "format" and check if the part after it starts with whitespace + "json"
+    if let Some(pos) = lower.find("format") {
+        let before = &lower[..pos];
+        // Ensure "format" is a separate word (preceded by whitespace or at start)
+        if !before.is_empty() && !before.ends_with(|c: char| c.is_ascii_whitespace()) {
+            return false;
+        }
+        let after = &lower[pos + 6..];
+        // Must have whitespace after "format", then "json" as a separate word
+        let after_trimmed = after.trim_start();
+        after_trimmed.starts_with("json") && {
+            let after_json = &after_trimmed[4..];
+            after_json.is_empty() || after_json.starts_with(|c: char| c.is_ascii_whitespace())
+        }
+    } else {
+        false
+    }
+}
+
+pub fn ensure_json_format(sql: &str) -> String {
+    if has_format_clause(sql) {
+        trim_trailing_semicolon(sql).to_string()
+    } else {
+        format!("{} FORMAT JSON", trim_trailing_semicolon(sql))
+    }
+}
+
+pub fn infer_insert_values_row_count(sql: &str) -> Option<i64> {
+    let trimmed = trim_trailing_semicolon(sql);
+    if !matches!(super::super::first_sql_keyword(trimmed).as_deref(), Some("INSERT")) {
+        return None;
+    }
+
+    let bytes = trimmed.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    let mut values_pos = None;
+
+    while i < len {
+        if i + 1 < len && bytes[i] == b'-' && bytes[i + 1] == b'-' {
+            i += 2;
+            while i < len && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+
+        if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            i += 2;
+            while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i = (i + 2).min(len);
+            continue;
+        }
+
+        if bytes[i] == b'\'' {
+            i += 1;
+            while i < len {
+                if bytes[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == b'\'' {
+                    if i + 1 < len && bytes[i + 1] == b'\'' {
+                        i += 2;
+                        continue;
+                    }
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        if bytes[i].is_ascii_alphabetic() {
+            let start = i;
+            i += 1;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            if trimmed[start..i].eq_ignore_ascii_case("values") {
+                values_pos = Some(i);
+                break;
+            }
+            continue;
+        }
+
+        i += 1;
+    }
+
+    let mut i = values_pos?;
+    let mut tuple_count = 0_i64;
+    let mut paren_depth = 0_i32;
+    let mut in_single_quote = false;
+
+    while i < len {
+        let b = bytes[i];
+
+        if in_single_quote {
+            if b == b'\\' {
+                i += 2;
+                continue;
+            }
+            if b == b'\'' {
+                if i + 1 < len && bytes[i + 1] == b'\'' {
+                    i += 2;
+                    continue;
+                }
+                in_single_quote = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if b == b'\'' {
+            in_single_quote = true;
+            i += 1;
+            continue;
+        }
+
+        if b == b'(' {
+            paren_depth += 1;
+            if paren_depth == 1 {
+                tuple_count += 1;
+            }
+            i += 1;
+            continue;
+        }
+
+        if b == b')' {
+            paren_depth -= 1;
+            if paren_depth < 0 {
+                return None;
+            }
+            i += 1;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    if tuple_count > 0 && paren_depth == 0 {
+        Some(tuple_count)
+    } else {
+        None
+    }
+}
+
+pub fn raw_text_to_query_result(body: String, time_taken_ms: i64) -> QueryResult {
+    let trimmed = body.trim_end().to_string();
+    if trimmed.is_empty() {
+        return QueryResult {
+            data: vec![],
+            row_count: 0,
+            columns: vec![],
+            time_taken_ms,
+            success: true,
+            error: None,
+            result_sets: None,
+        };
+    }
+
+    let mut rows = Vec::new();
+    for (idx, line) in trimmed.lines().enumerate() {
+        let mut row = serde_json::Map::new();
+        row.insert("line_no".to_string(), Value::from((idx + 1) as i64));
+        row.insert("raw_line".to_string(), Value::String(line.to_string()));
+        rows.push(Value::Object(row));
+    }
+    QueryResult {
+        row_count: rows.len() as i64,
+        data: rows,
+        columns: vec![
+            QueryColumn {
+                name: "line_no".to_string(),
+                r#type: "Int64".to_string(),
+            },
+            QueryColumn {
+                name: "raw_line".to_string(),
+                r#type: "String".to_string(),
+            },
+        ],
+        time_taken_ms,
+        success: true,
+        error: None,
+        result_sets: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn has_format_clause_detects_format() {
+        assert_eq!(has_format_clause("SELECT * FROM t FORMAT JSON"), true);
+        assert_eq!(has_format_clause("SELECT * FROM t"), false);
+    }
+
+    #[test]
+    fn is_json_format_detects_json() {
+        assert_eq!(is_json_format("SELECT * FROM t FORMAT JSON"), true);
+        assert_eq!(is_json_format("SELECT * FROM t FORMAT CSV"), false);
+        assert_eq!(is_json_format("SELECT * FROM t"), false);
+    }
+
+    #[test]
+    fn ensure_json_format_appends_only_when_missing() {
+        assert_eq!(
+            ensure_json_format("SELECT * FROM t"),
+            "SELECT * FROM t FORMAT JSON"
+        );
+        assert_eq!(
+            ensure_json_format("SELECT * FROM t FORMAT JSON"),
+            "SELECT * FROM t FORMAT JSON"
+        );
+    }
+
+    #[test]
+    fn infer_insert_values_row_count_counts_top_level_tuples() {
+        let sql = "INSERT INTO `default`.`events` (id, name) VALUES (1, 'alpha'), (2, 'beta')";
+        assert_eq!(infer_insert_values_row_count(sql), Some(2));
+    }
+
+    #[test]
+    fn infer_insert_values_row_count_ignores_parentheses_inside_values() {
+        let sql = "INSERT INTO logs (id, payload) VALUES (1, 'fn(a, b)'), (2, '(nested) text')";
+        assert_eq!(infer_insert_values_row_count(sql), Some(2));
+    }
+
+    #[test]
+    fn infer_insert_values_row_count_returns_none_for_non_values_insert() {
+        let sql = "INSERT INTO dst SELECT id, name FROM src";
+        assert_eq!(infer_insert_values_row_count(sql), None);
+    }
+
+    #[test]
+    fn raw_text_to_query_result_splits_lines() {
+        let result = raw_text_to_query_result("a\nb\n".to_string(), 12);
+        assert_eq!(result.row_count, 2);
+        assert_eq!(result.columns.len(), 2);
+        assert_eq!(result.data[0]["line_no"], Value::from(1));
+        assert_eq!(result.data[0]["raw_line"], Value::String("a".to_string()));
+        assert_eq!(result.data[1]["line_no"], Value::from(2));
+        assert_eq!(result.data[1]["raw_line"], Value::String("b".to_string()));
+    }
+}
+```
+
+- [ ] **Step 2: 运行测试验证 query.rs**
+
+```bash
+cd src-tauri && cargo test --lib db::drivers::clickhouse::query::tests
+```
+
+Expected: PASS
+
+- [ ] **Step 3: 提交 query.rs**
+
+```bash
+git add src-tauri/src/db/drivers/clickhouse/query.rs
+git commit -m "feat(clickhouse): add query.rs with query execution logic"
+```
+
+---
+
+## Task 4: 创建 metadata.rs
+
+**Files:**
+- Create: `src-tauri/src/db/drivers/clickhouse/metadata.rs`
+
+- [ ] **Step 1: 创建 metadata.rs 文件**
+
+```rust
+use super::connection::ClickHouseJsonResponse;
+use super::helpers::{quote_ident, quote_literal, table_ref, value_to_bool, value_to_i64, value_to_string, required_i64_from_json_row};
+use super::super::{DriverResult, ColumnInfo, ColumnSchema, QueryColumn, QueryResult, SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata, TableSchema, TableStructure};
+use crate::error::AppError;
+use crate::models::ClickHouseTableExtra;
+use serde_json::Value;
+use std::collections::HashMap;
+
+pub fn normalize_optional_sql_expr(v: Option<&Value>) -> Option<String> {
+    v.and_then(Value::as_str).and_then(|s| {
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+pub fn extract_ttl_expr(create_table_query: &str) -> Option<String> {
+    let lower = create_table_query.to_ascii_lowercase();
+    let ttl_idx = lower.find(" ttl ")?;
+    let after = &create_table_query[ttl_idx + 5..];
+    let mut end = after.len();
+    for marker in [" SETTINGS ", " COMMENT ", " PRIMARY KEY ", " ORDER BY "] {
+        if let Some(pos) = after.to_ascii_uppercase().find(marker) {
+            end = end.min(pos);
+        }
+    }
+    let ttl = after[..end].trim().trim_end_matches(';').trim();
+    if ttl.is_empty() {
+        None
+    } else {
+        Some(ttl.to_string())
+    }
+}
+
+impl ClickHouseDriver {
+    pub async fn estimate_total_rows(&self, schema: &str, table: &str) -> DriverResult<Option<i64>> {
+        let sql = format!(
+            "SELECT total_rows FROM system.tables WHERE database = {} AND name = {} FORMAT JSON",
+            quote_literal(schema),
+            quote_literal(table)
+        );
+        let resp = self.execute_json(&sql, None).await?;
+        let total = resp
+            .data
+            .first()
+            .and_then(|v| v.get("total_rows"))
+            .and_then(value_to_i64);
+        Ok(total.filter(|v| *v >= 0))
+    }
+
+    pub async fn query_table_extra(
+        &self,
+        schema: &str,
+        table: &str,
+    ) -> DriverResult<Option<ClickHouseTableExtra>> {
+        let sql = format!(
+            "SELECT engine, partition_key, sorting_key, primary_key, sampling_key, create_table_query \
+             FROM system.tables WHERE database = {} AND name = {} FORMAT JSON",
+            quote_literal(schema),
+            quote_literal(table)
+        );
+        let resp = self.execute_json(&sql, None).await?;
+        let Some(first) = resp.data.first() else {
+            return Ok(None);
+        };
+
+        let engine = first
+            .get("engine")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if engine.is_empty() {
+            return Ok(None);
+        }
+
+        let create_table_query = normalize_optional_sql_expr(first.get("create_table_query"));
+        let ttl_expr = create_table_query.as_deref().and_then(extract_ttl_expr);
+
+        Ok(Some(ClickHouseTableExtra {
+            engine,
+            partition_key: normalize_optional_sql_expr(first.get("partition_key")),
+            sorting_key: normalize_optional_sql_expr(first.get("sorting_key")),
+            primary_key_expr: normalize_optional_sql_expr(first.get("primary_key")),
+            sampling_key: normalize_optional_sql_expr(first.get("sampling_key")),
+            ttl_expr,
+            create_table_query,
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_ttl_expr_extracts_ttl() {
+        let sql = "CREATE TABLE t (id Int64) ENGINE = MergeTree() TTL date + INTERVAL 30 DAY SETTINGS index_granularity = 8192";
+        assert_eq!(extract_ttl_expr(sql), Some("date + INTERVAL 30 DAY".to_string()));
+    }
+
+    #[test]
+    fn extract_ttl_expr_returns_none_for_no_ttl() {
+        let sql = "CREATE TABLE t (id Int64) ENGINE = MergeTree() SETTINGS index_granularity = 8192";
+        assert_eq!(extract_ttl_expr(sql), None);
+    }
+
+    #[test]
+    fn normalize_optional_sql_expr_normalizes() {
+        assert_eq!(normalize_optional_sql_expr(None), None);
+        assert_eq!(normalize_optional_sql_expr(Some(&Value::String("".to_string()))), None);
+        assert_eq!(normalize_optional_sql_expr(Some(&Value::String("  ".to_string()))), None);
+        assert_eq!(normalize_optional_sql_expr(Some(&Value::String("expr".to_string()))), Some("expr".to_string()));
+    }
+}
+```
+
+- [ ] **Step 2: 运行测试验证 metadata.rs**
+
+```bash
+cd src-tauri && cargo test --lib db::drivers::clickhouse::metadata::tests
+```
+
+Expected: PASS
+
+- [ ] **Step 3: 提交 metadata.rs**
+
+```bash
+git add src-tauri/src/db/drivers/clickhouse/metadata.rs
+git commit -m "feat(clickhouse): add metadata.rs with table metadata queries"
+```
+
+---
+
+## Task 5: 创建 table_data.rs
+
+**Files:**
+- Create: `src-tauri/src/db/drivers/clickhouse/table_data.rs`
+
+- [ ] **Step 1: 创建 table_data.rs 文件**
+
+```rust
+use super::helpers::{quote_ident, quote_literal, table_ref};
+use super::super::{DriverResult, TableDataResponse};
+use crate::error::AppError;
+use serde_json::Value;
+
+impl ClickHouseDriver {
+    pub async fn get_table_data(
+        &self,
+        schema: String,
+        table: String,
+        page: i64,
+        limit: i64,
+        sort_column: Option<String>,
+        sort_direction: Option<String>,
+        filter: Option<String>,
+        order_by: Option<String>,
+    ) -> DriverResult<TableDataResponse> {
+        let start = std::time::Instant::now();
+
+        let target_schema = if schema.trim().is_empty() {
+            self.database.clone()
+        } else {
+            schema
+        };
+        let safe_page = page.max(1);
+        let safe_limit = limit.clamp(1, 10_000);
+        let offset = (safe_page - 1) * safe_limit;
+        let qualified = table_ref(&target_schema, &table);
+
+        let filter = filter.map(|f| super::super::normalize_quotes(&f));
+        let order_by = order_by.map(|f| super::super::normalize_quotes(&f));
+
+        let where_clause = match &filter {
+            Some(f) if !f.trim().is_empty() => format!(" WHERE {}", f.trim()),
+            _ => String::new(),
+        };
+
+        let total = if where_clause.is_empty() {
+            match self.estimate_total_rows(&target_schema, &table).await? {
+                Some(estimated) => estimated,
+                None => {
+                    let count_sql = format!(
+                        "SELECT count() AS total FROM {}{} FORMAT JSON",
+                        qualified, where_clause
+                    );
+                    let count_resp = self.execute_json(&count_sql, None).await?;
+                    required_i64_from_json_row(count_resp.data.first(), "total", &count_sql)?
+                }
+            }
+        } else {
+            let count_sql = format!(
+                "SELECT count() AS total FROM {}{} FORMAT JSON",
+                qualified, where_clause
+            );
+            let count_resp = self.execute_json(&count_sql, None).await?;
+            required_i64_from_json_row(count_resp.data.first(), "total", &count_sql)?
+        };
+
+        let order_clause = if let Some(ref ob) = order_by {
+            if ob.trim().is_empty() {
+                String::new()
+            } else {
+                format!(" ORDER BY {}", ob.trim())
+            }
+        } else if let Some(ref col) = sort_column {
+            if !col.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                return Err(AppError::validation("Invalid sort column name"));
+            }
+            let dir = match sort_direction.as_deref() {
+                Some("desc") => "DESC",
+                _ => "ASC",
+            };
+            format!(" ORDER BY {} {}", quote_ident(col), dir)
+        } else {
+            String::new()
+        };
+
+        let sql = format!(
+            "SELECT * FROM {}{}{} LIMIT {} OFFSET {} FORMAT JSON",
+            qualified, where_clause, order_clause, safe_limit, offset
+        );
+        let resp = self.execute_json(&sql, None).await?;
+
+        let mut rows = Vec::new();
+        for row in resp.data {
+            match row {
+                Value::Object(_) => rows.push(row),
+                other => {
+                    let mut obj = serde_json::Map::new();
+                    obj.insert("value".to_string(), other);
+                    rows.push(Value::Object(obj));
+                }
+            }
+        }
+
+        let duration = start.elapsed();
+        Ok(TableDataResponse {
+            data: rows,
+            total,
+            page: safe_page,
+            limit: safe_limit,
+            execution_time_ms: duration.as_millis() as i64,
+        })
+    }
+
+    pub async fn get_table_data_chunk(
+        &self,
+        schema: String,
+        table: String,
+        page: i64,
+        limit: i64,
+        sort_column: Option<String>,
+        sort_direction: Option<String>,
+        filter: Option<String>,
+        order_by: Option<String>,
+    ) -> DriverResult<TableDataResponse> {
+        self.get_table_data(
+            schema,
+            table,
+            page,
+            limit,
+            sort_column,
+            sort_direction,
+            filter,
+            order_by,
+        )
+        .await
+    }
+}
+```
+
+- [ ] **Step 2: 提交 table_data.rs**
+
+```bash
+git add src-tauri/src/db/drivers/clickhouse/table_data.rs
+git commit -m "feat(clickhouse): add table_data.rs with pagination logic"
+```
+
+---
+
+## Task 6: 创建 mod.rs 整合所有模块
+
+**Files:**
+- Create: `src-tauri/src/db/drivers/clickhouse/mod.rs` (完整版本)
+
+- [ ] **Step 1: 创建 mod.rs 文件**
+
+```rust
+pub mod connection;
+pub mod helpers;
+pub mod metadata;
+pub mod query;
+pub mod table_data;
+
+use super::{DatabaseDriver, DriverCapabilities, DriverResult};
+use crate::error::AppError;
+use crate::models::{
+    ClickHouseTableExtra, ColumnInfo, ColumnSchema, ConnectionForm, QueryColumn, QueryResult,
+    SchemaOverview, SingleResultSet, TableDataResponse, TableInfo, TableMetadata, TableSchema,
+    TableStructure,
+};
+use async_trait::async_trait;
+use serde_json::Value;
+use std::collections::HashMap;
+
+use crate::ssh::SshTunnel;
+
+pub struct ClickHouseDriver {
+    pub client: reqwest::Client,
+    pub base_url: String,
+    pub database: String,
+    pub username: String,
+    pub password: String,
+    pub ssh_tunnel: Option<SshTunnel>,
+}
+
+#[async_trait]
+impl DatabaseDriver for ClickHouseDriver {
+    fn capabilities(&self) -> DriverCapabilities {
+        DriverCapabilities::QUERY_WITH_ID
+    }
+
+    async fn close(&self) {
+        // reqwest::Client does not require explicit close.
+    }
+
+    async fn test_connection(&self) -> DriverResult<()> {
+        self.execute_raw("SELECT 1", None).await.map(|_| ())
+    }
+
+    async fn list_databases(&self) -> DriverResult<Vec<String>> {
+        let resp = self
+            .execute_json(
+                "SELECT name FROM system.databases ORDER BY name FORMAT JSON",
+                None,
+            )
+            .await?;
+
+        let mut out = Vec::new();
+        for row in resp.data {
+            if let Some(name) = row.get("name").and_then(Value::as_str) {
+                out.push(name.to_string());
+            }
+        }
+        Ok(out)
+    }
+
+    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
+        let target_schema = schema
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| self.database.clone());
+
+        let sql = format!(
+            "SELECT database, name, engine FROM system.tables WHERE database = {} ORDER BY name FORMAT JSON",
+            quote_literal(&target_schema)
+        );
+        let resp = self.execute_json(&sql, None).await?;
+
+        let mut out = Vec::new();
+        for row in resp.data {
+            let schema_name = row
+                .get("database")
+                .and_then(Value::as_str)
+                .unwrap_or(target_schema.as_str())
+                .to_string();
+            let table_name = row
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let table_type = row
+                .get("engine")
+                .and_then(Value::as_str)
+                .unwrap_or("table")
+                .to_string();
+
+            if !table_name.is_empty() {
+                out.push(TableInfo {
+                    schema: schema_name,
+                    name: table_name,
+                    r#type: table_type,
+                });
+            }
+        }
+
+        Ok(out)
+    }
+
+    async fn get_table_structure(
+        &self,
+        schema: String,
+        table: String,
+    ) -> DriverResult<TableStructure> {
+        let columns = self.get_table_metadata(schema, table).await?.columns;
+        Ok(TableStructure { columns })
+    }
+
+    async fn get_table_metadata(
+        &self,
+        schema: String,
+        table: String,
+    ) -> DriverResult<TableMetadata> {
+        let target_schema = if schema.trim().is_empty() {
+            self.database.clone()
+        } else {
+            schema
+        };
+
+        let sql = format!(
+            "SELECT name, type, default_expression, comment, is_in_primary_key \
+             FROM system.columns \
+             WHERE database = {} AND table = {} \
+             ORDER BY position FORMAT JSON",
+            quote_literal(&target_schema),
+            quote_literal(&table)
+        );
+
+        let resp = self.execute_json(&sql, None).await?;
+
+        let mut columns = Vec::new();
+        for row in resp.data {
+            let name = row
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if name.is_empty() {
+                continue;
+            }
+
+            let type_name = row
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let nullable = type_name.starts_with("Nullable(");
+            let default_value = row
+                .get("default_expression")
+                .and_then(Value::as_str)
+                .and_then(|s| {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                });
+            let comment = row.get("comment").and_then(Value::as_str).and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            });
+
+            let primary_key = row
+                .get("is_in_primary_key")
+                .map(value_to_bool)
+                .unwrap_or(false);
+
+            columns.push(ColumnInfo {
+                name,
+                r#type: type_name,
+                nullable,
+                default_value,
+                primary_key,
+                comment,
+                default_constraint_name: None,
+            });
+        }
+
+        let clickhouse_extra = self.query_table_extra(&target_schema, &table).await?;
+
+        Ok(TableMetadata {
+            columns,
+            indexes: vec![],
+            foreign_keys: vec![],
+            clickhouse_extra,
+            cassandra_extra: None,
+            special_type_summaries: vec![],
+        })
+    }
+
+    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
+        let target_schema = if schema.trim().is_empty() {
+            self.database.clone()
+        } else {
+            schema
+        };
+        let sql = format!(
+            "SHOW CREATE TABLE {} FORMAT JSON",
+            table_ref(&target_schema, &table)
+        );
+        let resp = self.execute_json(&sql, None).await?;
+
+        if let Some(first) = resp.data.first() {
+            for key in ["statement", "create_table_query", "result"] {
+                if let Some(v) = first.get(key).and_then(Value::as_str) {
+                    return Ok(v.to_string());
+                }
+            }
+
+            if let Some(obj) = first.as_object() {
+                for value in obj.values() {
+                    if let Some(text) = value.as_str() {
+                        return Ok(text.to_string());
+                    }
+                }
+            }
+        }
+
+        Err(AppError::query_failed(
+            "SHOW CREATE TABLE returned empty result",
+        ))
+    }
+
+    async fn get_table_data(
+        &self,
+        schema: String,
+        table: String,
+        page: i64,
+        limit: i64,
+        sort_column: Option<String>,
+        sort_direction: Option<String>,
+        filter: Option<String>,
+        order_by: Option<String>,
+    ) -> DriverResult<TableDataResponse> {
+        self.get_table_data(
+            schema,
+            table,
+            page,
+            limit,
+            sort_column,
+            sort_direction,
+            filter,
+            order_by,
+        )
+        .await
+    }
+
+    async fn get_table_data_chunk(
+        &self,
+        schema: String,
+        table: String,
+        page: i64,
+        limit: i64,
+        sort_column: Option<String>,
+        sort_direction: Option<String>,
+        filter: Option<String>,
+        order_by: Option<String>,
+    ) -> DriverResult<TableDataResponse> {
+        self.get_table_data_chunk(
+            schema,
+            table,
+            page,
+            limit,
+            sort_column,
+            sort_direction,
+            filter,
+            order_by,
+        )
+        .await
+    }
+
+    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
+        self.execute_query_with_id(sql, None).await
+    }
+
+    async fn execute_query_with_id(
+        &self,
+        sql: String,
+        query_id: Option<&str>,
+    ) -> DriverResult<QueryResult> {
+        self.execute_query_with_id(sql, query_id).await
+    }
+
+    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
+        let base = "SELECT database, table, name, type FROM system.columns";
+        let sql = if let Some(s) = schema.filter(|s| !s.trim().is_empty()) {
+            format!(
+                "{} WHERE database = {} ORDER BY database, table, position FORMAT JSON",
+                base,
+                quote_literal(&s)
+            )
+        } else {
+            format!("{} ORDER BY database, table, position FORMAT JSON", base)
+        };
+
+        let resp = self.execute_json(&sql, None).await?;
+        let mut grouped: HashMap<(String, String), Vec<ColumnSchema>> = HashMap::new();
+
+        for row in resp.data {
+            let schema_name = row
+                .get("database")
+                .and_then(value_to_string)
+                .unwrap_or_default();
+            let table_name = row
+                .get("table")
+                .and_then(value_to_string)
+                .unwrap_or_default();
+            let col_name = row
+                .get("name")
+                .and_then(value_to_string)
+                .unwrap_or_default();
+            let col_type = row
+                .get("type")
+                .and_then(value_to_string)
+                .unwrap_or_default();
+
+            if schema_name.is_empty() || table_name.is_empty() || col_name.is_empty() {
+                continue;
+            }
+
+            grouped
+                .entry((schema_name, table_name))
+                .or_default()
+                .push(ColumnSchema {
+                    name: col_name,
+                    r#type: col_type,
+                });
+        }
+
+        let mut tables = grouped
+            .into_iter()
+            .map(|((schema_name, table_name), columns)| TableSchema {
+                schema: schema_name,
+                name: table_name,
+                columns,
+            })
+            .collect::<Vec<_>>();
+
+        tables.sort_by(|a, b| a.schema.cmp(&b.schema).then(a.name.cmp(&b.name)));
+
+        Ok(SchemaOverview { tables })
+    }
+}
+```
+
+- [ ] **Step 2: 运行 cargo check 验证编译**
+
+```bash
+cd src-tauri && cargo check
+```
+
+Expected: PASS
+
+- [ ] **Step 3: 提交 mod.rs**
+
+```bash
+git add src-tauri/src/db/drivers/clickhouse/mod.rs
+git commit -m "feat(clickhouse): add mod.rs integrating all modules"
+```
+
+---
+
+## Task 7: 更新 drivers/mod.rs 和删除原始文件
+
+**Files:**
+- Modify: `src-tauri/src/db/drivers/mod.rs`
+- Delete: `src-tauri/src/db/drivers/clickhouse.rs`
+
+- [ ] **Step 1: 更新 drivers/mod.rs 中的模块声明**
+
+将：
+```rust
+pub mod clickhouse;
+```
+
+改为：
+```rust
+pub mod clickhouse;
+```
+
+注意：模块声明保持不变，因为 Rust 会自动识别目录形式的模块。
+
+- [ ] **Step 2: 删除原始 clickhouse.rs 文件**
+
+```bash
+rm src-tauri/src/db/drivers/clickhouse.rs
+```
+
+- [ ] **Step 3: 运行 cargo check 验证编译**
+
+```bash
+cd src-tauri && cargo check
+```
+
+Expected: PASS
+
+- [ ] **Step 4: 运行所有测试**
+
+```bash
+cd src-tauri && cargo test
+```
+
+Expected: PASS
+
+- [ ] **Step 5: 提交最终更改**
+
+```bash
+git add -A
+git commit -m "refactor(clickhouse): complete modularization of ClickHouse driver"
+```
+
+---
+
+## Task 8: 验证和清理
+
+**Files:**
+- None (验证任务)
+
+- [ ] **Step 1: 运行集成测试**
+
+```bash
+cd src-tauri && cargo test --test clickhouse_integration -- --ignored
+```
+
+Expected: PASS (如果有 ClickHouse 服务器)
+
+- [ ] **Step 2: 检查代码格式**
+
+```bash
+cd src-tauri && cargo fmt --check
+```
+
+Expected: PASS
+
+- [ ] **Step 3: 运行 clippy 检查**
+
+```bash
+cd src-tauri && cargo clippy -- -D warnings
+```
+
+Expected: PASS
+
+- [ ] **Step 4: 提交格式化更改（如果需要）**
+
+```bash
+cd src-tauri && cargo fmt
+git add -A
+git commit -m "style(clickhouse): format code"
+```
+
+---
+
+## 完成
+
+ClickHouse driver 模块化拆分完成！现在代码结构更清晰，更易于维护和扩展。
