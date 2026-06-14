@@ -5,8 +5,12 @@ type ModifierToken = (typeof MODIFIER_ORDER)[number];
 
 export function isMacOS(): boolean {
   if (typeof navigator === "undefined") return false;
-  const platform = (navigator as Navigator).platform ?? "";
-  const userAgent = (navigator as Navigator).userAgent ?? "";
+  const nd = navigator as Navigator & { userAgentData?: { platform?: string } };
+  if (nd.userAgentData?.platform) {
+    return /mac/i.test(nd.userAgentData.platform);
+  }
+  const platform = nd.platform ?? "";
+  const userAgent = nd.userAgent ?? "";
   return (
     /Mac|iPhone|iPad|iPod/i.test(platform) || /Mac OS X/i.test(userAgent)
   );

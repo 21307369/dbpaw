@@ -203,6 +203,13 @@ export function useSqlEditorActions(props: {
               return true;
             },
           },
+          {
+            key: "Meta-s",
+            run: () => {
+              triggerSaveRef.current();
+              return true;
+            },
+          },
         ]),
       ),
     ];
