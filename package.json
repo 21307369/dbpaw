@@ -5,7 +5,7 @@
     "url": "git+https://github.com/codeErrorSleep/dbpaw.git"
   },
   "private": true,
-  "version": "0.5.3",
+  "version": "0.5.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -113,5 +113,9 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.60.1",
     "vite": "^7.3.2"
+  },
+  "resolutions": {
+    "@codemirror/view": "^6.43.1",
+    "@codemirror/state": "^6.5.4"
   }
 }

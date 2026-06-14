@@ -7,7 +7,7 @@
 - `bun tauri build` - Production build
 
 ## Testing
-See [TESTING.md](/TESTING.md) for full documentation.
+See [testing.md](./testing.md) for full documentation.
 
 Quick reference:
 - `bun run test:all` - Run all tests (unit, service, Rust, integration)

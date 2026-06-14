@@ -11,10 +11,10 @@ Cross-platform database client (Tauri v2, React, Rust). Supports PostgreSQL, MyS
 ## Documentation Index
 - **Architecture** → `docs/architecture.md` (frontend/backend structure, patterns, build system, i18n)
 - **Commands** → `docs/commands.md` (all dev/test/lint commands)
-- **Testing** → `TESTING.md` (3-layer test strategy and coverage)
-- **New Database Driver** → `ADD_NEW_DB.md` (step-by-step checklist)
+- **Testing** → `docs/testing.md` (3-layer test strategy and coverage)
+- **New Database Driver** → `docs/add-new-db.md` (step-by-step checklist)
 - **Immunity System** → `AGENTS.md` (every line = a past agent failure, prevents repeat mistakes)
-- **Design** → `DESIGN.md`
+- **Design** → `docs/design.md`
 
 ## Critical Rules
 - After modifying Rust code, always run `cargo check` (not just TypeScript compilation)

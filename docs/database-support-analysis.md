@@ -110,4 +110,4 @@
 
 - [DB-Engines 数据库排名](https://db-engines.com/en/ranking)
 - [项目数据库驱动目录](../src-tauri/src/db/drivers/)
-- [添加新数据库文档](../ADD_NEW_DB.md)
+- [添加新数据库文档](./add-new-db.md)

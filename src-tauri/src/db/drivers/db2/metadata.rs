@@ -5,7 +5,7 @@ use crate::models::{
     ColumnInfo, ColumnSchema, ForeignKeyInfo, IndexInfo, RoutineInfo, SchemaForeignKey,
     SchemaOverview, SequenceInfo, TableInfo, TableMetadata, TableSchema, TableStructure,
 };
-use odbc_api::ConnectionOptions;
+use odbc_api::{ConnectionOptions, Cursor, ResultSetMetadata};
 use std::collections::HashMap;
 
 pub struct Db2Metadata {

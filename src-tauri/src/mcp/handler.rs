@@ -65,7 +65,7 @@ impl RequestHandler {
             },
             "serverInfo": {
                 "name": "dbpaw",
-                "version": "0.5.3"
+                "version": "0.5.4"
             }
         }))
     }

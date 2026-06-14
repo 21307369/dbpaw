@@ -2,7 +2,7 @@ use super::connection::Db2Config;
 use super::super::{conn_failed_error, DriverResult};
 use crate::error::AppError;
 use crate::models::{QueryColumn, QueryResult, SingleResultSet};
-use odbc_api::ConnectionOptions;
+use odbc_api::{ConnectionOptions, Cursor, ResultSetMetadata};
 
 pub struct Db2Query {
     pub config: Db2Config,
