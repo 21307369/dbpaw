@@ -1,52 +1,23 @@
-use super::{
-    conn_failed_error, DatabaseDriver, DriverCapabilities, DriverResult, ForeignKeyDriver,
-    RoutineDriver, SequenceDriver,
-};
+use super::connection::Db2Config;
+use super::super::{conn_failed_error, DriverResult};
 use crate::error::AppError;
 use crate::models::{
-    ColumnInfo, ColumnSchema, ConnectionForm, ForeignKeyInfo, IndexInfo, QueryColumn, QueryResult,
-    RoutineInfo, SchemaForeignKey, SchemaOverview, SequenceInfo, SingleResultSet,
-    TableDataResponse, TableInfo, TableMetadata, TableSchema, TableStructure,
+    ColumnInfo, ColumnSchema, ForeignKeyInfo, IndexInfo, RoutineInfo, SchemaForeignKey,
+    SchemaOverview, SequenceInfo, TableInfo, TableMetadata, TableSchema, TableStructure,
 };
-use async_trait::async_trait;
-use odbc_api::{ConnectionOptions, Cursor, Environment, ResultSetMetadata};
+use odbc_api::ConnectionOptions;
 use std::collections::HashMap;
 
-pub struct Db2Driver {
-    config: Db2Config,
-    _ssh_tunnel: Option<crate::ssh::SshTunnel>,
-}
-
-#[derive(Clone)]
-struct Db2Config {
-    host: String,
-    port: u16,
-    database: String,
-    username: String,
-    password: String,
-}
-
-fn odbc_escape_value(v: &str) -> String {
-    if v.contains(';') || v.contains('{') || v.contains('}') || v.contains('[') {
-        format!("{{{}}}", v.replace('}', "}}"))
-    } else {
-        v.to_string()
-    }
-}
-
-fn build_connection_string(cfg: &Db2Config) -> String {
-    format!(
-        "DRIVER={{IBM DB2 ODBC DRIVER}};DATABASE={};HOSTNAME={};PORT={};PROTOCOL=TCPIP;UID={};PWD={};",
-        cfg.database, cfg.host, cfg.port, odbc_escape_value(&cfg.username), odbc_escape_value(&cfg.password)
-    )
-}
-
-fn quote_ident(ident: &str) -> String {
-    format!("\"{}\"", ident.replace('"', "\"\""))
+pub struct Db2Metadata {
+    pub config: Db2Config,
 }
 
 fn escape_literal(value: &str) -> String {
     value.replace('\'', "''")
+}
+
+fn quote_ident(ident: &str) -> String {
+    format!("\"{}\"", ident.replace('"', "\"\""))
 }
 
 fn odbc_value_to_json(row: &mut odbc_api::CursorRow<'_>, col_idx: u16) -> serde_json::Value {
@@ -101,57 +72,29 @@ fn collect_cursor_data(
     Ok((col_names, rows))
 }
 
-impl Db2Driver {
-    pub async fn connect(form: &ConnectionForm) -> DriverResult<Self> {
-        let mut effective_form = form.clone();
-        let mut ssh_tunnel = None;
-
-        if let Some(true) = form.ssh_enabled {
-            let tunnel = crate::ssh::start_ssh_tunnel(form)?;
-            effective_form.host = Some("127.0.0.1".to_string());
-            effective_form.port = Some(tunnel.local_port as i64);
-            ssh_tunnel = Some(tunnel);
+fn format_db2_type(type_name: &str, length: i64, scale: i64) -> String {
+    match type_name {
+        "VARCHAR" | "NVARCHAR" | "CHAR" | "NCHAR" | "VARGRAPHIC" | "DBCLOB" => {
+            if length > 0 {
+                format!("{}({})", type_name, length)
+            } else {
+                type_name.to_string()
+            }
         }
-
-        let host = effective_form
-            .host
-            .clone()
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-            .ok_or_else(|| AppError::validation("host cannot be empty"))?;
-        let port = effective_form.port.unwrap_or(50000);
-        if !(1..=65535).contains(&port) {
-            return Err(AppError::validation("port out of range"));
+        "DECIMAL" | "NUMERIC" => {
+            if length > 0 && scale > 0 {
+                format!("{}({},{})", type_name, length, scale)
+            } else if length > 0 {
+                format!("{}({})", type_name, length)
+            } else {
+                type_name.to_string()
+            }
         }
-        let database = effective_form
-            .database
-            .clone()
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-            .ok_or_else(|| AppError::validation("database cannot be empty"))?;
-        let username = effective_form
-            .username
-            .clone()
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-            .ok_or_else(|| AppError::validation("username cannot be empty"))?;
-        let password = effective_form.password.clone().unwrap_or_default();
-
-        let config = Db2Config {
-            host,
-            port: port as u16,
-            database,
-            username,
-            password,
-        };
-        let driver = Self {
-            config,
-            _ssh_tunnel: ssh_tunnel,
-        };
-        driver.test_connection().await?;
-        Ok(driver)
+        _ => type_name.to_string(),
     }
+}
 
+impl Db2Metadata {
     async fn run_blocking<F, T>(&self, f: F) -> DriverResult<T>
     where
         F: FnOnce(odbc_api::Connection<'_>) -> DriverResult<T> + Send + 'static,
@@ -159,8 +102,8 @@ impl Db2Driver {
     {
         let cfg = self.config.clone();
         tokio::task::spawn_blocking(move || {
-            let conn_string = build_connection_string(&cfg);
-            let env = Environment::new().map_err(|e| conn_failed_error(&e))?;
+            let conn_string = super::connection::build_connection_string(&cfg);
+            let env = odbc_api::Environment::new().map_err(|e| conn_failed_error(&e))?;
             let conn = env
                 .connect_with_connection_string(&conn_string, ConnectionOptions::default())
                 .map_err(|e| conn_failed_error(&e))?;
@@ -169,32 +112,8 @@ impl Db2Driver {
         .await
         .map_err(|e| AppError::internal(format!("DB2 blocking task failed: {e}")))?
     }
-}
 
-#[async_trait]
-impl DatabaseDriver for Db2Driver {
-    fn capabilities(&self) -> DriverCapabilities {
-        DriverCapabilities::ROUTINES
-            | DriverCapabilities::SEQUENCES
-            | DriverCapabilities::FOREIGN_KEYS
-    }
-
-    async fn test_connection(&self) -> DriverResult<()> {
-        self.run_blocking(|conn| {
-            let cursor = conn
-                .execute("SELECT 1 FROM SYSIBM.SYSDUMMY1", ())
-                .map_err(|e| conn_failed_error(&e))?;
-            if cursor.is_none() {
-                return Err(conn_failed_error(
-                    &"Empty response from SYSIBM.SYSDUMMY1".to_string(),
-                ));
-            }
-            Ok(())
-        })
-        .await
-    }
-
-    async fn list_databases(&self) -> DriverResult<Vec<String>> {
+    pub async fn list_databases(&self) -> DriverResult<Vec<String>> {
         self.run_blocking(|conn| {
             let cursor = conn
                 .execute("SELECT CURRENT_SERVER FROM SYSIBM.SYSDUMMY1", ())
@@ -216,7 +135,7 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
+    pub async fn list_tables(&self, schema: Option<String>) -> DriverResult<Vec<TableInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -264,13 +183,12 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn get_table_structure(
+    pub async fn get_table_structure(
         &self,
         schema: String,
         table: String,
     ) -> DriverResult<TableStructure> {
         self.run_blocking(move |conn| {
-            // Primary keys
             let pk_sql = format!(
                 "SELECT COLNAME \
                  FROM SYSCAT.KEYCOLUSE \
@@ -292,7 +210,6 @@ impl DatabaseDriver for Db2Driver {
                 }
             }
 
-            // Columns
             let col_sql = format!(
                 "SELECT COLNAME, TYPENAME, LENGTH, SCALE, NULLS, DEFAULT, IDENTITY, REMARKS \
                  FROM SYSCAT.COLUMNS \
@@ -366,7 +283,7 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn get_table_metadata(
+    pub async fn get_table_metadata(
         &self,
         schema: String,
         table: String,
@@ -378,7 +295,6 @@ impl DatabaseDriver for Db2Driver {
 
         let (indexes, foreign_keys) = self
             .run_blocking(move |conn| {
-                // Indexes
                 let idx_sql = format!(
                     "SELECT i.INDNAME, \
                      CASE WHEN i.UNIQUERULE = 'U' OR i.UNIQUERULE = 'P' THEN 1 ELSE 0 END, \
@@ -443,7 +359,6 @@ impl DatabaseDriver for Db2Driver {
                     .collect();
                 indexes.sort_by(|a, b| a.name.cmp(&b.name));
 
-                // Foreign keys
                 let fk_sql = format!(
                     "SELECT fk.CONSTNAME, fk.COLNAME, \
                      reftab.TABSCHEMA, reftab.TABNAME, refcol.COLNAME, fk.DELETERULE \
@@ -504,9 +419,7 @@ impl DatabaseDriver for Db2Driver {
         })
     }
 
-    // Db2 has no native GET_DDL; this generates minimal DDL (no indexes,
-    // foreign keys, comments, or tablespaces).
-    async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
+    pub async fn get_table_ddl(&self, schema: String, table: String) -> DriverResult<String> {
         let structure = self
             .get_table_structure(schema.clone(), table.clone())
             .await?;
@@ -544,349 +457,10 @@ impl DatabaseDriver for Db2Driver {
         Ok(ddl)
     }
 
-    async fn get_table_data(
+    pub async fn get_schema_overview(
         &self,
-        schema: String,
-        table: String,
-        page: i64,
-        limit: i64,
-        sort_column: Option<String>,
-        sort_direction: Option<String>,
-        filter: Option<String>,
-        order_by: Option<String>,
-    ) -> DriverResult<TableDataResponse> {
-        let start = std::time::Instant::now();
-        let safe_page = if page < 1 { 1 } else { page };
-        let safe_limit = if limit < 1 { 100 } else { limit };
-        let offset = (safe_page - 1) * safe_limit;
-
-        let filter = filter.map(|f| super::normalize_quotes(&f));
-        let order_by = order_by.map(|f| super::normalize_quotes(&f));
-
-        let table_ref = format!("{}.{}", quote_ident(&schema), quote_ident(&table));
-
-        let where_clause = match &filter {
-            Some(f) if !f.trim().is_empty() => format!(" WHERE {}", f.trim()),
-            _ => String::new(),
-        };
-
-        let order_clause = if let Some(ref raw) = order_by {
-            if raw.trim().is_empty() {
-                String::new()
-            } else {
-                format!(" ORDER BY {}", raw.trim())
-            }
-        } else if let Some(ref col) = sort_column {
-            let dir = if matches!(sort_direction.as_deref(), Some("desc")) {
-                "DESC"
-            } else {
-                "ASC"
-            };
-            format!(" ORDER BY {} {}", quote_ident(col), dir)
-        } else {
-            String::new()
-        };
-
-        self.run_blocking(move |conn| {
-            // Total count
-            let count_sql = format!("SELECT COUNT(*) FROM {}{}", table_ref, where_clause);
-            let count_cursor = conn
-                .execute(&count_sql, ())
-                .map_err(|e| AppError::query_failed(e.to_string()))?;
-            let mut total: i64 = 0;
-            if let Some(c) = count_cursor {
-                let (_, count_rows) = collect_cursor_data(c)?;
-                if let Some(row) = count_rows.first() {
-                    total = row.as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
-                }
-            }
-
-            // Paginated data
-            let data_sql = format!(
-                "SELECT * FROM {}{}{} OFFSET {} ROWS FETCH NEXT {} ROWS ONLY",
-                table_ref, where_clause, order_clause, offset, safe_limit
-            );
-            let data_cursor = conn
-                .execute(&data_sql, ())
-                .map_err(|e| AppError::query_failed(e.to_string()))?;
-            let mut data = Vec::new();
-            if let Some(c) = data_cursor {
-                let (_, rows) = collect_cursor_data(c)?;
-                data = rows;
-            }
-
-            Ok(TableDataResponse {
-                data,
-                total,
-                page: safe_page,
-                limit: safe_limit,
-                execution_time_ms: start.elapsed().as_millis() as i64,
-            })
-        })
-        .await
-    }
-
-    async fn get_table_data_chunk(
-        &self,
-        schema: String,
-        table: String,
-        page: i64,
-        limit: i64,
-        sort_column: Option<String>,
-        sort_direction: Option<String>,
-        filter: Option<String>,
-        order_by: Option<String>,
-    ) -> DriverResult<TableDataResponse> {
-        self.get_table_data(
-            schema,
-            table,
-            page,
-            limit,
-            sort_column,
-            sort_direction,
-            filter,
-            order_by,
-        )
-        .await
-    }
-
-    async fn execute_query(&self, sql: String) -> DriverResult<QueryResult> {
-        let start = std::time::Instant::now();
-        let statements = super::split_sql_statements(&sql);
-        if statements.is_empty() {
-            return Err(AppError::query_failed("Empty SQL statement"));
-        }
-
-        if statements.len() == 1 {
-            let last_sql = statements.last().unwrap().clone();
-            return self
-                .run_blocking(move |conn| {
-                    let sql_clean = super::strip_trailing_statement_terminator(&last_sql);
-                    let first_kw = super::first_sql_keyword(sql_clean);
-                    let is_read = matches!(
-                        first_kw.as_deref(),
-                        Some("SELECT") | Some("WITH") | Some("SHOW")
-                    );
-
-                    if is_read {
-                        let cursor = conn
-                            .execute(sql_clean, ())
-                            .map_err(|e| AppError::query_failed(e.to_string()))?;
-                        match cursor {
-                            Some(mut c) => {
-                                let num_cols = c
-                                    .num_result_cols()
-                                    .map_err(|e| AppError::query_failed(e.to_string()))?
-                                    as u16;
-                                let mut col_names = Vec::with_capacity(num_cols as usize);
-                                let mut col_types = Vec::with_capacity(num_cols as usize);
-                                for i in 1..=num_cols {
-                                    let name = c
-                                        .col_name(i)
-                                        .map_err(|e| AppError::query_failed(e.to_string()))?;
-                                    let data_type = c
-                                        .col_data_type(i)
-                                        .map_err(|e| AppError::query_failed(e.to_string()))?;
-                                    col_names.push(name.clone());
-                                    col_types.push(format!("{:?}", data_type));
-                                }
-                                let columns: Vec<QueryColumn> = col_names
-                                    .iter()
-                                    .zip(col_types.iter())
-                                    .map(|(name, ty)| QueryColumn {
-                                        name: name.clone(),
-                                        r#type: ty.clone(),
-                                    })
-                                    .collect();
-
-                                let mut data = Vec::new();
-                                while let Some(mut row) = c
-                                    .next_row()
-                                    .map_err(|e| AppError::query_failed(e.to_string()))?
-                                {
-                                    let mut map = serde_json::Map::new();
-                                    for (i, name) in col_names.iter().enumerate() {
-                                        map.insert(
-                                            name.clone(),
-                                            odbc_value_to_json(&mut row, (i + 1) as u16),
-                                        );
-                                    }
-                                    data.push(serde_json::Value::Object(map));
-                                }
-
-                                Ok(QueryResult {
-                                    row_count: data.len() as i64,
-                                    data,
-                                    columns,
-                                    time_taken_ms: start.elapsed().as_millis() as i64,
-                                    success: true,
-                                    error: None,
-                                    result_sets: None,
-                                })
-                            }
-                            None => Ok(QueryResult {
-                                row_count: 0,
-                                data: vec![],
-                                columns: vec![],
-                                time_taken_ms: start.elapsed().as_millis() as i64,
-                                success: true,
-                                error: None,
-                                result_sets: None,
-                            }),
-                        }
-                    } else {
-                        let mut prepared = conn
-                            .prepare(sql_clean)
-                            .map_err(|e| AppError::query_failed(e.to_string()))?;
-                        prepared
-                            .execute(())
-                            .map_err(|e| AppError::query_failed(e.to_string()))?;
-                        conn.commit()
-                            .map_err(|e| AppError::query_failed(format!("commit failed: {e}")))?;
-                        let row_count = prepared
-                            .row_count()
-                            .map_err(|e| AppError::query_failed(e.to_string()))
-                            .ok()
-                            .flatten()
-                            .unwrap_or(0) as i64;
-                        Ok(QueryResult {
-                            row_count,
-                            data: vec![],
-                            columns: vec![],
-                            time_taken_ms: start.elapsed().as_millis() as i64,
-                            success: true,
-                            error: None,
-                            result_sets: None,
-                        })
-                    }
-                })
-                .await;
-        }
-
-        // Multiple statements
-        self.run_blocking(move |conn| {
-            let mut result_sets = Vec::new();
-            let mut last_error: Option<String> = None;
-
-            for (idx, statement) in statements.iter().enumerate() {
-                let sql_clean = super::strip_trailing_statement_terminator(statement);
-                let first_kw = super::first_sql_keyword(sql_clean);
-                let is_read = matches!(
-                    first_kw.as_deref(),
-                    Some("SELECT") | Some("WITH") | Some("SHOW")
-                );
-
-                let result = if is_read {
-                    let cursor = conn
-                        .execute(sql_clean, ())
-                        .map_err(|e| AppError::query_failed(e.to_string()))?;
-                    match cursor {
-                        Some(mut c) => {
-                            let num_cols = c
-                                .num_result_cols()
-                                .map_err(|e| AppError::query_failed(e.to_string()))?
-                                as u16;
-                            let mut col_names = Vec::with_capacity(num_cols as usize);
-                            let mut col_types = Vec::with_capacity(num_cols as usize);
-                            for i in 1..=num_cols {
-                                let name = c
-                                    .col_name(i)
-                                    .map_err(|e| AppError::query_failed(e.to_string()))?;
-                                let data_type = c
-                                    .col_data_type(i)
-                                    .map_err(|e| AppError::query_failed(e.to_string()))?;
-                                col_names.push(name.clone());
-                                col_types.push(format!("{:?}", data_type));
-                            }
-                            let columns: Vec<QueryColumn> = col_names
-                                .iter()
-                                .zip(col_types.iter())
-                                .map(|(name, ty)| QueryColumn {
-                                    name: name.clone(),
-                                    r#type: ty.clone(),
-                                })
-                                .collect();
-
-                            let mut data = Vec::new();
-                            while let Some(mut row) = c
-                                .next_row()
-                                .map_err(|e| AppError::query_failed(e.to_string()))?
-                            {
-                                let mut map = serde_json::Map::new();
-                                for (i, name) in col_names.iter().enumerate() {
-                                    map.insert(
-                                        name.clone(),
-                                        odbc_value_to_json(&mut row, (i + 1) as u16),
-                                    );
-                                }
-                                data.push(serde_json::Value::Object(map));
-                            }
-                            let row_count = data.len() as i64;
-                            Ok((columns, data, row_count))
-                        }
-                        None => Ok((Vec::new(), Vec::new(), 0i64)),
-                    }
-                } else {
-                    let mut prepared = conn
-                        .prepare(sql_clean)
-                        .map_err(|e| AppError::query_failed(e.to_string()))?;
-                    prepared
-                        .execute(())
-                        .map_err(|e| AppError::query_failed(e.to_string()))?;
-                    conn.commit()
-                        .map_err(|e| AppError::query_failed(format!("commit failed: {e}")))?;
-                    let row_count = prepared
-                        .row_count()
-                        .map_err(|e| AppError::query_failed(e.to_string()))
-                        .ok()
-                        .flatten()
-                        .unwrap_or(0) as i64;
-                    Ok((Vec::new(), Vec::new(), row_count))
-                };
-
-                match result {
-                    Ok((columns, data, row_count)) => {
-                        result_sets.push(SingleResultSet {
-                            data,
-                            row_count,
-                            columns,
-                            index: idx as u32,
-                            statement: statement.clone(),
-                        });
-                    }
-                    Err(e) => {
-                        last_error = Some(e);
-                        break;
-                    }
-                }
-            }
-
-            if let Some(err) = last_error {
-                return Ok(QueryResult {
-                    data: vec![],
-                    row_count: 0,
-                    columns: vec![],
-                    time_taken_ms: start.elapsed().as_millis() as i64,
-                    success: false,
-                    error: Some(err),
-                    result_sets: Some(result_sets),
-                });
-            }
-
-            Ok(QueryResult {
-                data: vec![],
-                row_count: 0,
-                columns: vec![],
-                time_taken_ms: start.elapsed().as_millis() as i64,
-                success: true,
-                error: None,
-                result_sets: Some(result_sets),
-            })
-        })
-        .await
-    }
-
-    async fn get_schema_overview(&self, schema: Option<String>) -> DriverResult<SchemaOverview> {
+        schema: Option<String>,
+    ) -> DriverResult<SchemaOverview> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -945,12 +519,10 @@ impl DatabaseDriver for Db2Driver {
         .await
     }
 
-    async fn close(&self) {}
-}
-
-#[async_trait]
-impl RoutineDriver for Db2Driver {
-    async fn list_routines(&self, schema: Option<String>) -> DriverResult<Vec<RoutineInfo>> {
+    pub async fn list_routines(
+        &self,
+        schema: Option<String>,
+    ) -> DriverResult<Vec<RoutineInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -995,11 +567,10 @@ impl RoutineDriver for Db2Driver {
         .await
     }
 
-    async fn get_routine_ddl(
+    pub async fn get_routine_ddl(
         &self,
         schema: String,
         name: String,
-        _routine_type: String,
     ) -> DriverResult<String> {
         self.run_blocking(move |conn| {
             let sql = format!(
@@ -1023,11 +594,11 @@ impl RoutineDriver for Db2Driver {
         })
         .await
     }
-}
 
-#[async_trait]
-impl SequenceDriver for Db2Driver {
-    async fn list_sequences(&self, schema: Option<String>) -> DriverResult<Vec<SequenceInfo>> {
+    pub async fn list_sequences(
+        &self,
+        schema: Option<String>,
+    ) -> DriverResult<Vec<SequenceInfo>> {
         let schema_upper = schema
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty());
@@ -1075,11 +646,8 @@ impl SequenceDriver for Db2Driver {
         })
         .await
     }
-}
 
-#[async_trait]
-impl ForeignKeyDriver for Db2Driver {
-    async fn get_schema_foreign_keys(
+    pub async fn get_schema_foreign_keys(
         &self,
         _database: Option<&str>,
     ) -> DriverResult<Vec<SchemaForeignKey>> {
@@ -1136,31 +704,9 @@ impl ForeignKeyDriver for Db2Driver {
     }
 }
 
-fn format_db2_type(type_name: &str, length: i64, scale: i64) -> String {
-    match type_name {
-        "VARCHAR" | "NVARCHAR" | "CHAR" | "NCHAR" | "VARGRAPHIC" | "DBCLOB" => {
-            if length > 0 {
-                format!("{}({})", type_name, length)
-            } else {
-                type_name.to_string()
-            }
-        }
-        "DECIMAL" | "NUMERIC" => {
-            if length > 0 && scale > 0 {
-                format!("{}({},{})", type_name, length, scale)
-            } else if length > 0 {
-                format!("{}({})", type_name, length)
-            } else {
-                type_name.to_string()
-            }
-        }
-        _ => type_name.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{escape_literal, format_db2_type, odbc_escape_value, quote_ident};
+    use super::*;
 
     #[test]
     fn quote_ident_wraps_in_double_quotes() {
@@ -1195,44 +741,5 @@ mod tests {
     #[test]
     fn format_db2_type_timestamp() {
         assert_eq!(format_db2_type("TIMESTAMP", 0, 0), "TIMESTAMP");
-    }
-
-    #[test]
-    fn odbc_escape_value_plain() {
-        assert_eq!(odbc_escape_value("myuser"), "myuser");
-    }
-
-    #[test]
-    fn odbc_escape_value_with_semicolon() {
-        assert_eq!(odbc_escape_value("p@ss;word"), "{p@ss;word}");
-    }
-
-    #[test]
-    fn odbc_escape_value_with_braces() {
-        assert_eq!(odbc_escape_value("a{b}c"), "{a{b}}c}");
-    }
-
-    #[test]
-    fn first_sql_keyword_extracts_select() {
-        assert_eq!(
-            crate::db::drivers::first_sql_keyword("  SELECT id FROM t"),
-            Some("SELECT".to_string())
-        );
-    }
-
-    #[test]
-    fn first_sql_keyword_skips_comments() {
-        assert_eq!(
-            crate::db::drivers::first_sql_keyword("-- comment\nINSERT INTO t VALUES(1)"),
-            Some("INSERT".to_string())
-        );
-    }
-
-    #[test]
-    fn first_sql_keyword_identifies_with() {
-        assert_eq!(
-            crate::db::drivers::first_sql_keyword("WITH cte AS (SELECT 1) SELECT * FROM cte"),
-            Some("WITH".to_string())
-        );
     }
 }
