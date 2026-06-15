@@ -93,6 +93,13 @@ it never happens again.
 - Use `IT_REUSE_LOCAL_DB=1` to skip container creation during local
   development iterations.
 
+## Release / Packaging
+
+- The GitHub release workflow's macOS updater path only requires the signed
+  `.app.tar.gz` updater bundle. Do not let optional DMG generation block CI
+  unless the release intentionally needs a DMG asset; use `tauri build
+  --bundles app` for macOS updater builds.
+
 ## General
 
 - `CLAUDE.md` is a **table of contents** — it points to deeper docs but does
