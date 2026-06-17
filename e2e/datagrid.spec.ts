@@ -5,14 +5,22 @@ async function openTable(page: Page) {
   await expect(
     page.getByRole("heading", { name: "Connections" }),
   ).toBeVisible();
-  // Expand PostgreSQL Dev connection
-  await page.getByText("PostgreSQL Dev").click();
-  // Wait for child nodes
+  // Double-click PostgreSQL Dev to connect
+  await page.getByText("PostgreSQL Dev", { exact: true }).dblclick();
+  // Wait for connection to establish and child nodes to appear
+  await expect(page.getByText("testdb")).toBeVisible();
+  // Click testdb to expand it and show schemas
   await page.getByText("testdb").click();
+  // Expand public schema
+  await expect(page.getByText("public")).toBeVisible();
+  await page.getByText("public").click();
+  // Expand Tables group
+  await expect(page.getByText("Tables")).toBeVisible();
+  await page.getByText("Tables").click();
   // Double-click users table to open
   await page.getByText("users", { exact: true }).dblclick();
   // Wait for table data to render
-  await expect(page.getByText("alice")).toBeVisible();
+  await expect(page.getByText("alice", { exact: true })).toBeVisible();
 }
 
 test.describe("DataGrid", () => {
@@ -23,8 +31,8 @@ test.describe("DataGrid", () => {
 
   test("table view should load without runtime errors", async ({ page }) => {
     const runtimeErrors = collectRuntimeErrors(page);
-    await expect(page.getByText("alice")).toBeVisible();
-    await expect(page.getByText("bob")).toBeVisible();
+    await expect(page.getByText("alice", { exact: true })).toBeVisible();
+    await expect(page.getByText("bob", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Refresh")).toBeVisible();
     await expect(page.getByLabel("Search")).toBeVisible();
     await expect(page.getByLabel("Export")).toBeVisible();
@@ -40,15 +48,15 @@ test.describe("DataGrid", () => {
       // Verify page input changes to 2
       const pageInput = page.locator('input[inputmode="numeric"]');
       await expect(pageInput).toHaveValue("2");
-      // Verify user_11 is visible (page 2 starts at row 11)
-      await expect(page.getByText("user_11")).toBeVisible();
+      // Verify user_101 is visible (page 2 starts at row 101 with limit 100)
+      await expect(page.getByText("user_101", { exact: true })).toBeVisible();
 
       // Click Previous page button
       await page.getByLabel("Previous page").click();
       // Verify back to page 1
       await expect(pageInput).toHaveValue("1");
       // Verify alice is visible again
-      await expect(page.getByText("alice")).toBeVisible();
+      await expect(page.getByText("alice", { exact: true })).toBeVisible();
 
       runtimeErrors.assertClean("Pagination should not emit runtime errors");
     });
@@ -60,8 +68,8 @@ test.describe("DataGrid", () => {
       // Fill page input with "3" and press Enter
       await pageInput.fill("3");
       await pageInput.press("Enter");
-      // Verify user_21 is visible (page 3 starts at row 21 with limit 10)
-      await expect(page.getByText("user_21")).toBeVisible();
+      // Verify user_201 is visible (page 3 starts at row 201 with limit 100)
+      await expect(page.getByText("user_201", { exact: true })).toBeVisible();
 
       runtimeErrors.assertClean(
         "Page jump by input should not emit runtime errors",
@@ -74,7 +82,7 @@ test.describe("DataGrid", () => {
       // Click the page size select trigger
       await page.locator('[role="combobox"]').click();
       // Choose option "50"
-      await page.getByRole("option", { name: "50" }).click();
+      await page.getByRole("option", { name: "50", exact: true }).click();
       // Verify "/ 5" appears (250 rows / 50 per page = 5 pages)
       await expect(page.getByText("/ 5")).toBeVisible();
 
@@ -149,7 +157,7 @@ test.describe("DataGrid", () => {
       // Click "Toggle table view" to switch back
       await page.getByLabel("Toggle table view").click();
       // Verify alice is still visible in table view
-      await expect(page.getByText("alice")).toBeVisible();
+      await expect(page.getByText("alice", { exact: true })).toBeVisible();
 
       runtimeErrors.assertClean(
         "View switch should not emit runtime errors",
@@ -166,7 +174,7 @@ test.describe("DataGrid", () => {
       await whereInput.fill("username = 'alice'");
       await whereInput.press("Enter");
       // Verify alice is visible
-      await expect(page.getByText("alice")).toBeVisible();
+      await expect(page.getByText("alice", { exact: true })).toBeVisible();
 
       runtimeErrors.assertClean("WHERE filter should not emit runtime errors");
     });
