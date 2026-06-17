@@ -18,6 +18,7 @@
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "test:unit": "bash ./scripts/test-unit.sh",
     "test:service": "bash ./scripts/test-service.sh",
+    "test:e2e:mock": "playwright test",
     "test:rust:unit": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
     "test:integration": "bash ./scripts/test-integration.sh",
     "test:smoke": "bun run typecheck && bun run lint && bun run rust:check && bun run test:unit && bun run test:service && bun run test:rust:unit",
@@ -93,6 +94,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.61.0",
     "@tailwindcss/vite": "4.1.12",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",
