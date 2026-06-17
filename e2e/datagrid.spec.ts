@@ -45,6 +45,60 @@ test.describe("DataGrid", () => {
     runtimeErrors.assertClean("Table view should not emit runtime errors");
   });
 
+  test("all toolbar buttons exist", async ({ page }) => {
+    const runtimeErrors = collectRuntimeErrors(page);
+
+    // Scope to the DataGrid tab panel (sidebar also has buttons)
+    const tabPanel = page.locator("[role='tabpanel']").filter({
+      has: page.getByText("alice", { exact: true }),
+    });
+
+    // Pagination controls
+    await expect(tabPanel.getByLabel("Previous page")).toBeVisible();
+    await expect(tabPanel.getByLabel("Next page")).toBeVisible();
+
+    // Core toolbar buttons
+    await expect(tabPanel.getByLabel("Refresh")).toBeVisible();
+    await expect(tabPanel.getByLabel("Search")).toBeVisible();
+    await expect(tabPanel.getByLabel("Export")).toBeVisible();
+
+    // DDL, ER Diagram, New Query buttons
+    await expect(tabPanel.getByLabel("DDL")).toBeVisible();
+    await expect(tabPanel.getByLabel("ER Diagram")).toBeVisible();
+    await expect(tabPanel.getByLabel("New Query", { exact: false })).toBeVisible();
+
+    runtimeErrors.assertClean("Toolbar buttons should not emit runtime errors");
+  });
+
+  test("click refresh/search/DDL buttons without errors", async ({ page }) => {
+    const runtimeErrors = collectRuntimeErrors(page);
+
+    // Scope to the DataGrid tab panel (sidebar also has Refresh button)
+    const tabPanel = page.locator("[role='tabpanel']").filter({
+      has: page.getByText("alice", { exact: true }),
+    });
+
+    // Click Refresh
+    await tabPanel.getByLabel("Refresh").click();
+    await page.waitForTimeout(300);
+
+    // Click Search to open it
+    await tabPanel.getByLabel("Search").click();
+    await expect(
+      page.locator('input[placeholder="Search keyword..."]'),
+    ).toBeVisible();
+    // Close search
+    await page.keyboard.press("Escape");
+
+    // Click DDL
+    await tabPanel.getByLabel("DDL").click();
+    await page.waitForTimeout(300);
+
+    runtimeErrors.assertClean(
+      "Refresh/Search/DDL buttons should not emit runtime errors",
+    );
+  });
+
   test.describe("Pagination", () => {
     test("navigate to next and previous page", async ({ page }) => {
       const runtimeErrors = collectRuntimeErrors(page);
