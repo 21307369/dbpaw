@@ -24,7 +24,7 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
   const isClusterModeRef = useRef(isClusterMode);
   isClusterModeRef.current = isClusterMode;
 
-  const scan = useCallback(
+  const doScan = useCallback(
     async (pat: string, cur: string, append: boolean) => {
       if (isClusterModeRef.current && !pat.trim()) {
         setKeys([]);
@@ -55,6 +55,7 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
     [connectionId, database, t],
   );
 
+  // Init effect: only depends on connectionId + database
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
@@ -65,7 +66,25 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
         setIsClusterMode(clusterMode);
         setRequiresPattern(clusterMode);
         if (!clusterMode) {
-          await scan("", "0", false);
+          setIsLoading(true);
+          try {
+            const res = await api.redis.scanKeys({
+              id: connectionId,
+              database,
+              cursor: "0",
+              pattern: undefined,
+              limit: SCAN_LIMIT,
+            });
+            if (!cancelled) {
+              setKeys(res.keys);
+              setCursor(res.cursor);
+              setIsPartial(res.isPartial);
+            }
+          } catch (e) {
+            if (!cancelled) handleApiError(t("redis.browser.scanFailed"), e);
+          } finally {
+            if (!cancelled) setIsLoading(false);
+          }
         } else {
           setKeys([]);
           setCursor("0");
@@ -79,13 +98,13 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
     return () => {
       cancelled = true;
     };
-  }, [connectionId, scan, t]);
+  }, [connectionId, database, t]);
 
   const handleSearch = () => {
-    void scan(pattern, "0", false);
+    void doScan(pattern, "0", false);
   };
 
-  const handleLoadMore = () => void scan(pattern, cursor, true);
+  const handleLoadMore = () => void doScan(pattern, cursor, true);
 
   return {
     pattern,
@@ -97,7 +116,7 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
     isLoading,
     isClusterMode,
     requiresPattern,
-    scan,
+    scan: doScan,
     handleSearch,
     handleLoadMore,
   };
