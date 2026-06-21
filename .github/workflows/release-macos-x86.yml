@@ -119,8 +119,8 @@ jobs:
 
           sig_path = pathlib.Path(str(bundle) + ".sig")
           if not sig_path.exists():
-              print(f"Signature file not found: {sig_path}", file=sys.stderr)
-              raise SystemExit(1)
+              print("No signature file found, skipping updater metadata generation")
+              sys.exit(0)
 
           signature = sig_path.read_text(encoding="utf-8").strip()
           pub_date = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
@@ -149,8 +149,9 @@ jobs:
           if-no-files-found: error
 
       - name: Upload updater metadata artifact
+        if: hashFiles('updater-json/latest-x86_64-apple-darwin.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: updater-json-x86_64-apple-darwin
           path: updater-json/latest-x86_64-apple-darwin.json
-          if-no-files-found: error
+          if-no-files-found: warn
