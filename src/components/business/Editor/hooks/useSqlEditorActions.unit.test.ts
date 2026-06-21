@@ -1,4 +1,5 @@
-import { mock } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
+import { renderHook } from "@testing-library/react";
 
 const mockT = (s: string) => s;
 mock.module("react-i18next", () => ({
@@ -13,8 +14,6 @@ mock.module("@/lib/shortcuts/match", () => ({
   comboToCodeMirror: (s: string) => s,
 }));
 
-import { describe, test, expect, mock } from "bun:test";
-import { renderHook } from "@testing-library/react";
 import { useSqlEditorActions } from "./useSqlEditorActions";
 
 describe("useSqlEditorActions", () => {
