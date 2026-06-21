@@ -74,7 +74,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bun run tauri build --target x86_64-apple-darwin --bundles app
+          bun run tauri build --target x86_64-apple-darwin --bundles dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Point the linker to x86_64 libraries
@@ -82,96 +82,11 @@ jobs:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           PKG_CONFIG_ALLOW_CROSS: "1"
 
-      - name: Normalize updater bundle name
-        shell: bash
-        run: |
-          set -euo pipefail
-          bundle_dir="src-tauri/target/x86_64-apple-darwin/release/bundle"
-          src="$(find "$bundle_dir/macos" -maxdepth 1 -type f -name '*.app.tar.gz' | head -n 1 || true)"
-          if [ -z "$src" ]; then
-            echo "No .app.tar.gz found, skipping rename"
-            exit 0
-          fi
-          dst="$bundle_dir/macos/DbPaw-x86_64-apple-darwin.app.tar.gz"
-          if [ "$src" != "$dst" ] && [ ! -f "$dst" ]; then
-            mv "$src" "$dst"
-          fi
-          if [ -f "${src}.sig" ] && [ ! -f "${dst}.sig" ]; then
-            mv "${src}.sig" "${dst}.sig"
-          fi
-
-      - name: Generate updater metadata
-        shell: bash
-        env:
-          TAG_NAME: ${{ inputs.tag || github.ref_name }}
-          BUNDLE_DIR: src-tauri/target/x86_64-apple-darwin/release/bundle
-          TARGET_TRIPLE: x86_64-apple-darwin
-        run: |
-          set -euo pipefail
-          cat > /tmp/gen_updater_metadata.py << 'PYTHON_SCRIPT'
-          import datetime
-          import json
-          import os
-          import pathlib
-          import sys
-
-          bundle_dir = pathlib.Path(os.environ["BUNDLE_DIR"])
-          target = os.environ["TARGET_TRIPLE"]
-          tag = os.environ["TAG_NAME"]
-          repo = os.environ["GITHUB_REPOSITORY"]
-          base_url = f"https://github.com/{repo}/releases/download/{tag}"
-
-          def pick(patterns):
-              for pattern in patterns:
-                  matches = sorted(bundle_dir.glob(pattern))
-                  if matches:
-                      return matches[0]
-              return None
-
-          platform = "darwin-x86_64"
-          bundle = pick(["macos/*.app.tar.gz"])
-
-          if bundle is None:
-              print(f"No updater bundle found for target {target} — updater artifacts disabled, skipping")
-              sys.exit(0)
-
-          sig_path = pathlib.Path(str(bundle) + ".sig")
-          if not sig_path.exists():
-              print("No signature file found, skipping updater metadata generation")
-              sys.exit(0)
-
-          signature = sig_path.read_text(encoding="utf-8").strip()
-          pub_date = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-          url = f"{base_url}/{bundle.name}"
-
-          data = {
-              "version": tag,
-              "notes": "See the assets to download this version and install.",
-              "pub_date": pub_date,
-              "platforms": {platform: {"url": url, "signature": signature}},
-          }
-
-          out_dir = pathlib.Path("updater-json")
-          out_dir.mkdir(parents=True, exist_ok=True)
-          out_path = out_dir / f"latest-{target}.json"
-          out_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-          print(f"Wrote {out_path}")
-          PYTHON_SCRIPT
-          python3 /tmp/gen_updater_metadata.py
-
-      - name: Upload bundle artifacts
-        if: hashFiles('src-tauri/target/x86_64-apple-darwin/release/bundle/macos/**/*.app.tar.gz') != ''
+      - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bundle-x86_64-apple-darwin
+          name: DbPaw-x86_64-apple-darwin
           path: |
-            src-tauri/target/x86_64-apple-darwin/release/bundle/macos/**/*.app.tar.gz*
+            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
-      - name: Upload updater metadata artifact
-        if: hashFiles('updater-json/latest-x86_64-apple-darwin.json') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: updater-json-x86_64-apple-darwin
-          path: updater-json/latest-x86_64-apple-darwin.json
-          if-no-files-found: warn
