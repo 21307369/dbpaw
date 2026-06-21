@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           # Remove updater plugin to skip signing (no private key configured)
-          echo "aW1wb3J0IGpzb24KeWlmIG9wZW4oJ3NyYy10YXVyaS90YXVyaS5jb25mLmpzb24nLCAncicpIGFzIGY6CiAgICBjZmcgPSBqc29uLmxvYWQoZikKY2ZnLmdldCgncGx1Z2lucycsIHt9KS5wb3AoJ3VwZGF0ZXInLCBOb25lKQpjZmdbJ2J1bmRsZSddWydjcmVhdGVVcGRhdGVyQXJ0aWZhY3RzJ10gPSBGYWxzZQp3aXRoIG9wZW4oJ3NyYy10YXVyaS90YXVyaS5jb25mLmpzb24nLCAndycpIGFzIGY6CiAgICBqc29uLmR1bXAoY2ZnLCBmLCBpbmRlbnQ9MikKcHJpbnQoIlJlbW92ZWQgdXBkYXRlciBwbHVnaW4iKQo=" | base64 -d | python3
+          echo "aW1wb3J0IGpzb24Kd2l0aCBvcGVuKCdzcmMtdGF1cmkvdGF1cmkuY29uZi5qc29uJywgJ3InKSBhcyBmOgogICAgY2ZnID0ganNvbi5sb2FkKGYpCmNmZy5nZXQoJ3BsdWdpbnMnLCB7fSkucG9wKCd1cGRhdGVyJywgTm9uZSkKY2ZnWydidW5kbGUnXVsnY3JlYXRlVXBkYXRlckFydGlmYWN0cyddID0gRmFsc2UKd2l0aCBvcGVuKCdzcmMtdGF1cmkvdGF1cmkuY29uZi5qc29uJywgJ3cnKSBhcyBmOgogICAganNvbi5kdW1wKGNmZywgZiwgaW5kZW50PTIpCnByaW50KCJSZW1vdmVkIHVwZGF0ZXIgcGx1Z2luIikK" | base64 -d | python3
           cat src-tauri/tauri.conf.json | grep -A2 '"bundle"'
           bun run tauri build --target x86_64-apple-darwin --bundles app
         env:
