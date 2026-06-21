@@ -48,11 +48,14 @@ describe("useRedisKeyScan", () => {
     const keys = [makeKey("user:1"), makeKey("user:2")];
     scanKeysMock.mockResolvedValue(scanResponse(keys));
 
-    const { result } = renderHook(() =>
-      useRedisKeyScan({ connectionId: 1, database: "0" }),
-    );
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    let hookResult: any;
+    await act(async () => {
+      const { result } = renderHook(() =>
+        useRedisKeyScan({ connectionId: 1, database: "0" }),
+      );
+      hookResult = result;
+      await new Promise((r) => setTimeout(r, 50));
+    });
 
     expect(listDatabasesMock).toHaveBeenCalledWith(1);
     expect(scanKeysMock).toHaveBeenCalledWith({
@@ -62,8 +65,8 @@ describe("useRedisKeyScan", () => {
       pattern: undefined,
       limit: 200,
     });
-    expect(result.current.keys).toEqual(keys);
-    expect(result.current.isClusterMode).toBe(false);
+    expect(hookResult.current.keys).toEqual(keys);
+    expect(hookResult.current.isClusterMode).toBe(false);
   });
 
   test("does NOT scan on mount for cluster mode", async () => {

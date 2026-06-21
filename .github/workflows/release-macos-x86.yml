@@ -74,14 +74,7 @@ jobs:
         shell: bash
         run: |
           # Remove updater plugin to skip signing (no private key configured)
-          python3 -c "
-import json
-with open('src-tauri/tauri.conf.json') as f:
-    cfg = json.load(f)
-cfg['plugins'].pop('updater', None)
-with open('src-tauri/tauri.conf.json', 'w') as f:
-    json.dump(cfg, f, indent=2)
-"
+          python3 -c "import json; cfg=json.load(open('src-tauri/tauri.conf.json')); cfg['plugins'].pop('updater',None); json.dump(cfg,open('src-tauri/tauri.conf.json','w'),indent=2)"
           bun run tauri build --target x86_64-apple-darwin --bundles app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -116,7 +109,7 @@ with open('src-tauri/tauri.conf.json', 'w') as f:
           TARGET_TRIPLE: x86_64-apple-darwin
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          cat > /tmp/gen_updater_metadata.py << 'PYTHON_SCRIPT'
           import datetime
           import json
           import os
@@ -164,7 +157,8 @@ with open('src-tauri/tauri.conf.json', 'w') as f:
           out_path = out_dir / f"latest-{target}.json"
           out_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
           print(f"Wrote {out_path}")
-          PY
+          PYTHON_SCRIPT
+          python3 /tmp/gen_updater_metadata.py
 
       - name: Upload bundle artifacts
         uses: actions/upload-artifact@v4
