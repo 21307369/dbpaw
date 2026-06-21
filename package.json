@@ -12,7 +12,7 @@
     "dev:mock": "VITE_USE_MOCK=true vite",
     "build": "bun run typecheck && vite build",
     "typecheck": "tsc -b",
-    "lint:web": "prettier --check \"package.json\" \"package-lock.json\" \"tsconfig*.json\" \"vite.config.ts\" \"eslint.config.js\" \"src-tauri/tauri.conf.json\" \"src-tauri/capabilities/**/*.json\" \".github/workflows/*.{yml,yaml}\" && eslint \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"test-setup.ts\"",
+    "lint:web": "prettier --check \"package.json\" \"bun.lock\" \"tsconfig*.json\" \"vite.config.ts\" \"eslint.config.js\" \"src-tauri/tauri.conf.json\" \"src-tauri/capabilities/**/*.json\" \".github/workflows/*.{yml,yaml}\" && eslint \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"test-setup.ts\"",
     "lint:rust": "bun run rust:check",
     "lint": "bun run lint:web",
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml",
