@@ -15,7 +15,7 @@ jobs:
   build-macos-x86:
     permissions:
       contents: read
-    runs-on: macos-latest
+    runs-on: macos-13
 
     steps:
       - name: Checkout repository
@@ -23,20 +23,8 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install macOS dependencies (ARM host)
-        run: brew install create-dmg
-
-      - name: Install x86_64 unixODBC for cross-compilation
-        run: |
-          # Build unixODBC from source for x86_64 target
-          curl -LO https://www.unixodbc.org/unixODBC-2.3.12.tar.gz
-          tar xzf unixODBC-2.3.12.tar.gz
-          cd unixODBC-2.3.12
-          ./configure --host=x86_64-apple-darwin --prefix=/usr/local/opt/unixodbc-x86_64 --disable-gui --disable-drivers --enable-iconv --with-lib-iconv-prefix=/opt/homebrew/opt/libiconv CFLAGS="-target x86_64-apple-darwin -isysroot $(xcrun --sdk macosx --show-sdk-path)" LDFLAGS="-target x86_64-apple-darwin -L/opt/homebrew/opt/libiconv/lib"
-          make -j$(nproc)
-          sudo make install
-          echo "PKG_CONFIG_PATH=/usr/local/opt/unixodbc-x86_64/lib/pkgconfig" >> "$GITHUB_ENV"
-          echo "RUSTFLAGS=-L/usr/local/opt/unixodbc-x86_64/lib" >> "$GITHUB_ENV"
+      - name: Install macOS dependencies
+        run: brew install create-dmg unixodbc
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -58,8 +46,6 @@ jobs:
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -69,7 +55,7 @@ jobs:
 
       - name: Build macOS x86
         shell: bash
-        run: bun run tauri build --target x86_64-apple-darwin --bundles app
+        run: bun run tauri build --bundles app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -80,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bundle_dir="src-tauri/target/x86_64-apple-darwin/release/bundle"
+          bundle_dir="src-tauri/target/release/bundle"
           src="$(find "$bundle_dir/macos" -maxdepth 1 -type f -name '*.app.tar.gz' | head -n 1 || true)"
           if [ -z "$src" ]; then
             echo "No .app.tar.gz found, skipping rename"
@@ -98,7 +84,7 @@ jobs:
         shell: bash
         env:
           TAG_NAME: ${{ inputs.tag || github.ref_name }}
-          BUNDLE_DIR: src-tauri/target/x86_64-apple-darwin/release/bundle
+          BUNDLE_DIR: src-tauri/target/release/bundle
           TARGET_TRIPLE: x86_64-apple-darwin
         run: |
           set -euo pipefail
@@ -157,7 +143,7 @@ jobs:
         with:
           name: bundle-x86_64-apple-darwin
           path: |
-            src-tauri/target/x86_64-apple-darwin/release/bundle/macos/**/*.app.tar.gz*
+            src-tauri/target/release/bundle/macos/**/*.app.tar.gz*
           if-no-files-found: error
 
       - name: Upload updater metadata artifact
