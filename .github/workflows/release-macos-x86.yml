@@ -23,8 +23,20 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install macOS dependencies
-        run: brew install create-dmg unixodbc
+      - name: Install macOS dependencies (ARM host)
+        run: brew install create-dmg
+
+      - name: Install x86_64 unixODBC for cross-compilation
+        run: |
+          # Build unixODBC from source for x86_64 target
+          curl -LO https://www.unixodbc.org/unixODBC-2.3.12.tar.gz
+          tar xzf unixODBC-2.3.12.tar.gz
+          cd unixODBC-2.3.12
+          ./configure --host=x86_64-apple-darwin --prefix=/usr/local/opt/unixodbc-x86_64 --disable-gui --disable-drivers --enable-iconv --with-lib-iconv-prefix=/opt/homebrew/opt/libiconv CFLAGS="-target x86_64-apple-darwin -isysroot $(xcrun --sdk macosx --show-sdk-path)" LDFLAGS="-target x86_64-apple-darwin -L/opt/homebrew/opt/libiconv/lib"
+          make -j$(nproc)
+          sudo make install
+          echo "PKG_CONFIG_PATH=/usr/local/opt/unixodbc-x86_64/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "RUSTFLAGS=-L/usr/local/opt/unixodbc-x86_64/lib" >> "$GITHUB_ENV"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
