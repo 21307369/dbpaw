@@ -23,6 +23,8 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
   const [requiresPattern, setRequiresPattern] = useState(false);
   const isClusterModeRef = useRef(isClusterMode);
   isClusterModeRef.current = isClusterMode;
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const doScan = useCallback(
     async (pat: string, cur: string, append: boolean) => {
@@ -47,12 +49,12 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
         setIsPartial(res.isPartial);
         setRequiresPattern(false);
       } catch (e) {
-        handleApiError(t("redis.browser.scanFailed"), e);
+        handleApiError(tRef.current("redis.browser.scanFailed"), e);
       } finally {
         setIsLoading(false);
       }
     },
-    [connectionId, database, t],
+    [connectionId, database],
   );
 
   // Init effect: only depends on connectionId + database
@@ -81,7 +83,7 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
               setIsPartial(res.isPartial);
             }
           } catch (e) {
-            if (!cancelled) handleApiError(t("redis.browser.scanFailed"), e);
+            if (!cancelled) handleApiError(tRef.current("redis.browser.scanFailed"), e);
           } finally {
             if (!cancelled) setIsLoading(false);
           }
@@ -91,14 +93,14 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
           setIsPartial(false);
         }
       } catch (e) {
-        handleApiError(t("redis.browser.loadDatabasesFailed"), e);
+        handleApiError(tRef.current("redis.browser.loadDatabasesFailed"), e);
       }
     };
     void init();
     return () => {
       cancelled = true;
     };
-  }, [connectionId, database, t]);
+  }, [connectionId, database]);
 
   const handleSearch = () => {
     void doScan(pattern, "0", false);
