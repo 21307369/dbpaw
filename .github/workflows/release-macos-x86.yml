@@ -109,7 +109,7 @@ jobs:
           TARGET_TRIPLE: x86_64-apple-darwin
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          cat > /tmp/gen_updater_metadata.py << 'PYTHON_SCRIPT'
           import datetime
           import json
           import os
@@ -157,7 +157,8 @@ jobs:
           out_path = out_dir / f"latest-{target}.json"
           out_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
           print(f"Wrote {out_path}")
-          PY
+          PYTHON_SCRIPT
+          python3 /tmp/gen_updater_metadata.py
 
       - name: Upload bundle artifacts
         uses: actions/upload-artifact@v4
