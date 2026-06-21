@@ -74,7 +74,7 @@ jobs:
         shell: bash
         run: |
           # Remove updater plugin to skip signing (no private key configured)
-          python3 -c "import json; cfg=json.load(open('src-tauri/tauri.conf.json')); cfg['plugins'].pop('updater',None); json.dump(cfg,open('src-tauri/tauri.conf.json','w'),indent=2)"
+          python3 -c "import json; cfg=json.load(open('src-tauri/tauri.conf.json')); cfg['plugins'].pop('updater',None); cfg['bundle']['createUpdaterArtifacts']=False; json.dump(cfg,open('src-tauri/tauri.conf.json','w'),indent=2)"
           bun run tauri build --target x86_64-apple-darwin --bundles app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
