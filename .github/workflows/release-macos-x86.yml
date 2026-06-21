@@ -75,17 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           # Remove updater plugin to skip signing (no private key configured)
-          cat > /tmp/remove_updater.py << 'PYEOF'
-import json
-with open('src-tauri/tauri.conf.json', 'r') as f:
-    cfg = json.load(f)
-cfg.get('plugins', {}).pop('updater', None)
-cfg['bundle']['createUpdaterArtifacts'] = False
-with open('src-tauri/tauri.conf.json', 'w') as f:
-    json.dump(cfg, f, indent=2)
-print("Removed updater plugin from tauri.conf.json")
-PYEOF
-          python3 /tmp/remove_updater.py
+          echo "aW1wb3J0IGpzb24KeWlmIG9wZW4oJ3NyYy10YXVyaS90YXVyaS5jb25mLmpzb24nLCAncicpIGFzIGY6CiAgICBjZmcgPSBqc29uLmxvYWQoZikKY2ZnLmdldCgncGx1Z2lucycsIHt9KS5wb3AoJ3VwZGF0ZXInLCBOb25lKQpjZmdbJ2J1bmRsZSddWydjcmVhdGVVcGRhdGVyQXJ0aWZhY3RzJ10gPSBGYWxzZQp3aXRoIG9wZW4oJ3NyYy10YXVyaS90YXVyaS5jb25mLmpzb24nLCAndycpIGFzIGY6CiAgICBqc29uLmR1bXAoY2ZnLCBmLCBpbmRlbnQ9MikKcHJpbnQoIlJlbW92ZWQgdXBkYXRlciBwbHVnaW4iKQo=" | base64 -d | python3
           cat src-tauri/tauri.conf.json | grep -A2 '"bundle"'
           bun run tauri build --target x86_64-apple-darwin --bundles app
         env:
