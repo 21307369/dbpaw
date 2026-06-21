@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/services/api";
 import type { RedisKeyInfo } from "@/services/api";
 import { handleApiError } from "@/lib/errors";
@@ -21,10 +21,12 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
   const [isLoading, setIsLoading] = useState(false);
   const [isClusterMode, setIsClusterMode] = useState(false);
   const [requiresPattern, setRequiresPattern] = useState(false);
+  const isClusterModeRef = useRef(isClusterMode);
+  isClusterModeRef.current = isClusterMode;
 
   const scan = useCallback(
     async (pat: string, cur: string, append: boolean) => {
-      if (isClusterMode && !pat.trim()) {
+      if (isClusterModeRef.current && !pat.trim()) {
         setKeys([]);
         setCursor("0");
         setIsPartial(false);
@@ -50,7 +52,7 @@ export function useRedisKeyScan({ connectionId, database }: UseRedisKeyScanParam
         setIsLoading(false);
       }
     },
-    [connectionId, database, isClusterMode, t],
+    [connectionId, database, t],
   );
 
   useEffect(() => {
