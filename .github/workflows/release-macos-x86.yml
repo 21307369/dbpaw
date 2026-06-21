@@ -15,7 +15,7 @@ jobs:
   build-macos-x86:
     permissions:
       contents: read
-    runs-on: macos-13
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
@@ -46,6 +46,8 @@ jobs:
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -55,7 +57,7 @@ jobs:
 
       - name: Build macOS x86
         shell: bash
-        run: bun run tauri build --bundles app
+        run: bun run tauri build --target x86_64-apple-darwin --bundles app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -66,7 +68,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bundle_dir="src-tauri/target/release/bundle"
+          bundle_dir="src-tauri/target/x86_64-apple-darwin/release/bundle"
           src="$(find "$bundle_dir/macos" -maxdepth 1 -type f -name '*.app.tar.gz' | head -n 1 || true)"
           if [ -z "$src" ]; then
             echo "No .app.tar.gz found, skipping rename"
@@ -84,7 +86,7 @@ jobs:
         shell: bash
         env:
           TAG_NAME: ${{ inputs.tag || github.ref_name }}
-          BUNDLE_DIR: src-tauri/target/release/bundle
+          BUNDLE_DIR: src-tauri/target/x86_64-apple-darwin/release/bundle
           TARGET_TRIPLE: x86_64-apple-darwin
         run: |
           set -euo pipefail
@@ -143,7 +145,7 @@ jobs:
         with:
           name: bundle-x86_64-apple-darwin
           path: |
-            src-tauri/target/release/bundle/macos/**/*.app.tar.gz*
+            src-tauri/target/x86_64-apple-darwin/release/bundle/macos/**/*.app.tar.gz*
           if-no-files-found: error
 
       - name: Upload updater metadata artifact
