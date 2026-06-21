@@ -14,7 +14,7 @@ on:
 jobs:
   build-macos-x86:
     permissions:
-      contents: read
+      contents: write
     runs-on: macos-latest
 
     steps:
@@ -89,4 +89,23 @@ jobs:
           path: |
             src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
+          body: |
+            ## DbPaw ${{ inputs.tag || github.ref_name }}
+
+            ### macOS (x86_64)
+            - 下载 `.dmg` 文件（见下方 Assets）
+
+            ### 安装说明
+            下载 `.dmg` 文件，双击挂载后拖动 DbPaw 到 Applications 文件夹即可。
+          files: |
+            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          draft: false
+          prerelease: false
 
