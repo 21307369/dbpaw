@@ -74,9 +74,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Remove updater plugin to skip signing (no private key configured)
-          echo "aW1wb3J0IGpzb24Kd2l0aCBvcGVuKCdzcmMtdGF1cmkvdGF1cmkuY29uZi5qc29uJywgJ3InKSBhcyBmOgogICAgY2ZnID0ganNvbi5sb2FkKGYpCmNmZy5nZXQoJ3BsdWdpbnMnLCB7fSkucG9wKCd1cGRhdGVyJywgTm9uZSkKY2ZnWydidW5kbGUnXVsnY3JlYXRlVXBkYXRlckFydGlmYWN0cyddID0gRmFsc2UKd2l0aCBvcGVuKCdzcmMtdGF1cmkvdGF1cmkuY29uZi5qc29uJywgJ3cnKSBhcyBmOgogICAganNvbi5kdW1wKGNmZywgZiwgaW5kZW50PTIpCnByaW50KCJSZW1vdmVkIHVwZGF0ZXIgcGx1Z2luIikK" | base64 -d | python3
-          cat src-tauri/tauri.conf.json | grep -A2 '"bundle"'
           bun run tauri build --target x86_64-apple-darwin --bundles app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -135,8 +132,8 @@ jobs:
           bundle = pick(["macos/*.app.tar.gz"])
 
           if bundle is None:
-              print(f"No updater bundle found for target {target}", file=sys.stderr)
-              raise SystemExit(1)
+              print(f"No updater bundle found for target {target} — updater artifacts disabled, skipping")
+              sys.exit(0)
 
           sig_path = pathlib.Path(str(bundle) + ".sig")
           if not sig_path.exists():
@@ -163,6 +160,7 @@ jobs:
           python3 /tmp/gen_updater_metadata.py
 
       - name: Upload bundle artifacts
+        if: hashFiles('src-tauri/target/x86_64-apple-darwin/release/bundle/macos/**/*.app.tar.gz') != ''
         uses: actions/upload-artifact@v4
         with:
           name: bundle-x86_64-apple-darwin

@@ -9,14 +9,7 @@
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
   },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://github.com/codeErrorSleep/dbpaw/releases/latest/download/latest.json"
-      ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDAzMDk0NDE4REZFQUE0NTUKUldSVnBPcmZHRVFKQTdqekNpRitFbVl1MDRtaG1sZjRlZWpPNUVvUytoRk1xVXBOSU5yREF1WDEK"
-    }
-  },
+  "plugins": {},
   "app": {
     "windows": [
       {
@@ -35,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
