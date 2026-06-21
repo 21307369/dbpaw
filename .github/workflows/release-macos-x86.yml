@@ -23,8 +23,23 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install macOS dependencies
-        run: brew install create-dmg unixodbc
+      # ── Install Rosetta 2 & x86_64 Homebrew for cross-compilation ──
+      - name: Setup Rosetta 2 and x86_64 Homebrew
+        run: |
+          # Install Rosetta 2 (idempotent — safe to run even if already installed)
+          softwareupdate --install-rosetta --agree-to-license || true
+
+          # Install x86_64 Homebrew in /usr/local (alongside ARM Homebrew in /opt/homebrew)
+          if [ ! -x /usr/local/bin/brew ]; then
+            arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/null
+          fi
+
+          # Install x86_64 unixODBC
+          arch -x86_64 /usr/local/bin/brew install unixodbc
+
+      # ── ARM Homebrew deps (create-dmg is arch-independent) ──
+      - name: Install ARM macOS dependencies
+        run: brew install create-dmg
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -47,7 +62,7 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: x86_64-apple-darwin
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -55,7 +70,7 @@ jobs:
           workspaces: |
             src-tauri -> target
 
-      - name: Build macOS x86
+      - name: Build macOS x86_64
         shell: bash
         run: bun run tauri build --target x86_64-apple-darwin --bundles app
         env:
@@ -63,6 +78,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           VITE_UPGRADE_LINK_ACCESS_KEY: ${{ secrets.UPGRADE_LINK_ACCESS_KEY }}
+          # Point the linker to x86_64 libraries
+          RUSTFLAGS: -L /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+          PKG_CONFIG_ALLOW_CROSS: "1"
 
       - name: Normalize updater bundle name
         shell: bash
