@@ -10,7 +10,6 @@
     "fs:allow-read-text-file",
     "opener:default",
     "store:default",
-    "updater:default",
     "process:default",
     "window-state:default"
   ]
