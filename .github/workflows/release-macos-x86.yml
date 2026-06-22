@@ -24,6 +24,14 @@ jobs:
           fetch-depth: 1
 
       # ── Install Rosetta 2 & x86_64 Homebrew for cross-compilation ──
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: ${{ runner.os }}-homebrew-x86-${{ hashFiles('.github/workflows/release-macos-x86.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-homebrew-x86-
+
       - name: Setup Rosetta 2 and x86_64 Homebrew
         run: |
           # Install Rosetta 2 (idempotent — safe to run even if already installed)
@@ -34,7 +42,7 @@ jobs:
             arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/null
           fi
 
-          # Install x86_64 unixODBC
+          # Install x86_64 unixODBC (uses cached bottles if available)
           arch -x86_64 /usr/local/bin/brew install unixodbc
 
       # ── ARM Homebrew deps (create-dmg is arch-independent) ──
