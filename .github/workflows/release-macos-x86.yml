@@ -70,17 +70,122 @@ jobs:
           workspaces: |
             src-tauri -> target
 
-      - name: Build macOS x86_64
+      - name: Build macOS x86_64 (app bundle only)
         shell: bash
         run: |
           set -euo pipefail
-          bun run tauri build --target x86_64-apple-darwin --bundles dmg
+          bun run tauri build --target x86_64-apple-darwin --bundles app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Point the linker to x86_64 libraries
           RUSTFLAGS: -L /usr/local/lib
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           PKG_CONFIG_ALLOW_CROSS: "1"
+
+      - name: Bundle unixODBC dylib into app
+        shell: bash
+        run: |
+          set -euo pipefail
+          
+          APP_PATH="src-tauri/target/x86_64-apple-darwin/release/bundle/macos/DbPaw.app"
+          FRAMEWORKS_DIR="$APP_PATH/Contents/Frameworks"
+          EXECUTABLE="$APP_PATH/Contents/MacOS/DbPaw"
+          mkdir -p "$FRAMEWORKS_DIR"
+          
+          # 递归收集所有非系统依赖的函数
+          collect_deps() {
+            local target="$1"
+            local deps=$(otool -L "$target" 2>/dev/null | tail -n +2 | awk '{print $1}')
+            for dep in $deps; do
+              # 跳过系统库
+              if [[ "$dep" == /usr/lib/* ]] || [[ "$dep" == /System/* ]]; then
+                continue
+              fi
+              # 跳过已处理的 @executable_path/@rpath 引用
+              if [[ "$dep" == @* ]]; then
+                continue
+              fi
+              # 如果文件存在且未被复制过，则复制并递归处理
+              if [ -f "$dep" ] && [ ! -f "$FRAMEWORKS_DIR/$(basename $dep)" ]; then
+                echo "Bundling: $dep"
+                cp "$dep" "$FRAMEWORKS_DIR/"
+                chmod +w "$FRAMEWORKS_DIR/$(basename $dep)"
+                # 递归处理这个依赖的依赖
+                collect_deps "$dep"
+              fi
+            done
+          }
+          
+          # 收集可执行文件的所有非系统依赖
+          echo "Collecting non-system dependencies..."
+          collect_deps "$EXECUTABLE"
+          
+          # 修改所有打包的 dylib 的 install name 和引用
+          echo ""
+          echo "Updating dylib references..."
+          for dylib in "$FRAMEWORKS_DIR"/*.dylib; do
+            [ -f "$dylib" ] || continue
+            dylib_name=$(basename "$dylib")
+            
+            # 修改 install name
+            install_name_tool -id "@executable_path/../Frameworks/$dylib_name" "$dylib"
+            
+            # 修改对其他打包 dylib 的引用
+            deps=$(otool -L "$dylib" 2>/dev/null | tail -n +2 | awk '{print $1}')
+            for dep in $deps; do
+              if [[ "$dep" != /usr/lib/* ]] && [[ "$dep" != /System/* ]] && [[ "$dep" != @* ]] && [ -f "$dep" ]; then
+                dep_name=$(basename "$dep")
+                if [ -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+                  install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$dylib"
+                fi
+              fi
+            done
+          done
+          
+          # 修改可执行文件的引用
+          echo ""
+          echo "Updating executable references..."
+          deps=$(otool -L "$EXECUTABLE" 2>/dev/null | tail -n +2 | awk '{print $1}')
+          for dep in $deps; do
+            if [[ "$dep" != /usr/lib/* ]] && [[ "$dep" != /System/* ]] && [[ "$dep" != @* ]] && [ -f "$dep" ]; then
+              dep_name=$(basename "$dep")
+              if [ -f "$FRAMEWORKS_DIR/$dep_name" ]; then
+                install_name_tool -change "$dep" "@executable_path/../Frameworks/$dep_name" "$EXECUTABLE"
+              fi
+            fi
+          done
+          
+          echo ""
+          echo "✓ Bundled dylibs:"
+          ls -la "$FRAMEWORKS_DIR"/*.dylib 2>/dev/null || echo "  (no dylibs bundled)"
+          
+          # 验证修改结果
+          echo ""
+          echo "Executable dependencies after bundling:"
+          otool -L "$EXECUTABLE" | grep -E 'Frameworks|\.dylib' | grep -v '/usr/lib' | grep -v '/System' || echo "  (all dependencies resolved)"
+
+      - name: Create DMG bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 使用 create-dmg 打包修改后的 .app
+          BUNDLE_DIR="src-tauri/target/x86_64-apple-darwin/release/bundle"
+          APP_PATH="$BUNDLE_DIR/macos/DbPaw.app"
+          DMG_PATH="$BUNDLE_DIR/dmg/DbPaw_${{ inputs.tag || github.ref_name }}_x86_64.dmg"
+          mkdir -p "$BUNDLE_DIR/dmg"
+          
+          create-dmg \
+            --volname "DbPaw" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "DbPaw.app" 200 190 \
+            --hide-extension "DbPaw.app" \
+            --app-drop-link 600 185 \
+            "$DMG_PATH" \
+            "$APP_PATH"
+          
+          echo "✓ Created DMG: $DMG_PATH"
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
